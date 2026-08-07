@@ -83,7 +83,7 @@ npm run dev        # http://localhost:3000
 | 경로 | 메뉴 | 내용 |
 |---|---|---|
 | `/home` | 홈 | 대시보드 — 인사 배너 · **달력** · 통계 3장 · 마감 타임라인 · 내 할 일 · 팀 현황<br>(PC 는 오른쪽에 팀 활동 · 주간 활동 · 프로그램 구성) |
-| `/notice` | 공지사항 | 공지 + **읽음 표시** (누가 봤고 누가 아직인지). 쓰기는 원장만 |
+| `/notice` | 공지사항 | 공지 + **첨부(사진·한글·PDF)** + **읽음 표시** + 검색·안읽은것만. 쓰기는 원장만 |
 | `/apps` | 프로그램계획 | 목록(리스트·보드·갤러리) → `/apps/[id]` **프로그램 페이지** |
 | `/verify` | 프로그램검증 | 검증만 모아 보기 — 내가 볼 것 / 내 답변 대기 / 전체 |
 | `/mock` | 모의수업 | 날짜·발표자만 잡고, 끝나면 "좋았던 점 / 고칠 점" 두 칸 |
@@ -187,6 +187,16 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
    글 없이 상태만 바꾸는 건 막는다 — 다음 사람이 못 알아본다.
 3. **확인완료로 닫기** — 지적을 낸 사람(또는 원장)이 닫는다 → `closed`.
 
+### 검증자는 누구나 — 자기 이름을 눌러 참여한다
+
+원장이 미리 배정해두는 방식이 아니다. **본인이 스스로 점검하고 자기 이름을 체크한다.**
+
+- 검증 섹션 아래 패널에 **멤버 전원**이 칩으로 보인다.
+- **내 이름은 내가** 눌러서 참여/빼기 (`app_reviewers` upsert/delete).
+  남의 이름은 **원장만** 누를 수 있다 (`canToggle = isMe || isAdmin`).
+- 참여를 빼면 그 사람의 `round_signoffs` 도 같이 지운다 — 안 그러면 정족수가 어긋난다.
+- 칩 색: 회색 = 미참여 / 브랜드 = 참여 중 / 초록 = 검증 완료.
+
 `FindingStatus` 5개 중 **`open` · `fixed` · `recheck` 는 아직 살아있는 것**으로 센다
 (`isOpenFinding`). `wontfix` · `closed` 만 닫힌 것이다.
 `fixed` 를 살아있는 쪽에 둔 이유: 제작자가 고쳤다고만 한 상태이고
@@ -228,6 +238,25 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
 - 배정에서 빠진 사람의 낡은 `round_signoffs` 는 **세지 않는다** (정족수가 부풀려진다).
   검증자를 바꿀 때 `AppForm` 이 지우고, 화면 쪽에서도 한 번 더 걸러낸다.
 - 지적을 쓰거나·답하거나·닫을 때마다 `recomputeAppStatus(appId)` 가 DB 의 `status` 를 다시 쓴다.
+
+### 푸시 알림
+
+`src/lib/push.ts` + `public/sw.js` + `/api/push/send`
+
+- 표준 Web Push (VAPID). 구독은 `moalab.push_subscriptions`, **브라우저마다 한 줄**
+  (`endpoint` 가 고유키). 폰에서 켜도 PC 는 따로 켜야 한다.
+- **알림이 나가는 순간** — 새 공지 / 새 지적 / 지적 답변.
+  `fromId` 를 보내서 **자기가 한 일은 자기한테 안 울린다.**
+- 발송이 실패해도 본 작업(공지 저장 등)을 막지 않는다. `sendPush()` 는 fire-and-forget 이고
+  서버도 실패 시 200 + `skipped` 를 돌려준다. **알림 때문에 공지가 안 올라가면 더 나쁘다.**
+- 구독이 죽으면(404/410) 발송하면서 그 줄을 지운다.
+- 서비스 워커는 **캐싱을 하지 않는다.** 오프라인 대응까지 하면
+  "고쳐서 배포했는데 옛 화면이 뜬다" 는 더 큰 문제가 생긴다.
+- **아이폰은 사파리에서 '홈 화면에 추가' 를 해야 알림을 받는다** (iOS 16.4+).
+  그래서 지원 안 되는 걸 그냥 숨기지 말고 `PushToggle` 이 그 이유를 한글로 적어준다.
+- 환경변수 3개. 없으면 알림 기능만 조용히 꺼지고 나머지는 그대로 돌아간다.
+  `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`
+  (`npx web-push generate-vapid-keys` 로 만든다. private 키에 `NEXT_PUBLIC_` 붙이지 말 것)
 
 ### 원가 계산
 
@@ -279,6 +308,7 @@ src/lib/
   format.ts                  원화·날짜·D-day 표기
   useMembers.ts              멤버 목록 훅
   useAppsOverview.ts         앱 요약(상태·진행률·미해결 댓글) — 목록 화면 공용
+  push.ts                    usePush(구독 켜기·끄기) + sendPush(발송 요청)
 
 src/app/(app)/
   home/ notice/ apps/ verify/ mock/ training/ cost/ gallery/ schedule/ admin/
@@ -298,8 +328,9 @@ src/components/
   MonthCalendar.tsx          월간 달력 그리드 (칸 안에 일정 제목까지 — 홈·일정 공용)
   Charts.tsx                 Sparkline · WeekBars · Timeline · StatCard (SVG 직접)
   TeamBoard.tsx              누가 뭘 했나/안 했나 — 사람 단위 협업 현황
-  Findings.tsx               검증 전체 — 캡처+지적 쓰기 / 답변 스레드 / 검증완료 표시 /
+  Findings.tsx               검증 전체 — 캡처+지적 쓰기 / 답변 스레드 / 검증 참여·완료 /
                              지난 라운드 기록(FindingHistory)
+  PushToggle.tsx             푸시 알림 켜기·끄기 (아이폰 홈화면 추가 안내 포함)
   CommentThread.tsx          댓글 + 사진 첨부 + 해결됨 토글
   CostItemForm.tsx           원가 항목 입력 (사진·구매처·재사용)
   CostChart.tsx              구분별 도넛 + 막대 (SVG 직접 그림, 라이브러리 없음)
@@ -386,6 +417,13 @@ src/components/
 - [x] 검증자의 **검증 완료** 표시(`round_signoffs`) — 지적 0건 + 전원 완료여야 `done`
 - [x] (구) `checks`·`check_files` 는 기록 보존용으로 테이블만 남김
 
+### ✅ 8단계 — 검증 참여 개방 · 공지 첨부 · 푸시 알림
+- [x] 검증자는 누구나 — **자기 이름을 눌러 참여**, 남의 이름은 원장만
+- [x] 공지에 **사진·파일 첨부** (사진은 바로 보이고, 문서는 확장자 라벨 + 내려받기)
+- [x] 공지 **검색 + 안 읽은 것만** 필터, 홈에도 공지 카드(안 읽은 것 먼저 / 전체 N건 링크)
+- [x] **푸시 알림** — 새 공지·새 지적·답변. 자기 행동은 자기한테 안 울림.
+      죽은 구독 자동 정리. 아이폰 홈화면 추가 안내
+
 ### 다음에 하면 좋을 것
 
 - [ ] **모의수업·강사양성은 뼈대만 만든 상태다.** 실제로 어떤 칸이 필요한지
@@ -394,7 +432,8 @@ src/components/
       지적 캡처(`finding_files`)도 같은 문제라 정리 스크립트가 하나 필요하다.
 - [ ] 댓글에 답글(스레드) — 지금은 평면 목록
 - [ ] 앱 목록 정렬 옵션 (마감순 고정 → 이름순/상태순 선택)
-- [ ] PWA 아이콘 (`public/manifest.webmanifest` 의 `icons` 가 비어 있음)
+- [ ] PWA 아이콘 — 지금은 `icon.svg` 하나뿐. 아이폰 홈 화면 아이콘용 **192·512 PNG** 가 있으면
+      '홈 화면에 추가' 결과가 깔끔해진다 (푸시 알림도 홈 화면 설치가 전제라 같이 하면 좋다)
 
 ---
 

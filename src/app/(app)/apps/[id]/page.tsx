@@ -418,8 +418,10 @@ export default function AppDetailPage() {
               <Findings
                 appId={id}
                 appSlug={app.slug}
+                appTitle={app.title_ko}
                 round={currentRound}
                 reviewerIds={reviewerIds}
+                members={members.filter((m) => m.active)}
                 bundle={bundle}
                 nameOf={nameOf}
                 onChanged={() => {

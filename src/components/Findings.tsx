@@ -6,6 +6,7 @@ import { useSession } from '@/lib/session';
 import { logActivity } from '@/lib/log';
 import { recomputeAppStatus } from '@/lib/verify';
 import { uploadMany } from '@/lib/upload';
+import { sendPush } from '@/lib/push';
 import { relTime } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { ErrorBanner, Sheet } from '@/components/ui';
@@ -17,6 +18,7 @@ import {
   type FindingFile,
   type FindingReply,
   type ReplyState,
+  type MemberPublic,
   type Round,
   type RoundSignoff,
 } from '@/lib/types';
@@ -37,16 +39,21 @@ export interface FindingBundle {
 export function Findings({
   appId,
   appSlug,
+  appTitle,
   round,
   reviewerIds,
+  members,
   bundle,
   nameOf,
   onChanged,
 }: {
   appId: string;
   appSlug: string;
+  appTitle: string;
   round: Round;
   reviewerIds: string[];
+  /** 전원 — 검증은 아무나 참여할 수 있어서 목록 전체를 보여준다 */
+  members: MemberPublic[];
   bundle: FindingBundle;
   nameOf: (id: string | null) => string;
   onChanged: () => void;
@@ -55,6 +62,7 @@ export function Findings({
   const [addOpen, setAddOpen] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const list = useMemo(
     () => bundle.findings.filter((f) => f.round_id === round.id),
@@ -69,6 +77,39 @@ export function Findings({
   const signedIds = bundle.signoffs
     .filter((s) => s.round_id === round.id && reviewerIds.includes(s.member_id))
     .map((s) => s.member_id);
+
+  /** 검증 참여 넣기·빼기. 빼면 그 사람의 '검증 완료' 표시도 같이 지운다 */
+  const toggleReviewer = async (memberId: string, joined: boolean) => {
+    setError('');
+    setBusyId(memberId);
+    try {
+      if (joined) {
+        const { error: e } = await supabase
+          .from('app_reviewers')
+          .delete()
+          .eq('app_id', appId)
+          .eq('member_id', memberId);
+        if (e) throw e;
+        await supabase
+          .from('round_signoffs')
+          .delete()
+          .eq('round_id', round.id)
+          .eq('member_id', memberId);
+      } else {
+        const { error: e } = await supabase
+          .from('app_reviewers')
+          .upsert({ app_id: appId, member_id: memberId }, { onConflict: 'app_id,member_id' });
+        if (e) throw e;
+        logActivity(session?.id, `${appSlug} 검증 참여 — ${nameOf(memberId)}`, `app:${appId}`);
+      }
+      await recomputeAppStatus(appId);
+      onChanged();
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const toggleSignoff = async () => {
     if (!session) return;
@@ -132,6 +173,7 @@ export function Findings({
                     replies={bundle.repliesBy.get(f.id) ?? []}
                     appId={appId}
                     appSlug={appSlug}
+                    appTitle={appTitle}
                     nameOf={nameOf}
                     canClose={Boolean(isAdmin || f.member_id === session?.id)}
                     onView={setViewer}
@@ -156,6 +198,7 @@ export function Findings({
                     replies={bundle.repliesBy.get(f.id) ?? []}
                     appId={appId}
                     appSlug={appSlug}
+                    appTitle={appTitle}
                     nameOf={nameOf}
                     canClose={Boolean(isAdmin || f.member_id === session?.id)}
                     onView={setViewer}
@@ -168,28 +211,51 @@ export function Findings({
         </>
       )}
 
-      {/* 검증 완료 표시 — "아무도 안 봤다" 와 "다 봤는데 문제없다" 를 구분하는 곳 */}
+      {/* 검증 참여 + 완료 — 검증자는 누구나 될 수 있다.
+          자기 이름을 눌러 참여하고, 다 보면 검증 완료를 누른다. */}
       <div className="mt-4 rounded-xl border border-neutral-200 bg-raised p-3">
         <p className="text-[12px] font-bold text-neutral-500">
           검증 완료 {signedIds.length}/{reviewerIds.length}
+          <span className="ml-1.5 font-normal text-neutral-400">· 이름을 눌러 참여해요</span>
         </p>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {reviewerIds.length === 0 ? (
-            <span className="text-[12px] text-neutral-400">검증자가 배정되지 않았어요.</span>
-          ) : (
-            reviewerIds.map((id) => {
-              const done = signedIds.includes(id);
-              return (
-                <span
-                  key={id}
-                  className={`chip ${done ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-500'}`}
-                >
-                  {nameOf(id)} {done ? '완료' : '미완료'}
-                </span>
-              );
-            })
-          )}
+
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {members.map((m) => {
+            const joined = reviewerIds.includes(m.id);
+            const done = signedIds.includes(m.id);
+            const isMe = m.id === session?.id;
+            // 내 이름은 내가, 남의 이름은 원장만 누를 수 있다
+            const canToggle = isMe || isAdmin;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                disabled={!canToggle || busyId === m.id}
+                onClick={() => void toggleReviewer(m.id, joined)}
+                aria-pressed={joined}
+                className={`flex min-h-[34px] items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-bold transition ${
+                  done
+                    ? 'border-green-600 bg-green-100 text-green-800'
+                    : joined
+                      ? 'border-brand bg-brand-50 text-brand-700'
+                      : 'border-neutral-200 bg-surface text-neutral-400'
+                } ${canToggle ? 'active:scale-[.97]' : 'opacity-70'}`}
+              >
+                <Icon name={done ? 'check' : joined ? 'search' : 'plus'} size={12} />
+                {m.name}
+                {isMe && <span className="text-[10px] font-normal">(나)</span>}
+                {done && ' 완료'}
+              </button>
+            );
+          })}
         </div>
+
+        {reviewerIds.length === 0 && (
+          <p className="mt-2 text-[12px] text-neutral-400">
+            아직 검증에 참여한 사람이 없어요. 내 이름을 눌러 시작해주세요.
+          </p>
+        )}
+
         {iAmReviewer && (
           <button
             onClick={() => void toggleSignoff()}
@@ -210,6 +276,7 @@ export function Findings({
         onClose={() => setAddOpen(false)}
         appId={appId}
         appSlug={appSlug}
+        appTitle={appTitle}
         roundId={round.id}
         onSaved={onChanged}
       />
@@ -227,6 +294,7 @@ function FindingCard({
   replies,
   appId,
   appSlug,
+  appTitle,
   nameOf,
   canClose,
   onView,
@@ -237,6 +305,7 @@ function FindingCard({
   replies: FindingReply[];
   appId: string;
   appSlug: string;
+  appTitle: string;
   nameOf: (id: string | null) => string;
   /** 지적을 낸 사람(또는 원장)만 확인완료로 닫는다 */
   canClose: boolean;
@@ -279,6 +348,13 @@ function FindingCard({
       await recomputeAppStatus(appId);
       const label = REPLY_STATES.find((s) => s.value === picked)?.label ?? picked;
       logActivity(session?.id, `${appSlug} 지적 ${label}`, `app:${appId}`);
+      sendPush({
+        title: `${appTitle} — ${label}`,
+        body: body.trim(),
+        url: `/apps/${appId}`,
+        tag: `finding-${finding.id}`,
+        fromId: session?.id ?? null,
+      });
       setPicked(null);
       setBody('');
       onChanged();
@@ -430,6 +506,7 @@ function AddFindingSheet({
   onClose,
   appId,
   appSlug,
+  appTitle,
   roundId,
   onSaved,
 }: {
@@ -437,6 +514,7 @@ function AddFindingSheet({
   onClose: () => void;
   appId: string;
   appSlug: string;
+  appTitle: string;
   roundId: string;
   onSaved: () => void;
 }) {
@@ -495,6 +573,13 @@ function AddFindingSheet({
 
       await recomputeAppStatus(appId);
       logActivity(session?.id, `${appSlug} 지적 등록`, `app:${appId}`);
+      sendPush({
+        title: `${appTitle} — 새 지적`,
+        body: body.trim(),
+        url: `/apps/${appId}`,
+        tag: `finding-${finding.id}`,
+        fromId: session?.id ?? null,
+      });
       reset();
       onClose();
       onSaved();

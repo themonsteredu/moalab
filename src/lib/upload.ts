@@ -8,7 +8,8 @@ export type BucketName =
   | 'moalab-comment-files'
   | 'moalab-cost-photos'
   | 'moalab-gallery'
-  | 'moalab-plans';
+  | 'moalab-plans'
+  | 'moalab-notices';
 
 export interface UploadedFile {
   url: string;

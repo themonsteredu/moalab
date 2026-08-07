@@ -232,6 +232,17 @@ export interface Notice {
   created_at: string;
 }
 
+export interface NoticeFile {
+  id: string;
+  notice_id: string;
+  file_url: string;
+  file_name: string;
+  file_size: number | null;
+  is_image: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface NoticeRead {
   notice_id: string;
   member_id: string;

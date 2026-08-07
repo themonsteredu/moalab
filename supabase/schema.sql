@@ -337,12 +337,43 @@ create table if not exists moalab.notices (
 );
 create index if not exists notices_created_idx on moalab.notices(pinned desc, created_at desc);
 
+-- 공지 첨부 — 사진도, 한글·PDF 도 (is_image 로 화면에서 갈라 보여준다)
+create table if not exists moalab.notice_files (
+  id         uuid primary key default gen_random_uuid(),
+  notice_id  uuid not null references moalab.notices(id) on delete cascade,
+  file_url   text not null,
+  file_name  text not null,
+  file_size  bigint,
+  is_image   boolean not null default false,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists notice_files_notice_idx on moalab.notice_files(notice_id, sort_order);
+
 create table if not exists moalab.notice_reads (
   notice_id uuid not null references moalab.notices(id) on delete cascade,
   member_id uuid not null references moalab.members(id) on delete cascade,
   read_at   timestamptz not null default now(),
   primary key (notice_id, member_id)
 );
+
+-- ---------------------------------------------------------------------
+-- 13-1. 푸시 알림 구독
+--
+--   브라우저마다 구독이 하나씩 생긴다 (폰 / PC 따로).
+--   endpoint 가 고유키다. 만료된 구독은 발송 때 410 이 오면 지운다.
+--   ※ 아이폰은 사파리에서 '홈 화면에 추가' 를 해야 푸시를 받을 수 있다 (iOS 16.4+).
+-- ---------------------------------------------------------------------
+create table if not exists moalab.push_subscriptions (
+  id         uuid primary key default gen_random_uuid(),
+  member_id  uuid not null references moalab.members(id) on delete cascade,
+  endpoint   text not null unique,
+  p256dh     text not null,
+  auth       text not null,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+create index if not exists push_subs_member_idx on moalab.push_subscriptions(member_id);
 
 -- ---------------------------------------------------------------------
 -- 14. 모의수업 — 학교 나가기 전에 우리끼리 돌려보는 자리
@@ -431,7 +462,7 @@ begin
     'cost_sheets','cost_items','cost_item_photos',
     'albums','photos','schedules','schedule_members','activity_logs',
     'plan_files','app_samples',
-    'notices','notice_reads','mock_lessons','mock_feedback',
+    'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',
     'training_courses','training_records'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);
@@ -449,13 +480,14 @@ insert into storage.buckets (id, name, public)
 values ('moalab-comment-files','moalab-comment-files', true),
        ('moalab-cost-photos','moalab-cost-photos', true),
        ('moalab-gallery','moalab-gallery', true),
-       ('moalab-plans','moalab-plans', true)
+       ('moalab-plans','moalab-plans', true),
+       ('moalab-notices','moalab-notices', true)
 on conflict (id) do update set public = true;
 
 do $$
 declare b text;
 begin
-  foreach b in array array['moalab-comment-files','moalab-cost-photos','moalab-gallery','moalab-plans'] loop
+  foreach b in array array['moalab-comment-files','moalab-cost-photos','moalab-gallery','moalab-plans','moalab-notices'] loop
     execute format('drop policy if exists "read_%s"   on storage.objects', b);
     execute format('drop policy if exists "write_%s"  on storage.objects', b);
     execute format('drop policy if exists "update_%s" on storage.objects', b);

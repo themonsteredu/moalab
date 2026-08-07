@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { PIECES, useAppsOverview } from '@/lib/useAppsOverview';
-import type { ActivityLog, CommentRow, Schedule } from '@/lib/types';
+import type { ActivityLog, CommentRow, Notice, NoticeRead, Schedule } from '@/lib/types';
 import { CardSkeleton, ErrorBanner, ProgressBar, Skeleton } from '@/components/ui';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
@@ -37,6 +37,8 @@ export default function HomePage() {
   const [attendees, setAttendees] = useState<Record<string, string[]>>({});
   const [myComments, setMyComments] = useState<(CommentRow & { app_title: string })[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [noticeReads, setNoticeReads] = useState<NoticeRead[]>([]);
 
   const meId = session?.id ?? '';
 
@@ -49,16 +51,25 @@ export default function HomePage() {
   }, [cursor]);
 
   const loadExtras = useCallback(async () => {
-    const [schedRes, smRes, logRes] = await Promise.all([
+    const [schedRes, smRes, logRes, noticeRes, readRes] = await Promise.all([
       supabase.from('schedules').select('*').gte('date', range.from).lte('date', range.to).order('date').order('start_time'),
       supabase.from('schedule_members').select('*'),
       supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(200),
+      supabase
+        .from('notices')
+        .select('*')
+        .order('pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(20),
+      supabase.from('notice_reads').select('*'),
     ]);
     setSchedules((schedRes.data ?? []) as Schedule[]);
     const map: Record<string, string[]> = {};
     for (const r of smRes.data ?? []) (map[r.schedule_id] ??= []).push(r.member_id);
     setAttendees(map);
     setLogs((logRes.data ?? []) as ActivityLog[]);
+    setNotices((noticeRes.data ?? []) as Notice[]);
+    setNoticeReads((readRes.data ?? []) as NoticeRead[]);
   }, [range.from, range.to]);
 
   useEffect(() => {
@@ -202,6 +213,24 @@ export default function HomePage() {
     const ticks = ['오늘', '1주', '2주', '3주', '4주'];
     return { rows: rows.slice(0, 8), ticks };
   }, [items]);
+
+  /* --------------------------------------------------------- 공지 */
+  const noticeCards = useMemo(() => {
+    const isRead = (id: string) => noticeReads.some((r) => r.notice_id === id && r.member_id === meId);
+    // 안 읽은 것 먼저, 그다음 고정 → 최신
+    const sorted = [...notices].sort((a, b) => {
+      const ar = isRead(a.id) ? 1 : 0;
+      const br = isRead(b.id) ? 1 : 0;
+      if (ar !== br) return ar - br;
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return b.created_at.localeCompare(a.created_at);
+    });
+    return {
+      list: sorted.slice(0, 3).map((n) => ({ ...n, read: isRead(n.id) })),
+      unread: notices.filter((n) => !isRead(n.id)).length,
+      total: notices.length,
+    };
+  }, [notices, noticeReads, meId]);
 
   /* ------------------------------------------------------- 내 할 일 */
   const myTasks = useMemo(() => {
@@ -403,6 +432,46 @@ export default function HomePage() {
               <Timeline rows={timeline.rows} ticks={timeline.ticks} onPick={(id) => router.push(`/apps/${id}`)} />
             )}
           </section>
+
+          {/* 공지 — 전체 공지를 홈에서도 훑을 수 있게 */}
+          {noticeCards.total > 0 && (
+            <section>
+              <div className="mb-2.5 flex items-center justify-between">
+                <h2 className="text-[15px] font-bold">
+                  공지사항{' '}
+                  {noticeCards.unread > 0 && <span className="text-brand">{noticeCards.unread}</span>}
+                </h2>
+                <Link href="/notice" className="text-[12.5px] font-bold text-neutral-400">
+                  전체 {noticeCards.total}건 ›
+                </Link>
+              </div>
+              <ul className="space-y-2">
+                {noticeCards.list.map((n) => (
+                  <li key={n.id}>
+                    <Link href="/notice" className="card flex items-start gap-2.5 p-3 transition hover:bg-raised">
+                      {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          {n.pinned && <span className="chip bg-brand-50 text-brand-700">고정</span>}
+                          <span
+                            className={`text-[13.5px] leading-snug ${
+                              n.read ? 'font-semibold text-neutral-600' : 'font-bold text-neutral-900'
+                            }`}
+                          >
+                            {n.title}
+                          </span>
+                        </span>
+                        <span className="mt-0.5 block line-clamp-1 text-[12px] text-neutral-400">
+                          {n.body}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[11px] text-neutral-400">{relTime(n.created_at)}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {/* 내 할 일 */}
           <section>
