@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
+import { useTopics } from '@/lib/useTopics';
 import { logActivity } from '@/lib/log';
 import { getCurrentRound, openFirstRound, recomputeAppStatus } from '@/lib/verify';
 import { ErrorBanner, MultiPicker, Sheet } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 import type { AppRow } from '@/lib/types';
 
 interface Props {
@@ -31,26 +33,17 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
   const [url, setUrl] = useState('');
   const [purpose, setPurpose] = useState('');
   const [grade, setGrade] = useState('');
-  const [topic, setTopic] = useState('');
+  const [topicId, setTopicId] = useState('');
+  /** 폼 안에서 바로 새 주제를 만들 때 */
+  const [newTopic, setNewTopic] = useState('');
+  const [addingTopic, setAddingTopic] = useState(false);
   const [creatorId, setCreatorId] = useState('');
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  /** 이미 쓰인 주제 — 오타로 주제가 갈라지지 않게 제안해준다 */
-  const [knownTopics, setKnownTopics] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!open) return;
-    void (async () => {
-      const { data } = await supabase.from('apps').select('topic').not('topic', 'is', null);
-      const set = new Set<string>();
-      for (const r of (data ?? []) as { topic: string | null }[]) {
-        if (r.topic?.trim()) set.add(r.topic.trim());
-      }
-      setKnownTopics([...set].sort((a, b) => a.localeCompare(b, 'ko')));
-    })();
-  }, [open]);
+  // 주제는 '주제 관리' 에서 만든 목록에서 고른다 (매번 타이핑하지 않는다)
+  const { topics, reload: reloadTopics } = useTopics();
 
   useEffect(() => {
     if (!open) return;
@@ -61,7 +54,7 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
       setUrl(editing.app.url ?? '');
       setPurpose(editing.app.purpose ?? '');
       setGrade(editing.app.target_grade ?? '');
-      setTopic(editing.app.topic ?? '');
+      setTopicId(editing.app.topic_id ?? '');
       setCreatorId(editing.app.creator_id ?? '');
       setReviewerIds(editing.reviewerIds);
       setDueDate(editing.app.due_date ?? '');
@@ -71,12 +64,42 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
       setUrl('');
       setPurpose('');
       setGrade('');
-      setTopic('');
+      setTopicId('');
       setCreatorId('');
       setReviewerIds([]);
       setDueDate('');
     }
   }, [open, editing]);
+
+  /** 폼을 벗어나지 않고 새 주제를 만들고 바로 고른다 */
+  const addTopic = async () => {
+    const name = newTopic.trim();
+    setError('');
+    if (!name) {
+      setError('새 주제 이름을 적어주세요.');
+      return;
+    }
+    const existing = topics.find((t) => t.name === name);
+    if (existing) {
+      setTopicId(existing.id);
+      setAddingTopic(false);
+      setNewTopic('');
+      return;
+    }
+    const { data, error: e } = await supabase
+      .from('topics')
+      .insert({ name, sort_order: topics.length })
+      .select()
+      .single();
+    if (e) {
+      setError(friendlyError(e));
+      return;
+    }
+    await reloadTopics();
+    setTopicId(data.id as string);
+    setAddingTopic(false);
+    setNewTopic('');
+  };
 
   const save = async () => {
     setError('');
@@ -97,7 +120,7 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
         url: url.trim() || null,
         purpose: purpose.trim() || null,
         target_grade: grade.trim() || null,
-        topic: topic.trim() || null,
+        topic_id: topicId || null,
         creator_id: creatorId,
         due_date: dueDate || null,
       };
@@ -197,22 +220,61 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
           <label className="label" htmlFor="f-topic">
             주제
           </label>
-          <input
-            id="f-topic"
-            list="f-topic-list"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="예) AI 문화"
-            className="field"
-          />
-          {/* 이미 쓰인 주제를 제안한다 — 주제를 코드에 박아두지 않으려고 자유 입력으로 뒀다 */}
-          <datalist id="f-topic-list">
-            {knownTopics.map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
+          {addingTopic ? (
+            <div className="flex gap-2">
+              <input
+                value={newTopic}
+                onChange={(e) => setNewTopic(e.target.value)}
+                placeholder="새 주제 이름"
+                aria-label="새 주제 이름"
+                autoFocus
+                className="field flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => void addTopic()}
+                className="btn-primary shrink-0 px-3 text-[13.5px]"
+              >
+                만들기
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingTopic(false);
+                  setNewTopic('');
+                }}
+                className="shrink-0 px-2 text-[13px] text-neutral-400"
+              >
+                취소
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <select
+                id="f-topic"
+                value={topicId}
+                onChange={(e) => setTopicId(e.target.value)}
+                className="field flex-1"
+              >
+                <option value="">주제 없음</option>
+                {topics.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setAddingTopic(true)}
+                className="btn-ghost shrink-0 gap-1 px-3 text-[13.5px]"
+              >
+                <Icon name="plus" size={14} />
+                새 주제
+              </button>
+            </div>
+          )}
           <p className="mt-1 text-[11.5px] text-neutral-400">
-            같은 주제끼리 목록에서 접었다 펼 수 있어요. 비워두면 &lsquo;주제 없음&rsquo; 으로 묶여요.
+            주제는 <b>프로그램계획 &gt; 주제 관리</b> 에서 한 번 만들면 여기서 고르기만 해요.
           </p>
         </div>
 

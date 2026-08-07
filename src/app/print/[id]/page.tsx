@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useMembers } from '@/lib/useMembers';
+import { useTopics } from '@/lib/useTopics';
 import { useSession } from '@/lib/session';
 import { calcItem, calcSheet, categoryLabel } from '@/lib/cost';
 import { STATUS_META } from '@/lib/status';
@@ -40,6 +41,7 @@ export default function PrintPage() {
   const search = useSearchParams();
   const router = useRouter();
   const { nameOf } = useMembers(true);
+  const { nameOfTopic } = useTopics();
   // 이 화면은 (app) 레이아웃 밖이라 로그인 가드를 직접 붙인다
   const { session, loading: sessionLoading } = useSession();
 
@@ -183,7 +185,7 @@ export default function PrintPage() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[12px] font-bold tracking-wide text-neutral-500">
-              {app.topic?.trim() || '모아랩 프로그램'}
+              {nameOfTopic(app.topic_id) || '모아랩 프로그램'}
             </p>
             <h1 className="mt-1 text-[26px] font-black leading-tight">{app.title_ko}</h1>
             <p className="mt-1 text-[12.5px] text-neutral-500">{app.slug}</p>

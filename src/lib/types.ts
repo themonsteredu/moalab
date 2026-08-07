@@ -21,7 +21,9 @@ export interface AppRow {
   url: string | null;
   purpose: string | null;
   target_grade: string | null;
-  /** 주제 — 목록을 트리로 묶는 기준. 자유 입력 */
+  /** 주제 — 목록을 트리로 묶는 기준. moalab.topics 를 가리킨다 */
+  topic_id: string | null;
+  /** (구) 자유 입력 주제. topics 로 옮긴 뒤에는 안 쓴다 */
   topic: string | null;
   creator_id: string | null;
   due_date: string | null;
@@ -30,6 +32,14 @@ export interface AppRow {
   archived: boolean;
   /** 수업계획안 본문 */
   plan_body: string | null;
+  created_at: string;
+}
+
+/** 주제 — 한 곳에서 만들고 고치고 순서를 바꾼다 */
+export interface Topic {
+  id: string;
+  name: string;
+  sort_order: number;
   created_at: string;
 }
 

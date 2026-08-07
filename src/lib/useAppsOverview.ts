@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { computeStatus, roundProgress } from '@/lib/status';
-import { isOpenFinding, type AppRow, type AppStatus, type Finding, type Round, type RoundSignoff } from '@/lib/types';
+import {
+  isOpenFinding,
+  type AppRow,
+  type AppStatus,
+  type Finding,
+  type Round,
+  type RoundSignoff,
+  type Topic,
+} from '@/lib/types';
 import type { IconName } from '@/components/Icon';
 
 /** 프로그램 하나에 딸린 것들이 얼마나 채워졌는지 */
@@ -17,6 +25,8 @@ export interface Completeness {
 
 export interface AppOverview {
   app: AppRow;
+  /** 주제 이름 (없으면 빈 문자열) */
+  topicName: string;
   reviewerIds: string[];
   currentRound: Round | null;
   /** 현재 라운드의 지적 */
@@ -44,6 +54,8 @@ export interface AppOverview {
  */
 export function useAppsOverview(includeArchived = false) {
   const [items, setItems] = useState<AppOverview[]>([]);
+  /** 주제 목록 — 트리 순서를 원장이 정한 순서대로 맞추려면 필요하다 */
+  const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -53,7 +65,7 @@ export function useAppsOverview(includeArchived = false) {
       let appQ = supabase.from('apps').select('*').order('due_date', { nullsFirst: false });
       if (!includeArchived) appQ = appQ.eq('archived', false);
 
-      const [appsRes, revRes, roundsRes, commentsRes, planRes, sheetRes, sampleRes, albumRes] =
+      const [appsRes, revRes, roundsRes, commentsRes, planRes, sheetRes, sampleRes, albumRes, topicRes] =
         await Promise.all([
           appQ,
           supabase.from('app_reviewers').select('app_id,member_id'),
@@ -63,7 +75,12 @@ export function useAppsOverview(includeArchived = false) {
           supabase.from('cost_sheets').select('app_id').not('app_id', 'is', null),
           supabase.from('app_samples').select('app_id,url,sort_order').order('sort_order'),
           supabase.from('albums').select('id,app_id').not('app_id', 'is', null),
+          supabase.from('topics').select('*').order('sort_order').order('name'),
         ]);
+
+      const topicList = (topicRes.data ?? []) as Topic[];
+      setTopics(topicList);
+      const topicName = new Map(topicList.map((t) => [t.id, t.name]));
 
       if (appsRes.error) throw appsRes.error;
       const apps = (appsRes.data ?? []) as AppRow[];
@@ -164,6 +181,7 @@ export function useAppsOverview(includeArchived = false) {
 
           return {
             app,
+            topicName: app.topic_id ? (topicName.get(app.topic_id) ?? '') : '',
             reviewerIds,
             currentRound,
             findings: rc,
@@ -191,7 +209,7 @@ export function useAppsOverview(includeArchived = false) {
     void reload();
   }, [reload]);
 
-  return { items, loading, error, reload };
+  return { items, topics, loading, error, reload };
 }
 
 /** 카드에 찍히는 5개 구성요소 라벨 */

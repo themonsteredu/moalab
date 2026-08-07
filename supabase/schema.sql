@@ -53,11 +53,40 @@ create table if not exists moalab.apps (
 create index if not exists apps_status_idx   on moalab.apps(status);
 create index if not exists apps_due_date_idx on moalab.apps(due_date);
 
--- 주제 (예: 'AI 문화', 'AI 과학'). 자유 입력이다 —
--- 주제 목록을 코드나 별도 테이블로 고정하면 주제 하나 늘릴 때마다 손을 봐야 한다.
--- 이미 쓰인 주제는 앱 등록 폼에서 datalist 로 자동 제안된다.
+-- ---------------------------------------------------------------------
+-- 2-1. 주제 — 프로그램 목록을 묶는 기준
+--
+--   주제는 한 곳(프로그램계획 > 주제 관리)에서 만들고 고치고 순서를 바꾼다.
+--   프로그램마다 매번 타이핑하지 않는다.
+--   여기 이름을 고치면 그 주제를 쓰는 프로그램 전부에 한 번에 반영된다 (FK 라서).
+-- ---------------------------------------------------------------------
+create table if not exists moalab.topics (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null unique,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists topics_order_idx on moalab.topics(sort_order, name);
+
+-- 주제를 지우면 그 프로그램들은 '주제 없음' 으로 돌아간다 (프로그램은 안 지운다)
+alter table moalab.apps add column if not exists topic_id uuid
+  references moalab.topics(id) on delete set null;
+create index if not exists apps_topic_id_idx on moalab.apps(topic_id);
+
+-- (구) 자유 입력 주제. 아래 블록이 topics 로 옮긴 뒤에는 안 쓴다 — 기록용으로만 남긴다
 alter table moalab.apps add column if not exists topic text;
-create index if not exists apps_topic_idx on moalab.apps(topic);
+
+-- 예전에 자유 입력으로 넣어둔 주제를 topics 로 옮긴다 (여러 번 실행해도 안전)
+insert into moalab.topics (name, sort_order)
+select distinct btrim(a.topic), 0
+from moalab.apps a
+where a.topic is not null and btrim(a.topic) <> ''
+on conflict (name) do nothing;
+
+update moalab.apps a
+set topic_id = t.id
+from moalab.topics t
+where a.topic_id is null and btrim(coalesce(a.topic, '')) = t.name;
 
 -- ---------------------------------------------------------------------
 -- 3. 검증자 배정 (앱 1 : 검증자 N)
@@ -463,7 +492,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'apps','app_reviewers','rounds','checks','check_files','comments','comment_files',
+    'topics','apps','app_reviewers','rounds','checks','check_files','comments','comment_files',
     'findings','finding_files','finding_replies','round_signoffs',
     'cost_sheets','cost_items','cost_item_photos',
     'albums','photos','schedules','schedule_members','activity_logs',

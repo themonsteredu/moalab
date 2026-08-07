@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
 import { AppBoardCard, AppCard, AppGalleryCard } from '@/components/AppCard';
 import { AppForm } from '@/components/AppForm';
+import { TopicManager } from '@/components/TopicManager';
 import { CardSkeleton, EmptyState, ErrorBanner } from '@/components/ui';
 import { useAppsOverview, PIECES, type Completeness } from '@/lib/useAppsOverview';
 import { useMembers } from '@/lib/useMembers';
@@ -40,7 +41,7 @@ const VIEW_KEY = 'moalab.apps.view';
 
 export default function AppsPage() {
   const { session, isAdmin } = useSession();
-  const { items, loading, error, reload } = useAppsOverview();
+  const { items, topics, loading, error, reload } = useAppsOverview();
   const { nameOf } = useMembers(true);
   const router = useRouter();
 
@@ -51,6 +52,7 @@ export default function AppsPage() {
   const [sort, setSort] = useState<Sort>('due');
   const [q, setQ] = useState('');
   const [formOpen, setFormOpen] = useState(false);
+  const [topicsOpen, setTopicsOpen] = useState(false);
 
   // 보기 방식은 기억해둔다 (원장은 보드, 강사는 리스트를 주로 쓴다)
   useEffect(() => {
@@ -99,15 +101,20 @@ export default function AppsPage() {
     });
   }, [items, filter, sort, q, session?.id]);
 
-  /** 주제별 트리. 검색·필터가 걸리면 그 결과 안에서 묶는다 */
+  /**
+   * 주제별 트리. 검색·필터가 걸리면 그 결과 안에서 묶는다.
+   * 순서는 '주제 관리' 에서 정한 순서를 따르고, '주제 없음' 은 늘 맨 아래다.
+   * 프로그램이 하나도 없는 주제는 그리지 않는다 (빈 줄이 쌓이면 스크롤만 길어진다).
+   */
   const groups = useMemo(() => {
     const m = new Map<string, typeof filtered>();
     for (const it of filtered) {
-      const t = it.app.topic?.trim() || NO_TOPIC;
+      const t = it.topicName || NO_TOPIC;
       const list = m.get(t) ?? [];
       list.push(it);
       m.set(t, list);
     }
+    const order = new Map(topics.map((t, i) => [t.name, i]));
     return [...m.entries()]
       .map(([topic, list]) => ({
         topic,
@@ -115,11 +122,17 @@ export default function AppsPage() {
         fixing: list.filter((i) => i.status === 'fixing').length,
         done: list.filter((i) => i.status === 'done').length,
       }))
-      // '주제 없음' 은 늘 맨 아래
-      .sort((a, b) =>
-        a.topic === NO_TOPIC ? 1 : b.topic === NO_TOPIC ? -1 : a.topic.localeCompare(b.topic, 'ko'),
-      );
-  }, [filtered]);
+      .sort((a, b) => {
+        if (a.topic === NO_TOPIC) return 1;
+        if (b.topic === NO_TOPIC) return -1;
+        const ai = order.get(a.topic) ?? 9999;
+        const bi = order.get(b.topic) ?? 9999;
+        return ai - bi || a.topic.localeCompare(b.topic, 'ko');
+      });
+  }, [filtered, topics]);
+
+  /** 주제별 프로그램 수 — 주제 관리에서 지울 때 경고에 쓴다 */
+  const countOfTopic = (topicId: string) => items.filter((i) => i.app.topic_id === topicId).length;
 
   /** 검색 중이면 저절로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다 */
   const searching = q.trim().length > 0 || filter !== 'all';
@@ -239,14 +252,27 @@ export default function AppsPage() {
           />
         ) : view === 'tree' ? (
           <div className="space-y-2">
-            {!searching && groups.length > 1 && (
-              <button
-                onClick={() => setOpenTopics(allOpen ? [] : groups.map((g) => g.topic))}
-                className="mb-1 text-[12px] font-bold text-neutral-400"
-              >
-                {allOpen ? '전부 접기' : '전부 펼치기'}
-              </button>
-            )}
+            <div className="mb-1 flex items-center justify-between gap-2">
+              {!searching && groups.length > 1 ? (
+                <button
+                  onClick={() => setOpenTopics(allOpen ? [] : groups.map((g) => g.topic))}
+                  className="text-[12px] font-bold text-neutral-400"
+                >
+                  {allOpen ? '전부 접기' : '전부 펼치기'}
+                </button>
+              ) : (
+                <span />
+              )}
+              {isAdmin && (
+                <button
+                  onClick={() => setTopicsOpen(true)}
+                  className="flex items-center gap-1 text-[12px] font-bold text-brand"
+                >
+                  <Icon name="tree" size={13} />
+                  주제 관리
+                </button>
+              )}
+            </div>
             {groups.map((g) => {
               const open = isOpen(g.topic);
               return (
@@ -337,6 +363,14 @@ export default function AppsPage() {
           </div>
         )}
       </div>
+
+      <TopicManager
+        open={topicsOpen}
+        onClose={() => setTopicsOpen(false)}
+        topics={topics}
+        countOf={countOfTopic}
+        onChanged={() => void reload()}
+      />
 
       <AppForm
         open={formOpen}
