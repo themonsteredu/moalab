@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from '@/lib/session';
-import { Avatar, BrandMark } from '@/components/Brand';
+import { Avatar, BrandLogo } from '@/components/Brand';
 import { Icon, type IconName } from '@/components/Icon';
 
 export interface NavItem {
@@ -170,9 +170,12 @@ export function SideNav() {
       className="fixed inset-y-0 left-0 z-40 hidden w-[232px] flex-col overflow-y-auto border-r border-sidebar-line bg-sidebar px-4 py-5 lg:flex"
       aria-label="주요 메뉴"
     >
-      <Link href="/home" className="mb-6 flex items-center gap-2.5 px-1">
-        <BrandMark size={34} />
-        <span className="text-[19px] font-black tracking-tight text-sidebar-bright">모아랩</span>
+      {/* 사이드바는 어두워서 전체 로고를 그대로 쓸 수 있다 */}
+      <Link href="/home" className="mb-6 block px-1">
+        <BrandLogo width={132} />
+        <span className="mt-1.5 block text-[12px] font-bold tracking-wide text-sidebar-text">
+          모아랩 업무
+        </span>
       </Link>
 
       <nav className="flex flex-1 flex-col gap-1">

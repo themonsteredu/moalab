@@ -130,10 +130,13 @@ export default function LoginPage() {
 
       <div className="relative flex w-full flex-1 flex-col items-center justify-center px-5 py-10">
         <div className="w-full max-w-[400px]">
-          {/* 로고 */}
+          {/* 로고 — 모아킷 로고는 어두운 배경 기준으로 만들어져 있어서
+              앱 아이콘과 같은 검은 판 위에 올린다 (밝은 배경에 teal 만 두면 붕 뜬다) */}
           <div className="mb-8 flex flex-col items-center">
-            <BrandMark size={60} />
-            <h1 className="mt-4 text-[26px] font-black leading-none tracking-tight text-neutral-900">
+            <span className="flex h-[84px] w-[84px] items-center justify-center rounded-[22px] bg-black shadow-[0_10px_28px_-10px_rgba(0,0,0,.55)]">
+              <BrandMark size={54} />
+            </span>
+            <h1 className="mt-3.5 text-[26px] font-black leading-none tracking-tight text-neutral-900">
               모아랩
             </h1>
             <p className="mt-2 text-[13px] font-normal tracking-wide text-neutral-400">

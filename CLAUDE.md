@@ -30,6 +30,7 @@
 | 프레임워크 | Next.js 14 (App Router) + TypeScript |
 | 스타일 | Tailwind CSS · **다크 대시보드** (브랜드 `#F26522`, 보조 `#2AD1C8`) |
 | 폰트 | 에스코어드림 (S-Core Dream, OFL) — jsDelivr CDN |
+| 로고 | 모아킷 (M 심볼 + moakit 워드마크), 브랜드 teal `#06BDBD` |
 | DB / Storage | Supabase |
 | 로그인 | 자체 PIN 4자리 (Supabase Auth 안 씀) |
 | 배포 | Vercel |
@@ -258,6 +259,34 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
   `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`
   (`npx web-push generate-vapid-keys` 로 만든다. private 키에 `NEXT_PUBLIC_` 붙이지 말 것)
 
+### 로고 · 앱 아이콘
+
+원본은 `assets/moakit-logo-source.png` (검정 배경의 모아킷 로고).
+여기서 `scripts/make-icons.mjs` 가 전부 뽑아낸다.
+
+```bash
+npm i -D playwright && node scripts/make-icons.mjs
+```
+
+playwright 는 아이콘을 다시 만들 때만 필요해서 `package.json` 에 넣지 않았다.
+**로고가 바뀌면 원본만 갈아끼우고 이 스크립트를 다시 돌리면 된다.**
+
+| 파일 | 쓰는 곳 |
+|---|---|
+| `public/moakit-symbol.png` | `BrandMark` — M 심볼만. **밝은 배경에도 쓸 수 있다** |
+| `public/moakit-mark.png` | `BrandLogo` — 심볼 + moakit. PC 사이드바 |
+| `public/moakit-logo.png` | `BrandLogo tagline` — 태그라인까지. 150px 이상에서만 |
+| `public/icon-192·512.png` | PWA (`manifest.webmanifest`) |
+| `public/icon-maskable-512.png` | 안드로이드 — 원형으로 잘려도 M 이 안 잘리게 작게 넣었다 |
+| `public/apple-touch-icon.png` | 아이폰 홈 화면. **iOS 가 모서리를 스스로 깎으니 각지게** 준다 |
+| `src/app/icon.png` | 파비콘 (app router 가 자동으로 집는다) |
+
+- 배경 검정을 알파로 빼낼 때 `alpha = max(r,g,b)` 로 두고 **프리멀티플라이를 되돌린다.**
+  안 그러면 글자 경계에 검은 테가 남는다.
+- **전체 로고는 어두운 배경에서만.** `moa` 가 흰색이라 밝은 배경에서 사라진다.
+  그래서 로그인 화면(밝음)에서는 **앱 아이콘과 같은 검은 판** 위에 심볼을 올렸다.
+- UI 강조색은 그대로 브랜드 오렌지(`#F26522`)다. 로고 teal 로 통째로 바꾸지 않았다.
+
 ### 원가 계산
 
 `src/lib/cost.ts`
@@ -323,7 +352,7 @@ src/components/
   LessonPlan.tsx             수업계획안 본문 + 파일 첨부
   CostInline.tsx             프로그램 페이지 안의 원가 요약
   SampleImages.tsx           프로그램 샘플 이미지
-  Brand.tsx                  브랜드 마크 · 멤버 아바타
+  Brand.tsx                  BrandMark(M 심볼) · BrandLogo(워드마크) · 멤버 아바타
   Icon.tsx                   인라인 SVG 아이콘 모음 (이모지 대체)
   MonthCalendar.tsx          월간 달력 그리드 (칸 안에 일정 제목까지 — 홈·일정 공용)
   Charts.tsx                 Sparkline · WeekBars · Timeline · StatCard (SVG 직접)
@@ -424,6 +453,12 @@ src/components/
 - [x] **푸시 알림** — 새 공지·새 지적·답변. 자기 행동은 자기한테 안 울림.
       죽은 구독 자동 정리. 아이폰 홈화면 추가 안내
 
+### ✅ 9단계 — 모아킷 로고 적용
+- [x] 원본 로고에서 투명 PNG 3종(심볼 / 마크 / 전체) 추출
+- [x] PWA·아이폰·안드로이드·파비콘 아이콘 전부 생성 (검정 + teal M)
+- [x] PC 사이드바는 moakit 마크, 로그인은 앱 아이콘과 같은 검은 판 위 심볼
+- [x] `scripts/make-icons.mjs` — 로고 갈아끼우면 한 번에 다시 뽑힌다
+
 ### 다음에 하면 좋을 것
 
 - [ ] **모의수업·강사양성은 뼈대만 만든 상태다.** 실제로 어떤 칸이 필요한지
@@ -432,8 +467,7 @@ src/components/
       지적 캡처(`finding_files`)도 같은 문제라 정리 스크립트가 하나 필요하다.
 - [ ] 댓글에 답글(스레드) — 지금은 평면 목록
 - [ ] 앱 목록 정렬 옵션 (마감순 고정 → 이름순/상태순 선택)
-- [ ] PWA 아이콘 — 지금은 `icon.svg` 하나뿐. 아이폰 홈 화면 아이콘용 **192·512 PNG** 가 있으면
-      '홈 화면에 추가' 결과가 깔끔해진다 (푸시 알림도 홈 화면 설치가 전제라 같이 하면 좋다)
+- [ ] UI 강조색을 로고 teal(`#06BDBD`)로 맞출지 — 지금은 오렌지 그대로다 (원장 취향 확인 필요)
 
 ---
 

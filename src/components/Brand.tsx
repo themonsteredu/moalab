@@ -1,14 +1,43 @@
-/** 모아랩 마크 — 브랜드 컬러 라운드 사각형 + '모' */
+/**
+ * 모아킷 심볼 (M 마크).
+ * 원본 로고 PNG 에서 검정 배경만 알파로 빼낸 것 — 밝은 배경·어두운 배경 양쪽에서 쓴다.
+ * (전체 로고 moakit-logo.png 는 흰 'moa' 가 있어서 어두운 배경에서만 쓸 수 있다)
+ * 다시 만들 땐 scripts/make-icons.mjs
+ */
 export function BrandMark({ size = 56 }: { size?: number }) {
+  // 원본 심볼 비율 431 x 273
   return (
-    <span
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/moakit-symbol.png"
+      alt=""
       aria-hidden
-      style={{ width: size, height: size, fontSize: size * 0.52, borderRadius: size * 0.28 }}
-      className="inline-flex shrink-0 items-center justify-center bg-brand font-black leading-none text-white
-                 shadow-[0_8px_22px_-6px_rgba(242,101,34,.65)]"
-    >
-      모
-    </span>
+      width={size}
+      height={Math.round((size * 273) / 431)}
+      style={{ width: size, height: 'auto' }}
+      className="shrink-0 select-none"
+    />
+  );
+}
+
+/**
+ * 로고 (심볼 + moakit 워드마크). **어두운 배경에서만** — 'moa' 가 흰색이다.
+ *
+ * `tagline` 을 켜면 'EMPOWER LEARNING…' 까지 들어간다. 150px 아래로 내려가면
+ * 태그라인 글씨가 뭉개져서 기본값은 끈 상태다.
+ */
+export function BrandLogo({ width = 150, tagline = false }: { width?: number; tagline?: boolean }) {
+  const ratio = tagline ? 557 / 1017 : 498 / 1017;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={tagline ? '/moakit-logo.png' : '/moakit-mark.png'}
+      alt="모아킷"
+      width={width}
+      height={Math.round(width * ratio)}
+      style={{ width, height: 'auto' }}
+      className="shrink-0 select-none"
+    />
   );
 }
 
