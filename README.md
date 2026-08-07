@@ -9,19 +9,34 @@
 
 ## 처음 설정 (3단계)
 
-### 1. Supabase 프로젝트 만들기
+### 1. Supabase 스키마 만들기
 
-[supabase.com](https://supabase.com) 에서 새 프로젝트를 만든 뒤,
 **SQL Editor** 에 [`supabase/schema.sql`](./supabase/schema.sql) 을 통째로 붙여넣고 **Run**.
 
 이 한 번으로 아래가 전부 만들어집니다.
 
-- 테이블 15개 (멤버 · 앱 · 라운드 · 체크 · 댓글 · 원가 · 갤러리 · 일정 · 로그)
+- `moalab` 스키마 + 테이블 15개 (멤버 · 앱 · 라운드 · 체크 · 댓글 · 원가 · 갤러리 · 일정 · 로그)
 - RLS 정책 (`members` 는 브라우저에서 접근 불가, PIN 노출 차단)
-- Storage 버킷 3개 (`comment-files`, `cost-photos`, `gallery`) — 공개 읽기 + 인증된 쓰기
+- Storage 버킷 3개 (`moalab-comment-files`, `moalab-cost-photos`, `moalab-gallery`)
 - 초기 멤버 5명
 
 여러 번 실행해도 안전합니다.
+
+> **왜 `public` 이 아니라 `moalab` 스키마인가**
+> 이 Supabase 프로젝트는 다른 앱과 같이 씁니다. `public` 에 만들면
+> 이미 있는 `members` · `apps` · `schedules` · `photos` 같은 테이블과 부딪칩니다.
+> 전용 스키마를 쓰면 서로 절대 건드리지 않습니다. Storage 버킷도 같은 이유로
+> `moalab-` 을 붙였습니다.
+
+### 1-1. ⚠️ Exposed schemas 에 `moalab` 추가 (필수)
+
+**Settings → API → Exposed schemas** 에서 `moalab` 을 추가하고 **Save**.
+(`public`, `graphql_public` 은 그대로 두고 `moalab` 만 더합니다.)
+
+이 단계를 건너뛰면 앱이 이렇게 말합니다 —
+*"DB 설정이 덜 끝났어요. Supabase 설정 > API > Exposed schemas 에 moalab 을 추가해주세요."*
+
+> 프로젝트를 새로 파는 경우엔 [supabase.com](https://supabase.com) 에서 만든 뒤 위 두 단계를 하면 됩니다.
 
 ### 2. 환경변수
 
@@ -131,6 +146,9 @@ npm run typecheck   # 타입 검사만
 
 ## 알아둘 것
 
+- 모아랩 데이터는 전부 **`moalab` 스키마** 안에 있습니다. 같은 프로젝트의 다른 앱
+  (`public` 스키마)과 완전히 분리돼 있어서 서로 영향을 주지 않습니다.
+  SQL 로 직접 볼 때는 `select * from moalab.apps;` 처럼 스키마를 붙여주세요.
 - 사진을 지우면 DB 기록은 사라지지만 **Storage 버킷의 파일은 남습니다.** 많이 쌓이면 정리가 필요합니다.
 - 내부 5~7명 전용 도구라 RLS를 느슨하게 뒀습니다 (`members` 만 예외). 외부에 공개하지 마세요.
 - 로그인 세션은 localStorage에 30일 유지됩니다. 공용 PC에서는 로그아웃하세요.

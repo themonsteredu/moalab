@@ -78,7 +78,7 @@ export default function AlbumPage() {
     for (let i = 0; i < files.length; i++) {
       setUploading(`올리는 중… ${i + 1}/${files.length}`);
       try {
-        const up = await uploadFile('gallery', files[i], `album-${albumId}`);
+        const up = await uploadFile('moalab-gallery', files[i], `album-${albumId}`);
         const { error: e } = await supabase
           .from('photos')
           .insert({ album_id: albumId, url: up.url, tag: 'work', has_face: false });

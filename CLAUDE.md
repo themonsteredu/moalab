@@ -47,7 +47,10 @@ cp .env.example .env.local
 #    Supabase 대시보드 > SQL Editor 에 supabase/schema.sql 을 통째로 붙여넣고 실행
 #    (여러 번 실행해도 안전 / Storage 버킷 3개와 초기 멤버 5명까지 같이 만들어짐)
 
-# 4) 개발 서버
+# 4) ★ Supabase 설정 > API > Exposed schemas 에 moalab 추가 후 Save
+#    이걸 빼먹으면 앱이 데이터를 하나도 못 읽는다
+
+# 5) 개발 서버
 npm run dev        # http://localhost:3000
 ```
 
@@ -80,6 +83,29 @@ npm run dev        # http://localhost:3000
 | `/gallery` | 갤러리 | 앨범/사진 → `/gallery/[albumId]` |
 | `/schedule` | 일정 | 월간·주간 달력 |
 | `/admin` | 관리 | **원장만.** 멤버, 앱 추가, 전체 현황, 활동 로그 |
+
+---
+
+---
+
+## 전용 스키마 `moalab` — 이걸 먼저 알아야 한다
+
+이 Supabase 프로젝트는 **다른 앱과 같이 쓴다.** `public` 스키마에는 이미
+`members` · `apps` · `schedules` · `photos` 같은 남의 테이블이 있다.
+그래서 모아랩 테이블은 **전부 `moalab` 스키마 안**에 있다.
+
+- 브라우저·서버 클라이언트 모두 `db: { schema: 'moalab' }` 로 만든다
+  (`src/lib/supabase.ts`, `src/lib/supabaseAdmin.ts`)
+  → 앱 코드에서는 그냥 `supabase.from('apps')` 라고 쓰면 `moalab.apps` 로 간다.
+- SQL 로 직접 볼 때만 스키마를 붙인다: `select * from moalab.apps;`
+- Storage 버킷도 같은 이유로 `moalab-` 접두어를 붙였다
+  (`moalab-comment-files`, `moalab-cost-photos`, `moalab-gallery`).
+  접두어 없이 `gallery` 를 쓰면 남의 버킷을 공개로 덮어쓸 위험이 있다.
+- **Supabase 설정 > API > Exposed schemas 에 `moalab` 이 없으면 아무것도 안 된다.**
+  이 경우 `friendlyError()` 가 그 사실을 한글로 알려준다.
+
+> 새 테이블을 추가할 때도 반드시 `moalab.` 을 붙이고, `schema.sql` 의
+> RLS 목록(`internal_all` 루프)에 테이블 이름을 넣어줘야 한다.
 
 ---
 
@@ -154,12 +180,12 @@ npm run dev        # http://localhost:3000
 ## 파일 지도
 
 ```
-supabase/schema.sql          테이블·RLS·Storage 버킷·초기 멤버 (한 번에 실행)
+supabase/schema.sql          moalab 스키마·테이블·RLS·Storage 버킷·초기 멤버 (한 번에 실행)
 
 src/lib/
   types.ts                   DB 타입 + CHECK_ITEMS(고정 5항목) + 카테고리 상수
-  supabase.ts                브라우저 클라이언트 + friendlyError (한글 에러 변환)
-  supabaseAdmin.ts           서버 전용 service_role 클라이언트
+  supabase.ts                브라우저 클라이언트(schema: moalab) + friendlyError (한글 에러 변환)
+  supabaseAdmin.ts           서버 전용 service_role 클라이언트(schema: moalab)
   session.tsx                로그인 세션 컨텍스트 (localStorage 30일)
   verify.ts                  라운드 생성 / 체크 생성 / 상태 재계산
   status.ts                  computeStatus, roundProgress, 상태 배지 스타일

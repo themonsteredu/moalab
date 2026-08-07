@@ -148,7 +148,7 @@ export function CostItemForm({
 
       if (newFiles.length > 0) {
         setProgress(`사진 올리는 중… 0/${newFiles.length}`);
-        const uploaded = await uploadMany('cost-photos', newFiles, `sheet-${sheetId}`, (d, t) =>
+        const uploaded = await uploadMany('moalab-cost-photos', newFiles, `sheet-${sheetId}`, (d, t) =>
           setProgress(`사진 올리는 중… ${d}/${t}`),
         );
         const { error: e } = await supabase

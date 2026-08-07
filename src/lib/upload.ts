@@ -3,7 +3,8 @@
 import { supabase } from './supabase';
 import { resizeImage, storagePath } from './image';
 
-export type BucketName = 'comment-files' | 'cost-photos' | 'gallery';
+/** 버킷 이름에 moalab- 접두어를 붙여 같은 프로젝트의 다른 앱 버킷과 섞이지 않게 한다 */
+export type BucketName = 'moalab-comment-files' | 'moalab-cost-photos' | 'moalab-gallery';
 
 export interface UploadedFile {
   url: string;

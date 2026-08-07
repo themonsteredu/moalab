@@ -75,7 +75,7 @@ export function CommentThread({ appId, appSlug }: { appId: string; appSlug: stri
 
       if (files.length > 0) {
         setProgress(`사진 올리는 중… 0/${files.length}`);
-        const uploaded = await uploadMany('comment-files', files, `app-${appId}`, (d, t) =>
+        const uploaded = await uploadMany('moalab-comment-files', files, `app-${appId}`, (d, t) =>
           setProgress(`사진 올리는 중… ${d}/${t}`),
         );
         const { error: fErr } = await supabase.from('comment_files').insert(
