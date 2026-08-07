@@ -33,7 +33,10 @@ export type IconName =
   | 'external'
   | 'chevronDown'
   | 'puzzle'
-  | 'receipt';
+  | 'receipt'
+  | 'megaphone'
+  | 'present'
+  | 'dots';
 
 const P: Record<IconName, React.ReactNode> = {
   check: <path d="m4.5 12.5 5 5 10-11" />,
@@ -151,6 +154,25 @@ const P: Record<IconName, React.ReactNode> = {
     <>
       <path d="M5 3.5h14v17l-2.3-1.6-2.3 1.6-2.4-1.6-2.3 1.6L7.3 19 5 20.5z" />
       <path d="M9 8.5h6M9 12.5h6" />
+    </>
+  ),
+  megaphone: (
+    <>
+      <path d="M4 10v4a1.5 1.5 0 0 0 1.5 1.5H8l8 4.5V5.5L8 10H5.5A1.5 1.5 0 0 0 4 11.5z" />
+      <path d="M19 9.5a3.5 3.5 0 0 1 0 5M8 15.5V20" />
+    </>
+  ),
+  present: (
+    <>
+      <path d="M3.5 4.5h17M4.5 4.5v9a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-9" />
+      <path d="M12 15v4.5M8.5 20.5 12 19.5l3.5 1" />
+    </>
+  ),
+  dots: (
+    <>
+      <circle cx="5" cy="12" r="1.4" />
+      <circle cx="12" cy="12" r="1.4" />
+      <circle cx="19" cy="12" r="1.4" />
     </>
   ),
 };

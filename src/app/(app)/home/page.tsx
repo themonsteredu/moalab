@@ -245,32 +245,36 @@ export default function HomePage() {
   const moveMonth = (d: number) => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + d, 1));
 
   return (
-    <div className="px-4 pb-8 pt-4 lg:px-0">
-      {/* --------------------------------------------------------- 인사 */}
-      <div className="mb-4 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-400 via-brand to-brand-600 p-4 lg:p-5">
-        <div className="flex items-center justify-between gap-3">
+    <div className="px-4 pb-8 pt-4 lg:px-0 lg:pt-0">
+      {/* --------------------------------------------------------- 인사
+          PC 에서는 인사·요약을 한 줄로 눕혀 맨 윗줄에 통째로 보이게 한다.
+          (두 줄이면 조금만 스크롤해도 반쯤 잘려 보여서 지저분했다) */}
+      <div className="mb-4 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-400 via-brand to-brand-600 p-4 lg:flex lg:items-center lg:gap-4 lg:px-5 lg:py-3.5">
+        <div className="flex items-center justify-between gap-3 lg:shrink-0">
           <div className="min-w-0">
-            <p className="text-[18px] font-black leading-tight text-white lg:text-[22px]">
+            <p className="text-[18px] font-black leading-tight text-white lg:text-[19px]">
               안녕하세요 {greeting}
             </p>
-            <p className="mt-1 text-[12.5px] text-white/75">{korDateFull(todayStr)}</p>
+            <p className="mt-0.5 text-[12.5px] text-white/75">{korDateFull(todayStr)}</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 lg:hidden">
             {session && <Avatar name={session.name} size={40} ring />}
-            <button
-              onClick={signOut}
-              className="hidden text-[12.5px] font-semibold text-white/70 hover:text-white lg:block"
-            >
-              로그아웃
-            </button>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
+
+        <div className="mt-3 flex flex-wrap gap-1.5 lg:mt-0 lg:flex-1 lg:flex-nowrap lg:justify-end">
           <HeroChip label="내 할 일" value={`${myTasks.length}`} />
           <HeroChip label="팀 미착수" value={`${untouched}`} tone={untouched > 0 ? 'warn' : 'ok'} />
           <HeroChip label="7일 내 마감" value={`${dueSoon}`} tone={dueSoon > 0 ? 'warn' : 'ok'} />
           <HeroChip label="검증 완료" value={`${overallPct}%`} />
         </div>
+
+        <button
+          onClick={signOut}
+          className="hidden shrink-0 text-[12.5px] font-semibold text-white/70 hover:text-white lg:block"
+        >
+          로그아웃
+        </button>
       </div>
 
       {error && (

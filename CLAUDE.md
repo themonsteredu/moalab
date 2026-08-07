@@ -76,16 +76,27 @@ npm run dev        # http://localhost:3000
 
 ## 화면 구조
 
-하단 탭 5개 + 원장 전용 1개
+메뉴 순서 = **일하는 순서**다.
+공지로 알리고 → 계획을 세우고 → 검증하고 → 모의수업으로 돌려보고 → 강사를 키운다.
+원가·갤러리·일정은 그 흐름에 딸린 **자료**라서 아래 묶음으로 내렸다.
 
-| 경로 | 탭 | 내용 |
+| 경로 | 메뉴 | 내용 |
 |---|---|---|
 | `/home` | 홈 | 대시보드 — 인사 배너 · **달력** · 통계 3장 · 마감 타임라인 · 내 할 일 · 팀 현황<br>(PC 는 오른쪽에 팀 활동 · 주간 활동 · 프로그램 구성) |
-| `/apps` | 프로그램 | 목록(리스트·보드·갤러리) → `/apps/[id]` **프로그램 페이지** |
+| `/notice` | 공지사항 | 공지 + **읽음 표시** (누가 봤고 누가 아직인지). 쓰기는 원장만 |
+| `/apps` | 프로그램계획 | 목록(리스트·보드·갤러리) → `/apps/[id]` **프로그램 페이지** |
+| `/verify` | 프로그램검증 | 검증만 모아 보기 — 내가 볼 것 / 내 답변 대기 / 전체 (새 테이블 없음, 기존 데이터 재조합) |
+| `/mock` | 모의수업 | 날짜·발표자만 잡고, 끝나면 "좋았던 점 / 고칠 점" 두 칸 |
+| `/training` | 강사양성 | 과정 × 강사 이수 상태 (미이수·진행 중·이수) |
 | `/cost` | 원가 | 원가표 목록 → `/cost/[sheetId]` 계산서 |
 | `/gallery` | 갤러리 | 앨범/사진 → `/gallery/[albumId]` |
 | `/schedule` | 일정 | 월간·주간 달력 |
 | `/admin` | 관리 | **원장만.** 멤버, 앱 추가, 전체 현황, 활동 로그 |
+
+- **PC**: 왼쪽 사이드바에 전부 세로로 (업무 6개 → 구분선 → 자료 4개).
+- **폰**: 하단 탭은 4개(홈·공지·프로그램·검증)만 두고 나머지는 **더보기** 시트에 넣는다.
+  탭을 9개 늘어놓으면 375px 에서 글씨가 뭉개진다.
+- 메뉴는 `src/components/BottomNav.tsx` 의 `WORK_NAV` / `RESOURCE_NAV` 두 배열이 전부다.
 
 ---
 
@@ -137,7 +148,7 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
 |---|---|---|
 | 속성 블록 | 상태·라운드·제작자·검증자·마감·학년·링크 | `apps`, `app_reviewers` |
 | ✅ 검증 | 현재 라운드 체크리스트 + 지난 라운드 | `rounds`, `checks` |
-| 📄 수업계획안 | 본문 + 지도안·활동지 파일 | `apps.plan_body`, `plan_files` |
+| 📄 수업계획안 | **첨부 전용** — 전체 다운로드(zip) · 미리보기 | `plan_files` |
 | 💰 원가 | 1인당·총원가·마진 요약 (고칠 땐 `/cost/[id]`) | `cost_sheets`, `cost_items` |
 | 🖼️ 샘플 이미지 | 제안서용 예시 작품 | `app_samples` |
 | 📸 수업 사진 | 실제 수업 기록 (앨범 링크) | `albums`, `photos` |
@@ -170,6 +181,23 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
 
 각 항목은 `none | pass | fail`. **`fail` 을 고르면 메모 없이는 저장이 막힌다.**
 (`src/components/Checklist.tsx`) — "봤다"인지 "다 돌려봤다"인지 구분이 안 되던 게 노션의 가장 큰 문제였다.
+
+### 지적 → 답변 (한 바퀴 도는 곳)
+
+말로만 "안 돼요" 하면 어디가 안 되는지 못 찾는다. 그래서 지적 한 건이 이렇게 닫힌다.
+
+1. 검증자가 `실패` → **사유(필수) + 캡처 이미지**를 붙인다 (`moalab.check_files`)
+2. 제작자(또는 원장)가 그 항목에 답한다 — `checks.response_state`
+   · `fixed` **업데이트 완료** → "고쳤으니 다시 봐주세요"
+   · `explained` **사유만 남기기** → "이건 이래서 이렇습니다"
+3. 검증자가 다시 보고 `통과` 로 바꾸거나, 또 걸면 **답변이 자동으로 무효**가 된다
+   (같은 항목을 다시 `fail` 로 저장하면서 내용이 바뀌면 `response_state` 를 `none` 으로 되돌린다.
+   안 그러면 새 지적에 옛 "업데이트 완료"가 붙어 있어 아무도 안 본다)
+
+답 안 한 지적은 `/verify` 의 **내 답변 대기** 칸에 모인다. 원장은 전부, 강사는 자기가 만든 것만.
+
+- 캡처는 `moalab-comment-files` 버킷에 올린다 (댓글 사진과 같은 버킷 — 성격이 같다).
+- 저장은 여기서도 **명시적 버튼**이다. 캡처를 골라도 저장을 눌러야 올라간다.
 
 ### 검증 라운드
 
@@ -246,9 +274,13 @@ src/lib/
   useMembers.ts              멤버 목록 훅
   useAppsOverview.ts         앱 요약(상태·진행률·미해결 댓글) — 목록 화면 공용
 
+src/app/(app)/
+  home/ notice/ apps/ verify/ mock/ training/ cost/ gallery/ schedule/ admin/
+                             메뉴 하나가 폴더 하나. 순서는 BottomNav.tsx 가 정한다.
+
 src/components/
   ui.tsx                     Sheet, ConfirmDialog, Skeleton, EmptyState, Toast 등
-  BottomNav.tsx              하단 탭 (원장이면 '관리' 탭 추가)
+  BottomNav.tsx              메뉴 정의(WORK_NAV/RESOURCE_NAV) + 폰 하단 탭 · PC 사이드바
   PageHeader.tsx             상단 헤더
   AppForm.tsx                앱 추가/수정 — 저장 시 라운드·체크 자동 생성
   AppCard.tsx                앱 목록 카드 (리스트/보드/갤러리 3종 + PieceRow)
@@ -257,11 +289,11 @@ src/components/
   SampleImages.tsx           프로그램 샘플 이미지
   Brand.tsx                  브랜드 마크 · 멤버 아바타
   Icon.tsx                   인라인 SVG 아이콘 모음 (이모지 대체)
-  MonthCalendar.tsx          월간 달력 그리드 (홈·일정 공용)
+  MonthCalendar.tsx          월간 달력 그리드 (칸 안에 일정 제목까지 — 홈·일정 공용)
   Charts.tsx                 Sparkline · WeekBars · Timeline · StatCard (SVG 직접)
   TeamBoard.tsx              누가 뭘 했나/안 했나 — 사람 단위 협업 현황
-  Checklist.tsx              검증자 1명의 5항목 체크 (명시적 저장 / fail 메모 강제)
-  RoundHistory.tsx           지난 라운드 접힌 기록
+  Checklist.tsx              검증자 1명의 5항목 체크 (명시적 저장 / fail 메모·캡처 / 제작자 답변)
+  RoundHistory.tsx           지난 라운드 접힌 기록 (캡처·답변까지 같이 남는다)
   CommentThread.tsx          댓글 + 사진 첨부 + 해결됨 토글
   CostItemForm.tsx           원가 항목 입력 (사진·구매처·재사용)
   CostChart.tsx              구분별 도넛 + 막대 (SVG 직접 그림, 라이브러리 없음)
@@ -331,11 +363,22 @@ src/components/
 - [x] 활동 로그 (원장 관리 화면에서만 조회, 검색 가능)
 - [x] 카톡 복사, 진행률 그래프
 
+### ✅ 6단계 — 업무 흐름대로 메뉴 재편
+- [x] 왼쪽 메뉴를 **공지사항 / 프로그램계획 / 프로그램검증 / 모의수업 / 강사양성** 으로 재편
+      (원가·갤러리·일정은 '자료' 묶음으로, 폰은 4탭 + 더보기)
+- [x] 공지사항 — 고정 공지 + **읽음 표시** (누가 봤고 누가 아직인지)
+- [x] 프로그램검증 — 내가 볼 것 / 내 답변 대기 / 전체. 새 테이블 없이 기존 데이터 재조합
+- [x] 검증 **지적 → 답변** 한 바퀴 (캡처 첨부 / 업데이트 완료·사유 / 재지적 시 답변 자동 무효)
+- [x] 모의수업 — 날짜·발표자 + "좋았던 점 / 고칠 점" 피드백
+- [x] 강사양성 — 과정 × 강사 이수 상태 (강사는 내 과정, 원장은 전체 판)
+- [x] PC 본문 첫 줄을 사이드바 로고와 같은 선에 맞추고, 홈 인사·요약을 한 줄로
+
 ### 다음에 하면 좋을 것
 
+- [ ] **모의수업·강사양성은 뼈대만 만든 상태다.** 실제로 어떤 칸이 필요한지
+      (모의수업 참석자 체크? 강사양성 과정 목록?) 원장 확인 후 채운다.
 - [ ] 사진 Storage 실제 파일 삭제 — 지금은 DB 레코드만 지운다 (버킷에 파일이 남음).
-      쌓이면 Supabase Storage 정리 스크립트가 필요하다.
-- [ ] 수업계획안 첨부 (스펙 0번의 "수업계획안" — 현재는 앱의 '제작 목적' 텍스트로만 있음)
+      검증 캡처(`check_files`)도 같은 문제라 정리 스크립트가 하나 필요하다.
 - [ ] 댓글에 답글(스레드) — 지금은 평면 목록
 - [ ] 앱 목록 정렬 옵션 (마감순 고정 → 이름순/상태순 선택)
 - [ ] PWA 아이콘 (`public/manifest.webmanifest` 의 `icons` 가 비어 있음)

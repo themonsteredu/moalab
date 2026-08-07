@@ -21,7 +21,7 @@ import { AppForm } from '@/components/AppForm';
 import { Avatar } from '@/components/Brand';
 import { Icon, type IconName } from '@/components/Icon';
 import { CardSkeleton, ConfirmDialog, ErrorBanner, ProgressBar, Sheet, useToast } from '@/components/ui';
-import type { Album, AppRow, CheckRow, Photo, Round } from '@/lib/types';
+import type { Album, AppRow, CheckFile, CheckRow, Photo, Round } from '@/lib/types';
 
 /** 프로그램 페이지의 목차. 이 순서가 곧 일하는 순서다. */
 const SECTIONS = [
@@ -44,6 +44,7 @@ export default function AppDetailPage() {
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [checks, setChecks] = useState<CheckRow[]>([]);
+  const [checkFiles, setCheckFiles] = useState<CheckFile[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [openComments, setOpenComments] = useState(0);
@@ -99,9 +100,20 @@ export default function AppDetailPage() {
 
       if (rs.length > 0) {
         const { data: cs } = await supabase.from('checks').select('*').in('round_id', rs.map((r) => r.id));
-        setChecks((cs ?? []) as CheckRow[]);
+        const rows = (cs ?? []) as CheckRow[];
+        setChecks(rows);
+
+        // 지적사항 캡처는 실패한 항목에만 붙는다 — 그 행만 물어본다
+        const failIds = rows.filter((c) => c.result === 'fail').map((c) => c.id);
+        if (failIds.length > 0) {
+          const { data: fs } = await supabase.from('check_files').select('*').in('check_id', failIds);
+          setCheckFiles((fs ?? []) as CheckFile[]);
+        } else {
+          setCheckFiles([]);
+        }
       } else {
         setChecks([]);
+        setCheckFiles([]);
       }
     } catch (e) {
       setError(friendlyError(e, '앱 정보를 불러오지 못했어요. 다시 시도해주세요.'));
@@ -131,6 +143,19 @@ export default function AppDetailPage() {
     }
     return m;
   }, [checks]);
+
+  const filesByCheck = useMemo(() => {
+    const m = new Map<string, CheckFile[]>();
+    for (const f of checkFiles) {
+      const list = m.get(f.check_id) ?? [];
+      list.push(f);
+      m.set(f.check_id, list);
+    }
+    return m;
+  }, [checkFiles]);
+
+  /** 지적사항에 답할 수 있는 사람 = 만든 사람 또는 원장 */
+  const canRespond = Boolean(isAdmin || (app?.creator_id && app.creator_id === session?.id));
 
   /** 스크롤에 따라 목차 칩을 따라가게 */
   useEffect(() => {
@@ -387,7 +412,10 @@ export default function AppDetailPage() {
                       memberId={memberId}
                       memberName={nameOf(memberId)}
                       rows={currentChecks.filter((c) => c.member_id === memberId)}
+                      filesByCheck={filesByCheck}
                       editable={memberId === session?.id}
+                      canRespond={canRespond}
+                      nameOf={nameOf}
                       onSaved={() => {
                         toast.show('저장했어요.');
                         void load();
@@ -406,7 +434,12 @@ export default function AppDetailPage() {
           {rounds.length > 1 && (
             <div className="mt-5">
               <p className="mb-2 text-[13px] font-bold text-neutral-500">지난 검증 기록</p>
-              <RoundHistory rounds={rounds.slice(1)} checksByRound={checksByRound} nameOf={nameOf} />
+              <RoundHistory
+                rounds={rounds.slice(1)}
+                checksByRound={checksByRound}
+                filesByCheck={filesByCheck}
+                nameOf={nameOf}
+              />
             </div>
           )}
         </Section>

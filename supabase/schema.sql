@@ -95,6 +95,25 @@ create table if not exists moalab.checks (
 create index if not exists checks_round_idx  on moalab.checks(round_id);
 create index if not exists checks_member_idx on moalab.checks(member_id);
 
+-- 지적사항에 대한 제작자·원장의 답변
+--   none      아직 답 없음
+--   fixed     "업데이트 완료" — 검증자에게 다시 봐달라는 신호
+--   explained 사유만 적음 (이건 이래서 이렇습니다)
+alter table moalab.checks add column if not exists response       text;
+alter table moalab.checks add column if not exists response_state text not null default 'none';
+alter table moalab.checks add column if not exists responded_by   uuid references moalab.members(id) on delete set null;
+alter table moalab.checks add column if not exists responded_at   timestamptz;
+
+-- 지적할 때 붙이는 캡처 이미지 (말로만 적으면 뭘 말하는지 못 찾는다)
+create table if not exists moalab.check_files (
+  id         uuid primary key default gen_random_uuid(),
+  check_id   uuid not null references moalab.checks(id) on delete cascade,
+  file_url   text not null,
+  file_name  text,
+  created_at timestamptz not null default now()
+);
+create index if not exists check_files_check_idx on moalab.check_files(check_id);
+
 -- ---------------------------------------------------------------------
 -- 6. 댓글
 -- ---------------------------------------------------------------------
@@ -251,6 +270,77 @@ create table if not exists moalab.activity_logs (
 );
 create index if not exists activity_logs_created_idx on moalab.activity_logs(created_at desc);
 
+-- ---------------------------------------------------------------------
+-- 13. 공지사항 — "봤다"까지 남아야 전달이 된 것이다
+-- ---------------------------------------------------------------------
+create table if not exists moalab.notices (
+  id         uuid primary key default gen_random_uuid(),
+  title      text not null,
+  body       text not null,
+  pinned     boolean not null default false,
+  member_id  uuid references moalab.members(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists notices_created_idx on moalab.notices(pinned desc, created_at desc);
+
+create table if not exists moalab.notice_reads (
+  notice_id uuid not null references moalab.notices(id) on delete cascade,
+  member_id uuid not null references moalab.members(id) on delete cascade,
+  read_at   timestamptz not null default now(),
+  primary key (notice_id, member_id)
+);
+
+-- ---------------------------------------------------------------------
+-- 14. 모의수업 — 학교 나가기 전에 우리끼리 돌려보는 자리
+-- ---------------------------------------------------------------------
+create table if not exists moalab.mock_lessons (
+  id          uuid primary key default gen_random_uuid(),
+  app_id      uuid references moalab.apps(id) on delete set null,
+  title       text not null,
+  lesson_date date not null,
+  start_time  time,
+  place       text,
+  presenter_id uuid references moalab.members(id) on delete set null,
+  memo        text,
+  done        boolean not null default false,
+  created_at  timestamptz not null default now()
+);
+create index if not exists mock_lessons_date_idx on moalab.mock_lessons(lesson_date desc);
+
+create table if not exists moalab.mock_feedback (
+  id         uuid primary key default gen_random_uuid(),
+  mock_id    uuid not null references moalab.mock_lessons(id) on delete cascade,
+  member_id  uuid references moalab.members(id) on delete set null,
+  good       text,                                 -- 좋았던 점
+  fix        text,                                 -- 고칠 점
+  created_at timestamptz not null default now()
+);
+create index if not exists mock_feedback_mock_idx on moalab.mock_feedback(mock_id, created_at);
+
+-- ---------------------------------------------------------------------
+-- 15. 강사양성 — 과정 목록 × 강사별 이수 상태
+-- ---------------------------------------------------------------------
+create table if not exists moalab.training_courses (
+  id         uuid primary key default gen_random_uuid(),
+  title      text not null,
+  summary    text,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists training_courses_order_idx on moalab.training_courses(sort_order);
+
+create table if not exists moalab.training_records (
+  id         uuid primary key default gen_random_uuid(),
+  course_id  uuid not null references moalab.training_courses(id) on delete cascade,
+  member_id  uuid not null references moalab.members(id) on delete cascade,
+  state      text not null default 'todo',         -- todo | doing | done
+  memo       text,
+  done_at    timestamptz,
+  updated_at timestamptz not null default now(),
+  unique (course_id, member_id)
+);
+create index if not exists training_records_member_idx on moalab.training_records(member_id);
+
 -- =====================================================================
 --  권한 + RLS
 --   · members       : RLS on, 정책 없음 → anon 키로는 읽기/쓰기 전부 차단
@@ -282,10 +372,12 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'apps','app_reviewers','rounds','checks','comments','comment_files',
+    'apps','app_reviewers','rounds','checks','check_files','comments','comment_files',
     'cost_sheets','cost_items','cost_item_photos',
     'albums','photos','schedules','schedule_members','activity_logs',
-    'plan_files','app_samples'
+    'plan_files','app_samples',
+    'notices','notice_reads','mock_lessons','mock_feedback',
+    'training_courses','training_records'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);
     execute format('drop policy if exists "internal_all" on moalab.%I', t);

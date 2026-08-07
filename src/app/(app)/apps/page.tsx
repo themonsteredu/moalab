@@ -86,7 +86,7 @@ export default function AppsPage() {
   return (
     <>
       <PageHeader
-        title="프로그램"
+        title="프로그램계획"
         subtitle={`전체 ${items.length}개 · 검증 완료 ${doneCount}개`}
         right={
           isAdmin ? (

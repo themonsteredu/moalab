@@ -55,6 +55,23 @@ export interface CheckRow {
   result: CheckResult;
   note: string | null;
   updated_at: string;
+  /** 제작자·원장이 남긴 답변 */
+  response: string | null;
+  response_state: ResponseState;
+  responded_by: string | null;
+  responded_at: string | null;
+}
+
+/** 지적사항에 대한 답변 상태 */
+export type ResponseState = 'none' | 'fixed' | 'explained';
+
+/** 지적사항 캡처 */
+export interface CheckFile {
+  id: string;
+  check_id: string;
+  file_url: string;
+  file_name: string | null;
+  created_at: string;
 }
 
 export interface CommentRow {
@@ -164,6 +181,69 @@ export interface ActivityLog {
   target: string | null;
   created_at: string;
 }
+
+export interface Notice {
+  id: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  member_id: string | null;
+  created_at: string;
+}
+
+export interface NoticeRead {
+  notice_id: string;
+  member_id: string;
+  read_at: string;
+}
+
+export interface MockLesson {
+  id: string;
+  app_id: string | null;
+  title: string;
+  lesson_date: string;
+  start_time: string | null;
+  place: string | null;
+  presenter_id: string | null;
+  memo: string | null;
+  done: boolean;
+  created_at: string;
+}
+
+export interface MockFeedback {
+  id: string;
+  mock_id: string;
+  member_id: string | null;
+  good: string | null;
+  fix: string | null;
+  created_at: string;
+}
+
+export type TrainingState = 'todo' | 'doing' | 'done';
+
+export interface TrainingCourse {
+  id: string;
+  title: string;
+  summary: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface TrainingRecord {
+  id: string;
+  course_id: string;
+  member_id: string;
+  state: TrainingState;
+  memo: string | null;
+  done_at: string | null;
+  updated_at: string;
+}
+
+export const TRAINING_STATES: { value: TrainingState; label: string; cls: string; on: string }[] = [
+  { value: 'todo', label: '미이수', cls: 'bg-neutral-100 text-neutral-500', on: 'bg-neutral-500 text-white' },
+  { value: 'doing', label: '진행 중', cls: 'bg-amber-100 text-amber-800', on: 'bg-amber-500 text-white' },
+  { value: 'done', label: '이수', cls: 'bg-green-100 text-green-800', on: 'bg-green-600 text-white' },
+];
 
 /** 고정 5항목 — 절대 늘리거나 줄이지 말 것 (DB check 제약과 맞물림) */
 export const CHECK_ITEMS = [

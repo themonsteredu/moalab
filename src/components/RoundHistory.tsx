@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { CHECK_ITEMS, type CheckRow, type Round } from '@/lib/types';
+import { CHECK_ITEMS, type CheckFile, type CheckRow, type Round } from '@/lib/types';
 import { shortTime } from '@/lib/format';
 import { Icon } from '@/components/Icon';
+import { RESPONSE_META } from '@/components/Checklist';
 
 const MARK: Record<string, { text: string; cls: string }> = {
   pass: { text: '통과', cls: 'bg-green-100 text-green-800' },
@@ -18,13 +19,16 @@ const MARK: Record<string, { text: string; cls: string }> = {
 export function RoundHistory({
   rounds,
   checksByRound,
+  filesByCheck,
   nameOf,
 }: {
   rounds: Round[];
   checksByRound: Map<string, CheckRow[]>;
+  filesByCheck: Map<string, CheckFile[]>;
   nameOf: (id: string | null) => string;
 }) {
   const [openIds, setOpenIds] = useState<string[]>([]);
+  const [viewer, setViewer] = useState<string | null>(null);
   if (rounds.length === 0) return null;
 
   const toggle = (id: string) =>
@@ -88,6 +92,11 @@ export function RoundHistory({
                           {CHECK_ITEMS.map((label, i) => {
                             const row = rows.find((x) => x.item_no === i + 1);
                             const m = MARK[row?.result ?? 'none'];
+                            const shots = row ? (filesByCheck.get(row.id) ?? []) : [];
+                            const answered =
+                              row && row.response_state !== 'none'
+                                ? RESPONSE_META[row.response_state as 'fixed' | 'explained']
+                                : null;
                             return (
                               <li key={i} className="flex items-start gap-2">
                                 <span className={`chip mt-0.5 shrink-0 ${m.cls}`}>{m.text}</span>
@@ -95,6 +104,34 @@ export function RoundHistory({
                                   {label}
                                   {row?.note && (
                                     <span className="mt-0.5 block text-[12px] text-red-600">— {row.note}</span>
+                                  )}
+                                  {shots.length > 0 && (
+                                    <span className="mt-1 flex flex-wrap gap-1">
+                                      {shots.map((f) => (
+                                        <button
+                                          key={f.id}
+                                          type="button"
+                                          onClick={() => setViewer(f.file_url)}
+                                          className="h-11 w-11 overflow-hidden rounded-md bg-neutral-100"
+                                        >
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                                          <img
+                                            src={f.file_url}
+                                            alt={f.file_name ?? '캡처'}
+                                            loading="lazy"
+                                            className="h-full w-full object-cover"
+                                          />
+                                        </button>
+                                      ))}
+                                    </span>
+                                  )}
+                                  {answered && (
+                                    <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                                      <span className={`chip ${answered.chip}`}>{answered.label}</span>
+                                      {row?.response && (
+                                        <span className="text-[12px] text-neutral-500">{row.response}</span>
+                                      )}
+                                    </span>
                                   )}
                                 </span>
                               </li>
@@ -110,6 +147,16 @@ export function RoundHistory({
           </div>
         );
       })}
+
+      {viewer && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setViewer(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={viewer} alt="캡처 크게 보기" className="max-h-full max-w-full object-contain" />
+        </div>
+      )}
     </div>
   );
 }

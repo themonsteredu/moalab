@@ -24,8 +24,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh pb-[76px] lg:pb-0 lg:pl-[232px]">
       <SideNav />
-      {/* 폰은 한 줄, PC 는 넓게 */}
-      <div className="mx-auto max-w-3xl lg:max-w-none lg:px-6 lg:py-2">{children}</div>
+      {/* 폰은 한 줄, PC 는 넓게.
+          PC 위쪽 여백(pt-5)은 사이드바 로고와 같은 선에서 본문이 시작되도록 맞춘 값이다. */}
+      <div className="mx-auto max-w-3xl lg:max-w-none lg:px-6 lg:pb-6 lg:pt-5">{children}</div>
       <BottomNav />
     </div>
   );
