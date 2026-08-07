@@ -36,7 +36,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200/70 bg-surface/95 backdrop-blur safe-bottom lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-surface/95 backdrop-blur safe-bottom lg:hidden"
       aria-label="주요 메뉴"
     >
       <div className="mx-auto flex max-w-3xl">
@@ -69,12 +69,12 @@ export function SideNav() {
 
   return (
     <aside
-      className="fixed inset-y-0 left-0 z-40 hidden w-[232px] flex-col border-r border-neutral-200/70 bg-surface px-4 py-5 lg:flex"
+      className="fixed inset-y-0 left-0 z-40 hidden w-[232px] flex-col border-r border-sidebar-line bg-sidebar px-4 py-5 lg:flex"
       aria-label="주요 메뉴"
     >
       <Link href="/home" className="mb-7 flex items-center gap-2.5 px-1">
         <BrandMark size={34} />
-        <span className="text-[19px] font-black tracking-tight text-neutral-900">모아랩</span>
+        <span className="text-[19px] font-black tracking-tight text-sidebar-bright">모아랩</span>
       </Link>
 
       <nav className="flex flex-1 flex-col gap-1">
@@ -88,7 +88,7 @@ export function SideNav() {
               className={`flex h-11 items-center gap-3 rounded-xl px-3 text-[14.5px] font-bold transition ${
                 active
                   ? 'bg-brand text-white shadow-[0_8px_20px_-10px_rgba(242,101,34,.9)]'
-                  : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800'
+                  : 'text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-bright'
               }`}
             >
               <Icon name={t.icon} size={18} strokeWidth={active ? 2.2 : 1.8} />
@@ -99,16 +99,16 @@ export function SideNav() {
       </nav>
 
       {session && (
-        <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-raised px-3 py-2.5">
+        <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-sidebar-hover px-3 py-2.5">
           <Avatar name={session.name} size={30} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-bold text-neutral-800">{session.name}</p>
-            <p className="text-[11px] text-neutral-400">{session.role === 'admin' ? '원장' : '강사'}</p>
+            <p className="truncate text-[13px] font-bold text-sidebar-bright">{session.name}</p>
+            <p className="text-[11px] text-sidebar-text">{session.role === 'admin' ? '원장' : '강사'}</p>
           </div>
           <button
             onClick={signOut}
             aria-label="로그아웃"
-            className="shrink-0 text-neutral-400 transition hover:text-neutral-700"
+            className="shrink-0 text-sidebar-text transition hover:text-sidebar-bright"
           >
             <Icon name="external" size={15} />
           </button>

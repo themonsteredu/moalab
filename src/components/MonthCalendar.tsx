@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { toISODate, today } from '@/lib/format';
+import { toISODate, today, hhmm } from '@/lib/format';
 
 export type EntryKind = 'due' | 'meeting' | 'visit';
 
@@ -13,21 +13,42 @@ export interface CalEntry {
   time?: string | null;
   place?: string | null;
   href?: string;
-  /** 담당/참석자 이름 — 누가 하는 일인지 달력에서 바로 보이게 */
+  /** 담당/참석자 이름 */
   who?: string[];
 }
 
-export const KIND_META: Record<EntryKind, { dot: string; chip: string; label: string }> = {
-  due: { dot: 'bg-red-500', chip: 'bg-red-100 text-red-700', label: '마감' },
-  meeting: { dot: 'bg-blue-500', chip: 'bg-blue-100 text-blue-700', label: '회의' },
-  visit: { dot: 'bg-green-500', chip: 'bg-green-100 text-green-700', label: '방문' },
+export const KIND_META: Record<
+  EntryKind,
+  { dot: string; chip: string; pill: string; label: string }
+> = {
+  due: {
+    dot: 'bg-red-500',
+    chip: 'bg-red-100 text-red-700',
+    pill: 'bg-red-50 text-red-700 border-red-200',
+    label: '마감',
+  },
+  meeting: {
+    dot: 'bg-blue-500',
+    chip: 'bg-blue-100 text-blue-700',
+    pill: 'bg-blue-50 text-blue-700 border-blue-200',
+    label: '회의',
+  },
+  visit: {
+    dot: 'bg-green-500',
+    chip: 'bg-green-100 text-green-800',
+    pill: 'bg-green-50 text-green-800 border-green-200',
+    label: '방문',
+  },
 };
 
 const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+/** 셀 안에 글씨로 보여줄 최대 개수. 넘으면 +N */
+const MAX_IN_CELL = 2;
 
 /**
- * 월간 달력 그리드. 홈과 일정 화면이 같은 걸 쓴다.
- * 폰에서 한 화면에 들어가도록 셀 높이를 44px 로 묶어뒀다.
+ * 월간 달력.
+ * 점만 찍으면 눌러봐야 뭔지 알 수 있어서, 칸 안에 일정 제목을 바로 적는다.
+ * 폭이 좁으면 잘리지만 색 + 앞 글자만으로도 뭔지 짐작이 된다.
  */
 export function MonthCalendar({
   month,
@@ -35,7 +56,6 @@ export function MonthCalendar({
   selected,
   onSelect,
 }: {
-  /** 이 달의 1일 */
   month: Date;
   entries: CalEntry[];
   selected: string;
@@ -47,6 +67,9 @@ export function MonthCalendar({
       const list = m.get(e.date) ?? [];
       list.push(e);
       m.set(e.date, list);
+    }
+    for (const list of m.values()) {
+      list.sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'));
     }
     return m;
   }, [entries]);
@@ -67,12 +90,12 @@ export function MonthCalendar({
   const todayStr = today();
 
   return (
-    <div className="card p-2">
-      <div className="grid grid-cols-7">
+    <div className="overflow-hidden rounded-xl border border-neutral-200">
+      <div className="grid grid-cols-7 border-b border-neutral-200 bg-raised">
         {WEEK.map((w, i) => (
           <div
             key={w}
-            className={`pb-1 text-center text-[11px] font-bold ${
+            className={`py-1.5 text-center text-[11px] font-bold ${
               i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-neutral-400'
             }`}
           >
@@ -81,14 +104,14 @@ export function MonthCalendar({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-px">
-        {cells.map((d) => {
+      <div className="grid grid-cols-7">
+        {cells.map((d, idx) => {
           const iso = toISODate(d);
           const inMonth = d.getMonth() === month.getMonth();
           const list = byDate.get(iso) ?? [];
           const isToday = iso === todayStr;
           const isPicked = iso === selected;
-          const kinds = [...new Set(list.map((e) => e.kind))];
+          const lastRow = idx >= cells.length - 7;
 
           return (
             <button
@@ -96,14 +119,15 @@ export function MonthCalendar({
               onClick={() => onSelect(iso)}
               aria-label={`${d.getMonth() + 1}월 ${d.getDate()}일${list.length ? `, 일정 ${list.length}건` : ''}`}
               aria-pressed={isPicked}
-              className={`flex h-11 flex-col items-center justify-center rounded-lg transition ${
-                isPicked ? 'bg-brand text-white' : isToday ? 'bg-brand-50' : 'active:bg-neutral-100'
-              }`}
+              className={`flex min-h-[62px] flex-col items-stretch gap-0.5 border-neutral-100 p-1 text-left transition
+                          lg:min-h-[92px] ${idx % 7 !== 6 ? 'border-r' : ''} ${lastRow ? '' : 'border-b'} ${
+                            isPicked ? 'bg-brand-50 ring-1 ring-inset ring-brand' : 'hover:bg-raised'
+                          }`}
             >
               <span
-                className={`text-[13px] font-bold leading-none ${
-                  isPicked
-                    ? 'text-white'
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold ${
+                  isToday
+                    ? 'bg-brand text-white'
                     : !inMonth
                       ? 'text-neutral-300'
                       : d.getDay() === 0
@@ -115,14 +139,22 @@ export function MonthCalendar({
               >
                 {d.getDate()}
               </span>
-              <span className="mt-1 flex h-1.5 items-center gap-0.5">
-                {kinds.slice(0, 3).map((k) => (
-                  <span
-                    key={k}
-                    className={`h-1.5 w-1.5 rounded-full ${isPicked ? 'bg-surface/90' : KIND_META[k].dot}`}
-                  />
-                ))}
-              </span>
+
+              {list.slice(0, MAX_IN_CELL).map((e) => (
+                <span
+                  key={e.id}
+                  title={`${e.title}${e.time ? ` ${hhmm(e.time)}` : ''}`}
+                  className={`truncate rounded border px-1 py-[1px] text-[9.5px] font-semibold leading-[13px]
+                              lg:text-[10.5px] lg:leading-[15px] ${KIND_META[e.kind].pill}`}
+                >
+                  {e.title}
+                </span>
+              ))}
+              {list.length > MAX_IN_CELL && (
+                <span className="px-1 text-[9.5px] font-bold text-neutral-400">
+                  +{list.length - MAX_IN_CELL}
+                </span>
+              )}
             </button>
           );
         })}

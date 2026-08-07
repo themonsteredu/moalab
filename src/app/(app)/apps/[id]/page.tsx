@@ -413,7 +413,7 @@ export default function AppDetailPage() {
 
         {/* ------------------------------------------------ 수업계획안 */}
         <Section id="plan" icon="doc" title="수업계획안">
-          <LessonPlan appId={id} appSlug={app.slug} initialBody={app.plan_body} />
+          <LessonPlan appId={id} appSlug={app.slug} appTitle={app.title_ko} />
         </Section>
 
         {/* -------------------------------------------------------- 원가 */}

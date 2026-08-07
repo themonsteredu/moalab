@@ -5,7 +5,7 @@ import { useId } from 'react';
 /** 부드러운 면적 스파크라인 */
 export function Sparkline({
   data,
-  color = '#2AD1C8',
+  color = '#0FB5AB',
   height = 44,
 }: {
   data: number[];

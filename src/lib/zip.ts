@@ -1,7 +1,10 @@
 'use client';
 
-/** 선택한 사진들을 zip 으로 묶어 내려받는다. jszip 은 필요할 때만 불러온다. */
-export async function downloadPhotosAsZip(
+/**
+ * 파일 여러 개를 zip 으로 묶어 내려받는다. jszip 은 필요할 때만 불러온다.
+ * (사진·수업계획안 첨부 등 공용)
+ */
+export async function downloadFilesAsZip(
   photos: { url: string; name: string }[],
   zipName: string,
   onProgress?: (done: number, total: number) => void,
@@ -44,3 +47,6 @@ export async function downloadPhotosAsZip(
 export function safeFileName(s: string): string {
   return s.replace(/[\\/:*?"<>|]/g, '_').trim() || 'photos';
 }
+
+/** 예전 이름 — 사진 화면들이 쓰고 있다 */
+export const downloadPhotosAsZip = downloadFilesAsZip;

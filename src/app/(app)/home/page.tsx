@@ -14,7 +14,7 @@ import { Icon } from '@/components/Icon';
 import { CalendarLegend, KIND_META, MonthCalendar, type CalEntry } from '@/components/MonthCalendar';
 import { TeamBoard, useTeamWork } from '@/components/TeamBoard';
 import { Sparkline, StatCard, Timeline, WeekBars, type TimelineRow } from '@/components/Charts';
-import { ddayClass, ddayLabel, hhmm, korDateFull, parseDate, relTime, today, toISODate } from '@/lib/format';
+import { ddayClass, ddayLabel, hhmm, korDate, korDateFull, parseDate, relTime, today, toISODate } from '@/lib/format';
 
 const WEEK_LABEL = ['일', '월', '화', '수', '목', '금', '토'];
 /** 타임라인이 보는 기간 */
@@ -120,6 +120,16 @@ export default function HomePage() {
     [entries, picked],
   );
 
+  /** 달력을 안 눌러도 바로 보이는 '다가오는 일정' */
+  const upcoming = useMemo(
+    () =>
+      entries
+        .filter((e) => e.date >= todayStr)
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '99').localeCompare(b.time ?? '99'))
+        .slice(0, 5),
+    [entries, todayStr],
+  );
+
   /* -------------------------------------------------------- 통계 */
   const teamWork = useTeamWork(members, items, logs);
   const untouched = teamWork.reduce((s, w) => s + w.reviewUntouched.length, 0);
@@ -183,7 +193,7 @@ export default function HomePage() {
         label: it.app.title_ko,
         start: 0,
         end: days < 0 ? 0.05 : end,
-        color: days < 0 ? '#EF4444' : days <= 3 ? '#F26522' : '#2AD1C8',
+        color: days < 0 ? '#DC2626' : days <= 3 ? '#F26522' : '#0FB5AB',
         note: `${it.app.title_ko} — ${ddayLabel(d)}`,
         href: `/apps/${it.app.id}`,
       });
@@ -299,20 +309,23 @@ export default function HomePage() {
               <CalendarLegend />
             </div>
 
-            <div className="mt-3 border-t border-neutral-200/70 pt-3">
-              <p className="mb-1.5 text-[12.5px] font-bold text-neutral-500">{pickedLabel}</p>
-              {dayEntries.length === 0 ? (
-                <p className="py-2 text-center text-[12.5px] text-neutral-400">일정 없음</p>
+            <div className="mt-3 border-t border-neutral-200 pt-3">
+              <p className="mb-1.5 text-[12.5px] font-bold text-neutral-500">
+                {picked === todayStr && dayEntries.length === 0 ? '다가오는 일정' : pickedLabel}
+              </p>
+              {(picked === todayStr && dayEntries.length === 0 ? upcoming : dayEntries).length === 0 ? (
+                <p className="py-2 text-center text-[12.5px] text-neutral-400">예정된 일정이 없어요</p>
               ) : (
                 <ul className="space-y-1.5">
-                  {dayEntries.map((e) => (
+                  {(picked === todayStr && dayEntries.length === 0 ? upcoming : dayEntries).map((e) => (
                     <li key={e.id}>
                       <Link href={e.href ?? '/schedule'} className="flex items-start gap-2.5 rounded-lg px-1 py-1.5 hover:bg-neutral-100">
                         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${KIND_META[e.kind].dot}`} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13.5px] font-semibold text-neutral-800">{e.title}</span>
                           <span className="text-[11.5px] text-neutral-400">
-                            {hhmm(e.time)}
+                            {korDate(e.date)}
+                            {e.time ? ` ${hhmm(e.time)}` : ''}
                             {e.place ? ` · ${e.place}` : ''}
                             {e.who && e.who.length > 0 ? ` · ${e.who.join(', ')}` : ''}
                           </span>

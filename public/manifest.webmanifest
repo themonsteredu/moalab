@@ -3,7 +3,7 @@
   "short_name": "모아랩",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0C111B",
+  "background_color": "#F5F7FA",
   "theme_color": "#F26522",
   "icons": [
     {

@@ -47,7 +47,6 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
-    color-scheme: dark;
   }
   body {
     @apply bg-canvas text-neutral-900 antialiased;
@@ -63,18 +62,12 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
-  /* 다크에서 날짜/시간 피커 아이콘이 안 보이는 것 보정 */
-  input[type='date']::-webkit-calendar-picker-indicator,
-  input[type='time']::-webkit-calendar-picker-indicator {
-    filter: invert(0.7);
-    cursor: pointer;
-  }
   ::placeholder {
     @apply text-neutral-400;
   }
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
   }
   ::-webkit-scrollbar-thumb {
     @apply rounded-full bg-neutral-300;
@@ -94,25 +87,24 @@
            disabled:opacity-40 disabled:active:scale-100;
   }
   .btn-primary {
-    @apply btn bg-brand text-white shadow-[0_6px_18px_-8px_rgba(242,101,34,.9)] hover:bg-brand-600;
+    @apply btn bg-brand text-white shadow-[0_6px_16px_-8px_rgba(242,101,34,.7)] hover:bg-brand-600;
   }
   .btn-ghost {
-    @apply btn border border-neutral-300 bg-raised text-neutral-700 hover:bg-neutral-200;
+    @apply btn border border-neutral-300 bg-surface text-neutral-700 hover:bg-neutral-50;
   }
   .btn-danger {
-    @apply btn bg-red-500 text-white hover:bg-red-600;
+    @apply btn bg-red-600 text-white hover:bg-red-700;
   }
   .card {
-    @apply rounded-2xl border border-neutral-200/70 bg-surface;
+    @apply rounded-2xl border border-neutral-200 bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)];
   }
-  /* 살짝 떠 보이는 카드 — 대시보드 상단 블록용 */
   .card-raised {
-    @apply rounded-2xl border border-neutral-200/70 bg-raised shadow-[0_10px_30px_-18px_rgba(0,0,0,.9)];
+    @apply rounded-2xl border border-neutral-200 bg-surface shadow-[0_8px_24px_-16px_rgba(16,24,40,.35)];
   }
   .field {
-    @apply w-full min-h-[44px] rounded-xl border border-neutral-300 bg-raised px-3 py-2 text-[15px]
+    @apply w-full min-h-[44px] rounded-xl border border-neutral-300 bg-surface px-3 py-2 text-[15px]
            text-neutral-900 outline-none transition
-           focus:border-brand focus:ring-2 focus:ring-brand/25;
+           focus:border-brand focus:ring-2 focus:ring-brand-100;
   }
   .label {
     @apply mb-1.5 block text-[13px] font-semibold text-neutral-500;
@@ -121,7 +113,7 @@
     @apply inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold;
   }
   .skeleton {
-    @apply animate-pulse rounded-lg bg-neutral-200;
+    @apply animate-pulse rounded-lg bg-neutral-200/80;
   }
   .no-scrollbar {
     scrollbar-width: none;
