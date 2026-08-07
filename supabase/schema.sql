@@ -53,6 +53,12 @@ create table if not exists moalab.apps (
 create index if not exists apps_status_idx   on moalab.apps(status);
 create index if not exists apps_due_date_idx on moalab.apps(due_date);
 
+-- 주제 (예: 'AI 문화', 'AI 과학'). 자유 입력이다 —
+-- 주제 목록을 코드나 별도 테이블로 고정하면 주제 하나 늘릴 때마다 손을 봐야 한다.
+-- 이미 쓰인 주제는 앱 등록 폼에서 datalist 로 자동 제안된다.
+alter table moalab.apps add column if not exists topic text;
+create index if not exists apps_topic_idx on moalab.apps(topic);
+
 -- ---------------------------------------------------------------------
 -- 3. 검증자 배정 (앱 1 : 검증자 N)
 -- ---------------------------------------------------------------------

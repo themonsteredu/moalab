@@ -21,6 +21,8 @@ export interface AppRow {
   url: string | null;
   purpose: string | null;
   target_grade: string | null;
+  /** 주제 — 목록을 트리로 묶는 기준. 자유 입력 */
+  topic: string | null;
   creator_id: string | null;
   due_date: string | null;
   current_round: number;

@@ -20,6 +20,7 @@ import { AppForm } from '@/components/AppForm';
 import { Avatar } from '@/components/Brand';
 import { Icon, type IconName } from '@/components/Icon';
 import { CardSkeleton, ConfirmDialog, ErrorBanner, ProgressBar, Sheet, useToast } from '@/components/ui';
+import { PRINT_PARTS, type PrintPart } from '@/lib/print';
 import type {
   Album,
   AppRow,
@@ -68,6 +69,9 @@ export default function AppDetailPage() {
   const [reopenBusy, setReopenBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+  /** 인쇄에 넣을 묶음 — 기본은 전부 */
+  const [printParts, setPrintParts] = useState<PrintPart[]>(PRINT_PARTS.map((p) => p.key));
   const navRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -389,6 +393,10 @@ export default function AppDetailPage() {
                 재검증 요청
               </button>
             )}
+            <button onClick={() => setPrintOpen(true)} className="btn-ghost col-span-2 gap-1.5">
+              <Icon name="printer" size={14} />
+              인쇄 / PDF 저장
+            </button>
           </div>
         </div>
 
@@ -562,6 +570,58 @@ export default function AppDetailPage() {
               className="field resize-none"
             />
           </div>
+        </div>
+      </Sheet>
+
+      {/* 인쇄할 것 고르기 */}
+      <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="인쇄 / PDF 저장">
+        <div className="space-y-3">
+          <p className="text-[13px] leading-relaxed text-neutral-500">
+            인쇄물에 넣을 것을 골라주세요. 표지(제목·상태·제작자·마감)는 항상 들어갑니다.
+          </p>
+
+          <div className="space-y-1.5">
+            {PRINT_PARTS.map((p) => {
+              const on = printParts.includes(p.key);
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() =>
+                    setPrintParts((v) => (on ? v.filter((x) => x !== p.key) : [...v, p.key]))
+                  }
+                  aria-pressed={on}
+                  className={`tap w-full justify-start gap-2.5 rounded-xl border px-3 text-[14px] font-semibold transition ${
+                    on ? 'border-brand bg-brand-50 text-brand-700' : 'border-neutral-200 bg-surface text-neutral-500'
+                  }`}
+                >
+                  <span
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                      on ? 'border-brand bg-brand text-white' : 'border-neutral-300'
+                    }`}
+                  >
+                    {on && <Icon name="check" size={12} strokeWidth={3} />}
+                  </span>
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <a
+            href={`/print/${id}?parts=${printParts.join(',')}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setPrintOpen(false)}
+            className={`btn-primary w-full ${printParts.length === 0 ? 'pointer-events-none opacity-40' : ''}`}
+          >
+            <Icon name="printer" size={15} />
+            인쇄 화면 열기
+          </a>
+          <p className="text-[12px] leading-relaxed text-neutral-400">
+            아이폰은 열린 화면에서 <b>공유 → 프린트</b>, PC 는 인쇄 대화상자에서
+            대상을 <b>PDF로 저장</b> 으로 바꾸면 파일로 저장돼요.
+          </p>
         </div>
       </Sheet>
 

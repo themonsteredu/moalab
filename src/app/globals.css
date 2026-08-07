@@ -130,3 +130,39 @@
     @apply lg:pl-[232px];
   }
 }
+
+/* ---------------------------------------------------------------------
+   인쇄 / PDF 저장 (/print/[id])
+   아이폰은 사파리 공유 → 프린트 → 'PDF로 저장' 으로 저장한다.
+   그래서 PDF 라이브러리를 넣지 않고 브라우저 인쇄를 그대로 쓴다.
+--------------------------------------------------------------------- */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    /* 화면용 어두운 배경/그림자가 잉크를 먹지 않게 */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* 인쇄에서 뺄 것 — 버튼, 안내문 등 */
+  .no-print {
+    display: none !important;
+  }
+  /* 한 덩어리가 페이지 경계에서 잘리지 않게 */
+  .print-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+}

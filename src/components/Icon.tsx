@@ -36,7 +36,9 @@ export type IconName =
   | 'receipt'
   | 'megaphone'
   | 'present'
-  | 'dots';
+  | 'dots'
+  | 'tree'
+  | 'printer';
 
 const P: Record<IconName, React.ReactNode> = {
   check: <path d="m4.5 12.5 5 5 10-11" />,
@@ -173,6 +175,19 @@ const P: Record<IconName, React.ReactNode> = {
       <circle cx="5" cy="12" r="1.4" />
       <circle cx="12" cy="12" r="1.4" />
       <circle cx="19" cy="12" r="1.4" />
+    </>
+  ),
+  tree: (
+    <>
+      <path d="M4 5.5h6M4 5.5v13M4 12h6M4 18.5h6" />
+      <path d="M13 3.5h7v4h-7zM13 10h7v4h-7zM13 16.5h7v4h-7z" />
+    </>
+  ),
+  printer: (
+    <>
+      <path d="M7 9V4h10v5" />
+      <path d="M5 9h14a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 19 17h-2v3H7v-3H5a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 5 9z" />
+      <path d="M7 13.5h10" />
     </>
   ),
 };

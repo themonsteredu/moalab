@@ -13,15 +13,20 @@ import { STATUS_META } from '@/lib/status';
 import { Icon, type IconName } from '@/components/Icon';
 import type { AppStatus } from '@/lib/types';
 
-type View = 'list' | 'board' | 'gallery';
+type View = 'tree' | 'list' | 'board' | 'gallery';
 type Filter = 'all' | AppStatus | 'mine' | `missing:${keyof Completeness}`;
 type Sort = 'due' | 'name' | 'filled';
 
 const VIEWS: { value: View; icon: IconName; label: string }[] = [
+  { value: 'tree', icon: 'tree', label: '주제별' },
   { value: 'list', icon: 'list', label: '리스트' },
   { value: 'board', icon: 'board', label: '보드' },
   { value: 'gallery', icon: 'grid', label: '갤러리' },
 ];
+
+/** 주제가 비어 있는 프로그램을 묶는 이름 */
+const NO_TOPIC = '주제 없음';
+const OPEN_KEY = 'moalab.apps.openTopics';
 
 const BOARD_COLS: AppStatus[] = ['fixing', 'pending', 'done'];
 
@@ -39,7 +44,9 @@ export default function AppsPage() {
   const { nameOf } = useMembers(true);
   const router = useRouter();
 
-  const [view, setView] = useState<View>('list');
+  const [view, setView] = useState<View>('tree');
+  /** 펼쳐둔 주제 (접힘이 기본 — 폰에서 21개를 다 늘어놓으면 끝까지 스크롤해야 한다) */
+  const [openTopics, setOpenTopics] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('due');
   const [q, setQ] = useState('');
@@ -53,6 +60,19 @@ export default function AppsPage() {
   useEffect(() => {
     window.localStorage.setItem(VIEW_KEY, view);
   }, [view]);
+
+  // 어떤 주제를 펼쳐뒀는지도 기억한다
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(OPEN_KEY);
+      if (raw) setOpenTopics(JSON.parse(raw) as string[]);
+    } catch {
+      /* 무시 */
+    }
+  }, []);
+  useEffect(() => {
+    window.localStorage.setItem(OPEN_KEY, JSON.stringify(openTopics));
+  }, [openTopics]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -78,6 +98,35 @@ export default function AppsPage() {
       return a.app.due_date < b.app.due_date ? -1 : 1;
     });
   }, [items, filter, sort, q, session?.id]);
+
+  /** 주제별 트리. 검색·필터가 걸리면 그 결과 안에서 묶는다 */
+  const groups = useMemo(() => {
+    const m = new Map<string, typeof filtered>();
+    for (const it of filtered) {
+      const t = it.app.topic?.trim() || NO_TOPIC;
+      const list = m.get(t) ?? [];
+      list.push(it);
+      m.set(t, list);
+    }
+    return [...m.entries()]
+      .map(([topic, list]) => ({
+        topic,
+        list,
+        fixing: list.filter((i) => i.status === 'fixing').length,
+        done: list.filter((i) => i.status === 'done').length,
+      }))
+      // '주제 없음' 은 늘 맨 아래
+      .sort((a, b) =>
+        a.topic === NO_TOPIC ? 1 : b.topic === NO_TOPIC ? -1 : a.topic.localeCompare(b.topic, 'ko'),
+      );
+  }, [filtered]);
+
+  /** 검색 중이면 저절로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다 */
+  const searching = q.trim().length > 0 || filter !== 'all';
+  const isOpen = (t: string) => searching || openTopics.includes(t);
+  const toggleTopic = (t: string) =>
+    setOpenTopics((v) => (v.includes(t) ? v.filter((x) => x !== t) : [...v, t]));
+  const allOpen = groups.length > 0 && groups.every((g) => isOpen(g.topic));
 
   const doneCount = items.filter((i) => i.status === 'done').length;
   /** 5개 항목 중 안 채워진 게 있는 프로그램 수 */
@@ -188,6 +237,65 @@ export default function AppsPage() {
                 : '필터나 검색어를 바꿔보세요.'
             }
           />
+        ) : view === 'tree' ? (
+          <div className="space-y-2">
+            {!searching && groups.length > 1 && (
+              <button
+                onClick={() => setOpenTopics(allOpen ? [] : groups.map((g) => g.topic))}
+                className="mb-1 text-[12px] font-bold text-neutral-400"
+              >
+                {allOpen ? '전부 접기' : '전부 펼치기'}
+              </button>
+            )}
+            {groups.map((g) => {
+              const open = isOpen(g.topic);
+              return (
+                <div key={g.topic} className="card overflow-hidden">
+                  <button
+                    onClick={() => toggleTopic(g.topic)}
+                    aria-expanded={open}
+                    className="flex w-full items-center gap-2 px-3.5 py-3 text-left"
+                  >
+                    <Icon
+                      name="chevronDown"
+                      size={15}
+                      className={`shrink-0 text-neutral-400 transition-transform ${open ? '' : '-rotate-90'}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block truncate text-[14.5px] ${
+                          g.topic === NO_TOPIC ? 'font-semibold text-neutral-500' : 'font-bold text-neutral-900'
+                        }`}
+                      >
+                        {g.topic}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-neutral-400">
+                        {g.list.length}개
+                        {g.fixing > 0 && <span className="font-bold text-red-600">수정 필요 {g.fixing}</span>}
+                        {g.done > 0 && <span className="font-bold text-green-700">완료 {g.done}</span>}
+                      </span>
+                    </span>
+                    {/* 접혀 있어도 상태 구성이 보이게 */}
+                    <span className="flex shrink-0 gap-0.5">
+                      {g.list.slice(0, 8).map((i) => (
+                        <span key={i.app.id} className={`h-1.5 w-1.5 rounded-full ${STATUS_META[i.status].dot}`} />
+                      ))}
+                    </span>
+                  </button>
+
+                  {open && (
+                    <div className="border-t border-neutral-100 p-2.5">
+                      <div className="space-y-2">
+                        {g.list.map((it) => (
+                          <AppCard key={it.app.id} item={it} nameOf={nameOf} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         ) : view === 'list' ? (
           <div className="space-y-3">
             {filtered.map((it) => (

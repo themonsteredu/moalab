@@ -159,9 +159,21 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
 - **샘플 이미지 vs 수업 사진**: 샘플은 "이 수업 하면 이런 게 나온다"(제안서용),
   수업 사진은 "언제 어느 학교에서 뭘 했다"(기록용). 목적이 달라 저장소를 나눴다.
 
-### 목록은 노션 데이터베이스처럼
+### 목록은 주제별 트리부터
 
-`/apps` 는 **리스트 · 보드(상태별) · 갤러리** 세 가지 보기를 제공한다 (선택은 localStorage 에 기억).
+`/apps` 는 **주제별(트리) · 리스트 · 보드(상태별) · 갤러리** 네 가지 보기를 제공한다
+(선택은 localStorage 에 기억).
+
+**기본은 주제별이고, 주제는 접힌 상태로 시작한다.** 폰에서 21개를 한 줄로 늘어놓으면
+5000px 가까이 되어 맨 아래까지 스크롤해야 다 볼 수 있었다.
+접어두면 프로그램이 몇 개든 **첫 화면 안에서 전체 구조가 보인다.**
+
+- 주제는 `apps.topic` **자유 입력**이다. 주제 목록을 코드나 별도 테이블로 고정하면
+  주제 하나 늘릴 때마다 손을 봐야 한다 (이 프로젝트의 제1 전제와 어긋난다).
+  앱 등록 폼이 이미 쓰인 주제를 `datalist` 로 제안해서 오타로 주제가 갈라지는 걸 막는다.
+- 비어 있으면 **주제 없음** 으로 묶이고 늘 맨 아래다.
+- 접힌 머리글에도 개수 · 수정 필요 · 완료 수와 상태 점을 찍어서, 펼치지 않고도 어디가 급한지 보인다.
+- **검색·필터가 걸리면 저절로 펼친다.** 접힌 채로 0건처럼 보이면 안 된다.
 카드마다 **검증·계획안·원가·샘플·사진** 5개가 채워졌는지 배지로 보인다.
 "빠진 것" 필터로 *원가 없는 프로그램만* 같은 걸 바로 뽑을 수 있다.
 관련 계산은 `useAppsOverview` 의 `Completeness` 에 모여 있다.
@@ -259,6 +271,23 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
   `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`
   (`npx web-push generate-vapid-keys` 로 만든다. private 키에 `NEXT_PUBLIC_` 붙이지 말 것)
 
+### 인쇄 / PDF 저장
+
+`/print/[id]` — 프로그램 화면의 **인쇄 / PDF 저장** 에서 넣을 것을 체크해서 연다.
+`?parts=verify,plan,cost,sample,photo` 로 무엇을 넣을지 정한다 (`src/lib/print.ts`).
+
+- **PDF 라이브러리를 쓰지 않는다.** 브라우저 인쇄를 그대로 쓴다.
+  · 아이폰: 사파리 공유 → 프린트 → 두 손가락으로 벌려 PDF 저장
+  · PC: 인쇄 대화상자에서 대상을 'PDF로 저장'
+  라이브러리로 그리면 한글 폰트를 따로 심어야 하고 표가 깨진다.
+- 인쇄용 CSS 는 `globals.css` 의 `@media print` 한 곳에 모여 있다.
+  `.no-print`(조작 줄 숨김) / `.print-block`(페이지 경계에서 안 잘림) / `@page A4`.
+- **수업계획안은 첨부 목록만** 들어간다. 한글·PDF 본문을 이 문서에 넣을 방법이 없어서
+  파일 이름·크기만 싣고 그 사실을 문서에 적어둔다.
+- 원가표는 표로 다시 그린다 (품목·구분·묶음가·1인당·총액 + 합계·판매가·마진).
+- 이 화면은 `(app)` 레이아웃 밖이라 **로그인 가드를 직접 붙였다.**
+- 상수를 `src/lib/print.ts` 로 뺀 이유: Next.js page 파일은 컴포넌트 외의 export 를 허용하지 않는다.
+
 ### 로고 · 앱 아이콘
 
 원본은 `assets/moakit-logo-source.png` (검정 배경의 모아킷 로고).
@@ -338,10 +367,13 @@ src/lib/
   useMembers.ts              멤버 목록 훅
   useAppsOverview.ts         앱 요약(상태·진행률·미해결 댓글) — 목록 화면 공용
   push.ts                    usePush(구독 켜기·끄기) + sendPush(발송 요청)
+  print.ts                   인쇄에 넣을 묶음 정의(PRINT_PARTS) + parts 파싱
 
 src/app/(app)/
   home/ notice/ apps/ verify/ mock/ training/ cost/ gallery/ schedule/ admin/
                              메뉴 하나가 폴더 하나. 순서는 BottomNav.tsx 가 정한다.
+src/app/print/[id]/          인쇄 / PDF 저장 (레이아웃 밖 — 사이드바·탭 없음)
+scripts/make-icons.mjs       로고에서 앱 아이콘 뽑기
 
 src/components/
   ui.tsx                     Sheet, ConfirmDialog, Skeleton, EmptyState, Toast 등
@@ -459,6 +491,13 @@ src/components/
 - [x] PC 사이드바는 moakit 마크, 로그인은 앱 아이콘과 같은 검은 판 위 심볼
 - [x] `scripts/make-icons.mjs` — 로고 갈아끼우면 한 번에 다시 뽑힌다
 
+### ✅ 10단계 — 주제별 트리 + 인쇄/PDF
+- [x] `apps.topic` (자유 입력) + `/apps` **주제별 트리 보기**를 기본으로.
+      접힘이 기본이라 폰 첫 화면에서 전체 구조가 보인다 (리스트 1862px → 트리 812px)
+- [x] 앱 등록 폼에 주제 입력 + 이미 쓰인 주제 자동 제안(datalist)
+- [x] **인쇄 / PDF 저장** — 검증·계획안·원가·샘플·사진을 체크해서 A4 문서로.
+      브라우저 인쇄를 쓰므로 라이브러리 없음
+
 ### 다음에 하면 좋을 것
 
 - [ ] **모의수업·강사양성은 뼈대만 만든 상태다.** 실제로 어떤 칸이 필요한지
@@ -466,7 +505,6 @@ src/components/
 - [ ] 사진 Storage 실제 파일 삭제 — 지금은 DB 레코드만 지운다 (버킷에 파일이 남음).
       지적 캡처(`finding_files`)도 같은 문제라 정리 스크립트가 하나 필요하다.
 - [ ] 댓글에 답글(스레드) — 지금은 평면 목록
-- [ ] 앱 목록 정렬 옵션 (마감순 고정 → 이름순/상태순 선택)
 - [ ] UI 강조색을 로고 teal(`#06BDBD`)로 맞출지 — 지금은 오렌지 그대로다 (원장 취향 확인 필요)
 
 ---
