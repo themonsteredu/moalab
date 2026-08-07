@@ -6,7 +6,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { AppBoardCard, AppCard, AppGalleryCard } from '@/components/AppCard';
 import { AppForm } from '@/components/AppForm';
 import { TopicManager } from '@/components/TopicManager';
-import { CardSkeleton, EmptyState, ErrorBanner } from '@/components/ui';
+import { TopicMove } from '@/components/TopicMove';
+import { CardSkeleton, EmptyState, ErrorBanner, useToast } from '@/components/ui';
 import { useAppsOverview, PIECES, type Completeness } from '@/lib/useAppsOverview';
 import { useMembers } from '@/lib/useMembers';
 import { useSession } from '@/lib/session';
@@ -44,6 +45,7 @@ export default function AppsPage() {
   const { items, topics, loading, error, reload } = useAppsOverview();
   const { nameOf } = useMembers(true);
   const router = useRouter();
+  const toast = useToast();
 
   const [view, setView] = useState<View>('tree');
   /** 펼쳐둔 주제 (접힘이 기본 — 폰에서 21개를 다 늘어놓으면 끝까지 스크롤해야 한다) */
@@ -53,6 +55,7 @@ export default function AppsPage() {
   const [q, setQ] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [topicsOpen, setTopicsOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
 
   // 보기 방식은 기억해둔다 (원장은 보드, 강사는 리스트를 주로 쓴다)
   useEffect(() => {
@@ -264,13 +267,22 @@ export default function AppsPage() {
                 <span />
               )}
               {isAdmin && (
-                <button
-                  onClick={() => setTopicsOpen(true)}
-                  className="flex items-center gap-1 text-[12px] font-bold text-brand"
-                >
-                  <Icon name="tree" size={13} />
-                  주제 관리
-                </button>
+                <span className="flex items-center gap-3">
+                  <button
+                    onClick={() => setMoveOpen(true)}
+                    className="flex items-center gap-1 text-[12px] font-bold text-brand"
+                  >
+                    <Icon name="check" size={13} />
+                    주제로 옮기기
+                  </button>
+                  <button
+                    onClick={() => setTopicsOpen(true)}
+                    className="flex items-center gap-1 text-[12px] font-bold text-neutral-400"
+                  >
+                    <Icon name="tree" size={13} />
+                    주제 관리
+                  </button>
+                </span>
               )}
             </div>
             {groups.map((g) => {
@@ -364,6 +376,17 @@ export default function AppsPage() {
         )}
       </div>
 
+      <TopicMove
+        open={moveOpen}
+        onClose={() => setMoveOpen(false)}
+        items={items}
+        topics={topics}
+        onMoved={(n, name) => {
+          toast.show(`${n}개를 '${name}' 으로 옮겼어요.`);
+          void reload();
+        }}
+      />
+
       <TopicManager
         open={topicsOpen}
         onClose={() => setTopicsOpen(false)}
@@ -380,6 +403,8 @@ export default function AppsPage() {
           router.push(`/apps/${id}`);
         }}
       />
+
+      {toast.node}
     </>
   );
 }

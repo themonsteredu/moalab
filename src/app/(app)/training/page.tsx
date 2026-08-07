@@ -395,6 +395,8 @@ export default function TrainingPage() {
         onCancel={() => setDeleting(null)}
         onConfirm={() => deleting && remove(deleting)}
       />
+
+      {toast.node}
     </div>
   );
 }

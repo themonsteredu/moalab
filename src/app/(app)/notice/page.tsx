@@ -652,6 +652,8 @@ export default function NoticePage() {
           <img src={viewer} alt="첨부 사진" className="max-h-full max-w-full object-contain" />
         </div>
       )}
+
+      {toast.node}
     </div>
   );
 }

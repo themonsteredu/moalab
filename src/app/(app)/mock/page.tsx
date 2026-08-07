@@ -331,6 +331,8 @@ export default function MockPage() {
         onCancel={() => setDeleting(null)}
         onConfirm={() => deleting && remove(deleting)}
       />
+
+      {toast.node}
     </div>
   );
 }
