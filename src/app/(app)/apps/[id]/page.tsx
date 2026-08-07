@@ -240,7 +240,7 @@ export default function AppDetailPage() {
       {/* 목차 — 노션 페이지 상단 목차처럼 */}
       <div
         ref={navRef}
-        className="sticky top-[53px] z-20 border-b border-neutral-200 bg-white/95 backdrop-blur"
+        className="sticky top-[53px] z-20 border-b border-neutral-200 bg-surface/95 backdrop-blur"
       >
         <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 py-2">
           {SECTIONS.map((s) => (
@@ -256,7 +256,7 @@ export default function AppDetailPage() {
               {s.id === 'comment' && openComments > 0 && (
                 <span
                   className={`ml-0.5 rounded-full px-1 text-[10px] ${
-                    active === s.id ? 'bg-white/25' : 'bg-brand text-white'
+                    active === s.id ? 'bg-surface/25' : 'bg-brand text-white'
                   }`}
                 >
                   {openComments}

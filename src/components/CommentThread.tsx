@@ -295,7 +295,7 @@ function CommentCard({
           onClick={onToggle}
           className={`h-9 flex-1 rounded-lg border text-[13px] font-bold transition ${
             c.resolved
-              ? 'border-neutral-300 bg-white text-neutral-500'
+              ? 'border-neutral-300 bg-surface text-neutral-500'
               : 'border-green-600 bg-green-600 text-white'
           }`}
         >

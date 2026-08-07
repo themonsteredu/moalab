@@ -120,12 +120,12 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-dvh flex-col overflow-hidden bg-[#FFF9F5]">
+    <main className="relative flex min-h-dvh flex-col overflow-hidden bg-canvas">
       {/* 배경 — 브랜드 컬러가 은은하게 번지는 느낌 */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-24 -top-28 h-72 w-72 rounded-full bg-brand/20 blur-3xl" />
-        <div className="absolute -right-20 top-40 h-64 w-64 rounded-full bg-amber-300/25 blur-3xl" />
-        <div className="absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-orange-200/40 blur-3xl" />
+        <div className="absolute -left-24 -top-28 h-72 w-72 rounded-full bg-brand/25 blur-3xl" />
+        <div className="absolute -right-20 top-40 h-64 w-64 rounded-full bg-accent/20 blur-3xl" />
+        <div className="absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-brand/15 blur-3xl" />
       </div>
 
       <div className="relative flex w-full flex-1 flex-col items-center justify-center px-5 py-10">
@@ -153,7 +153,7 @@ export default function LoginPage() {
                   ))}
                 </div>
               ) : members.length === 0 ? (
-                <div className="rounded-3xl border border-neutral-200/80 bg-white/80 p-7 text-center backdrop-blur">
+                <div className="rounded-3xl border border-neutral-200/80 bg-surface/80 p-7 text-center backdrop-blur">
                   <p className="text-[14px] leading-relaxed text-neutral-600">
                     {loadError || '등록된 멤버가 없어요.'}
                   </p>
@@ -174,7 +174,7 @@ export default function LoginPage() {
                       }}
                       style={{ animationDelay: `${i * 45}ms` }}
                       className="group relative flex animate-fade-up flex-col items-center gap-2.5 rounded-2xl
-                                 border border-white/80 bg-white/85 px-3 py-5 shadow-[0_2px_16px_-6px_rgba(120,70,40,.18)]
+                                 border border-neutral-300/80 bg-surface/85 px-3 py-5 shadow-[0_8px_24px_-14px_rgba(0,0,0,.9)]
                                  backdrop-blur transition
                                  hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-[0_10px_26px_-10px_rgba(242,101,34,.45)]
                                  active:translate-y-0 active:scale-[.98]"
@@ -296,8 +296,8 @@ function Key({
       className={`flex h-[58px] items-center justify-center rounded-2xl text-[22px] font-bold transition
                   active:scale-95 disabled:opacity-35 disabled:active:scale-100 ${
                     muted
-                      ? 'text-neutral-400 hover:bg-white/70'
-                      : 'border border-white/90 bg-white/85 text-neutral-800 shadow-[0_2px_10px_-4px_rgba(120,70,40,.2)] backdrop-blur hover:bg-white active:bg-brand-50'
+                      ? 'text-neutral-400 hover:bg-surface/70'
+                      : 'border border-neutral-300/90 bg-surface/85 text-neutral-800 shadow-[0_6px_16px_-10px_rgba(0,0,0,.9)] backdrop-blur hover:bg-surface active:bg-brand-50'
                   }`}
     >
       {children}

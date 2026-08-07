@@ -99,7 +99,7 @@ export function Sheet({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white
+        className="relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-surface
                    animate-slide-up sm:max-w-lg sm:rounded-3xl"
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
@@ -109,7 +109,7 @@ export function Sheet({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>
-        {footer && <div className="border-t border-neutral-200 bg-white px-4 py-3 safe-bottom">{footer}</div>}
+        {footer && <div className="border-t border-neutral-200 bg-surface px-4 py-3 safe-bottom">{footer}</div>}
       </div>
     </div>
   );
@@ -138,7 +138,7 @@ export function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/40" onClick={onCancel} aria-hidden />
-      <div className="relative w-full max-w-sm rounded-2xl bg-white p-5">
+      <div className="relative w-full max-w-sm rounded-2xl bg-surface p-5">
         <p className="text-[16px] font-bold">{title}</p>
         {message && <p className="mt-2 text-[14px] leading-relaxed text-neutral-600">{message}</p>}
         <div className="mt-5 flex gap-2">
@@ -232,7 +232,7 @@ export function MultiPicker<T extends { id: string; name: string }>({
             type="button"
             onClick={() => toggle(o.id)}
             className={`tap rounded-full border px-3.5 text-[14px] font-semibold transition ${
-              on ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-white text-neutral-600'
+              on ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
             }`}
           >
             {o.name}

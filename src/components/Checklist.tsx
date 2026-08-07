@@ -206,7 +206,7 @@ export function ReviewerChecklist({
                       aria-pressed={on}
                       onClick={() => set(no, { result: r.value })}
                       className={`tap flex-1 rounded-lg border text-[13.5px] font-bold transition ${
-                        on ? `${r.on} border-transparent` : 'border-neutral-200 bg-white text-neutral-500'
+                        on ? `${r.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-500'
                       } ${!editable ? 'opacity-70' : 'active:scale-[.97]'}`}
                     >
                       {r.label}

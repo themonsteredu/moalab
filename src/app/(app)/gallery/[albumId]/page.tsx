@@ -286,7 +286,7 @@ export default function AlbumPage() {
                   {selecting && (
                     <span
                       className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[11px] font-bold ${
-                        on ? 'border-brand bg-brand text-white' : 'border-white/80 bg-black/25 text-transparent'
+                        on ? 'border-brand bg-brand text-white' : 'border-neutral-300/80 bg-black/25 text-transparent'
                       }`}
                     >
                       <Icon name="check" size={11} strokeWidth={3} />
@@ -304,7 +304,7 @@ export default function AlbumPage() {
       </div>
 
       {selecting && selected.length > 0 && (
-        <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-neutral-200 bg-white/97 px-4 py-3 backdrop-blur safe-bottom">
+        <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-neutral-200 bg-surface/97 px-4 py-3 backdrop-blur safe-bottom">
           <div className="mx-auto flex max-w-3xl items-center gap-3">
             <span className="text-[13.5px] font-bold">{selected.length}장 선택됨</span>
             <button onClick={() => download(false)} disabled={Boolean(zipping)} className="btn-primary ml-auto h-10 px-4 text-[14px]">
@@ -414,7 +414,7 @@ function PhotoEditor({
                   key={t.value}
                   onClick={() => setTag(t.value)}
                   className={`tap rounded-full border px-3.5 text-[14px] font-semibold ${
-                    tag === t.value ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-white text-neutral-600'
+                    tag === t.value ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
                   }`}
                 >
                   {t.label}

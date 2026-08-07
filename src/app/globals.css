@@ -2,7 +2,6 @@
    에스코어드림 (S-Core Dream) — OFL, 상업적 사용 가능
    실제로 쓰는 굵기 4개만 불러온다 (한글 폰트는 굵기당 1MB 가까이 된다).
    400 normal · 600 semibold · 700 bold · 900 black
-   font-display: swap 이라 폰트를 받는 동안에도 글자가 바로 보인다.
 --------------------------------------------------------------------- */
 @font-face {
   font-family: 'S-Core Dream';
@@ -48,9 +47,10 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    color-scheme: dark;
   }
   body {
-    @apply bg-neutral-50 text-neutral-900 antialiased;
+    @apply bg-canvas text-neutral-900 antialiased;
     /* 폭 375px에서 가로 스크롤이 생기면 실패다. 전역으로 막아둔다. */
     overflow-x: hidden;
   }
@@ -63,6 +63,25 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
+  /* 다크에서 날짜/시간 피커 아이콘이 안 보이는 것 보정 */
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='time']::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
+  }
+  ::placeholder {
+    @apply text-neutral-400;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-neutral-300;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 @layer components {
@@ -71,34 +90,39 @@
     @apply min-h-[44px] inline-flex items-center justify-center;
   }
   .btn {
-    @apply tap rounded-xl px-4 text-[15px] font-semibold transition active:scale-[.98] disabled:opacity-40 disabled:active:scale-100;
+    @apply tap gap-1.5 rounded-xl px-4 text-[15px] font-semibold transition active:scale-[.98]
+           disabled:opacity-40 disabled:active:scale-100;
   }
   .btn-primary {
-    @apply btn bg-brand text-white shadow-sm hover:bg-brand-600;
+    @apply btn bg-brand text-white shadow-[0_6px_18px_-8px_rgba(242,101,34,.9)] hover:bg-brand-600;
   }
   .btn-ghost {
-    @apply btn border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50;
+    @apply btn border border-neutral-300 bg-raised text-neutral-700 hover:bg-neutral-200;
   }
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700;
+    @apply btn bg-red-500 text-white hover:bg-red-600;
   }
   .card {
-    @apply rounded-2xl border border-neutral-200 bg-white;
+    @apply rounded-2xl border border-neutral-200/70 bg-surface;
+  }
+  /* 살짝 떠 보이는 카드 — 대시보드 상단 블록용 */
+  .card-raised {
+    @apply rounded-2xl border border-neutral-200/70 bg-raised shadow-[0_10px_30px_-18px_rgba(0,0,0,.9)];
   }
   .field {
-    @apply w-full min-h-[44px] rounded-xl border border-neutral-300 bg-white px-3 py-2 text-[15px]
-           outline-none transition focus:border-brand focus:ring-2 focus:ring-brand-100;
+    @apply w-full min-h-[44px] rounded-xl border border-neutral-300 bg-raised px-3 py-2 text-[15px]
+           text-neutral-900 outline-none transition
+           focus:border-brand focus:ring-2 focus:ring-brand/25;
   }
   .label {
-    @apply mb-1.5 block text-[13px] font-semibold text-neutral-600;
+    @apply mb-1.5 block text-[13px] font-semibold text-neutral-500;
   }
   .chip {
     @apply inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold;
   }
   .skeleton {
-    @apply animate-pulse rounded-lg bg-neutral-200/80;
+    @apply animate-pulse rounded-lg bg-neutral-200;
   }
-  /* 가로 스크롤이 꼭 필요한 곳(탭 줄 등)에서만 스크롤바 숨김 */
   .no-scrollbar {
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -108,5 +132,9 @@
   }
   .safe-bottom {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px));
+  }
+  /* PC 사이드바가 생기는 폭에서 본문을 밀어준다 */
+  .with-sidebar {
+    @apply lg:pl-[232px];
   }
 }

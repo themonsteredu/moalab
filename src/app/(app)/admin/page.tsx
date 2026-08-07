@@ -55,7 +55,7 @@ function AdminInner() {
               key={v}
               onClick={() => setTab(v)}
               className={`tap flex-1 rounded-lg text-[14px] font-bold transition ${
-                tab === v ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
+                tab === v ? 'bg-surface text-neutral-900 shadow-sm' : 'text-neutral-500'
               }`}
             >
               {label}
@@ -301,7 +301,7 @@ function MemberForm({
                 type="button"
                 onClick={() => setRole(v)}
                 className={`tap flex-1 rounded-xl border text-[14px] font-semibold transition ${
-                  role === v ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-white text-neutral-600'
+                  role === v ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
                 }`}
               >
                 {label}

@@ -373,7 +373,7 @@ export default function CostSheetPage() {
       </div>
 
       {/* 하단 고정 요약 바 — 인원수를 바꾸면 즉시 다시 계산된다 */}
-      <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-neutral-200 bg-white/97 backdrop-blur safe-bottom">
+      <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-neutral-200 bg-surface/97 backdrop-blur safe-bottom">
         <div className="mx-auto max-w-3xl px-4 py-3">
           <div className="flex items-center gap-3">
             <label htmlFor="hc" className="shrink-0 text-[12.5px] font-bold text-neutral-600">

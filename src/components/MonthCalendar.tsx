@@ -119,7 +119,7 @@ export function MonthCalendar({
                 {kinds.slice(0, 3).map((k) => (
                   <span
                     key={k}
-                    className={`h-1.5 w-1.5 rounded-full ${isPicked ? 'bg-white/90' : KIND_META[k].dot}`}
+                    className={`h-1.5 w-1.5 rounded-full ${isPicked ? 'bg-surface/90' : KIND_META[k].dot}`}
                   />
                 ))}
               </span>

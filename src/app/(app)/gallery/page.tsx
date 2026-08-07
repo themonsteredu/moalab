@@ -190,7 +190,7 @@ function GalleryInner() {
                 setSelected([]);
               }}
               className={`tap flex-1 rounded-lg text-[14px] font-bold transition ${
-                mode === v ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
+                mode === v ? 'bg-surface text-neutral-900 shadow-sm' : 'text-neutral-500'
               }`}
             >
               {label}
@@ -253,7 +253,7 @@ function GalleryInner() {
                     key={t.value}
                     onClick={() => setFTag(fTag === t.value ? '' : t.value)}
                     className={`tap rounded-full border px-3.5 text-[13.5px] font-semibold ${
-                      fTag === t.value ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-white text-neutral-600'
+                      fTag === t.value ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
                     }`}
                   >
                     {t.label}
@@ -369,7 +369,7 @@ function GalleryInner() {
                     )}
                     <span
                       className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[11px] font-bold ${
-                        on ? 'border-brand bg-brand text-white' : 'border-white/80 bg-black/25 text-transparent'
+                        on ? 'border-brand bg-brand text-white' : 'border-neutral-300/80 bg-black/25 text-transparent'
                       }`}
                     >
                       <Icon name="check" size={11} strokeWidth={3} />
@@ -384,7 +384,7 @@ function GalleryInner() {
 
       {/* 선택 다운로드 바 */}
       {mode === 'photo' && selected.length > 0 && (
-        <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-neutral-200 bg-white/97 px-4 py-3 backdrop-blur safe-bottom">
+        <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-neutral-200 bg-surface/97 px-4 py-3 backdrop-blur safe-bottom">
           <div className="mx-auto flex max-w-3xl items-center gap-3">
             <span className="text-[13.5px] font-bold">{selected.length}장 선택됨</span>
             <button onClick={() => setSelected([])} className="text-[13px] text-neutral-500">

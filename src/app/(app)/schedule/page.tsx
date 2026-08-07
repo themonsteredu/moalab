@@ -194,7 +194,7 @@ export default function SchedulePage() {
 
         {/* 월/주 전환 + 이동 */}
         <div className="mb-3 flex items-center gap-2">
-          <button onClick={() => move(-1)} aria-label="이전" className="tap w-11 rounded-xl border border-neutral-300 bg-white text-neutral-500">
+          <button onClick={() => move(-1)} aria-label="이전" className="tap w-11 rounded-xl border border-neutral-300 bg-surface text-neutral-500">
             ‹
           </button>
           <p className="flex-1 text-center text-[16px] font-black">
@@ -202,7 +202,7 @@ export default function SchedulePage() {
               ? `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`
               : `${new Date(picked + 'T00:00:00').getMonth() + 1}월 ${Math.ceil(new Date(picked + 'T00:00:00').getDate() / 7)}주차`}
           </p>
-          <button onClick={() => move(1)} aria-label="다음" className="tap w-11 rounded-xl border border-neutral-300 bg-white text-neutral-500">
+          <button onClick={() => move(1)} aria-label="다음" className="tap w-11 rounded-xl border border-neutral-300 bg-surface text-neutral-500">
             ›
           </button>
         </div>
@@ -218,7 +218,7 @@ export default function SchedulePage() {
               key={v}
               onClick={() => setView(v)}
               className={`tap flex-1 rounded-lg text-[14px] font-bold transition ${
-                view === v ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
+                view === v ? 'bg-surface text-neutral-900 shadow-sm' : 'text-neutral-500'
               }`}
             >
               {label}
@@ -288,7 +288,7 @@ export default function SchedulePage() {
                       {[...new Set(list.map((e) => e.kind))].slice(0, 3).map((k) => (
                         <span
                           key={k}
-                          className={`h-1.5 w-1.5 rounded-full ${isPicked ? 'bg-white/90' : KIND_STYLE[k].dot}`}
+                          className={`h-1.5 w-1.5 rounded-full ${isPicked ? 'bg-surface/90' : KIND_STYLE[k].dot}`}
                         />
                       ))}
                     </span>
@@ -522,7 +522,7 @@ function ScheduleForm({
                 type="button"
                 onClick={() => setKind(v)}
                 className={`tap flex-1 rounded-xl border text-[14px] font-semibold transition ${
-                  kind === v ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-white text-neutral-600'
+                  kind === v ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
                 }`}
               >
                 {label}

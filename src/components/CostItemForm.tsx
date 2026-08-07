@@ -200,7 +200,7 @@ export function CostItemForm({
                 className={`tap rounded-full border px-3.5 text-[14px] font-semibold transition ${
                   f.category === c.value
                     ? 'border-transparent text-white'
-                    : 'border-neutral-300 bg-white text-neutral-600'
+                    : 'border-neutral-300 bg-surface text-neutral-600'
                 }`}
                 style={f.category === c.value ? { backgroundColor: c.color } : undefined}
               >
@@ -256,7 +256,7 @@ export function CostItemForm({
             ))}
             <label
               htmlFor="ci-photos"
-              className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-white text-neutral-400"
+              className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-surface text-neutral-400"
             >
               <span className="text-xl leading-none">＋</span>
               <span className="mt-0.5 text-[10.5px]">사진</span>

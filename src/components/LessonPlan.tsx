@@ -200,7 +200,7 @@ export function LessonPlan({
         ) : (
           <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200">
             {files.map((f) => (
-              <li key={f.id} className="flex items-center gap-2.5 bg-white px-3 py-2.5">
+              <li key={f.id} className="flex items-center gap-2.5 bg-surface px-3 py-2.5">
                 <FileBadge name={f.file_name} />
                 <a
                   href={f.file_url}

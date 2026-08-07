@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/session';
-import { BottomNav } from '@/components/BottomNav';
+import { BottomNav, SideNav } from '@/components/BottomNav';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { session, loading } = useSession();
@@ -22,8 +22,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh pb-[76px]">
-      <div className="mx-auto max-w-3xl">{children}</div>
+    <div className="min-h-dvh pb-[76px] lg:pb-0 lg:pl-[232px]">
+      <SideNav />
+      {/* 폰은 한 줄, PC 는 넓게 */}
+      <div className="mx-auto max-w-3xl lg:max-w-none lg:px-6 lg:py-2">{children}</div>
       <BottomNav />
     </div>
   );

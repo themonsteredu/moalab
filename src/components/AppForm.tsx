@@ -239,7 +239,7 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
                 className={`tap rounded-full border px-3.5 text-[14px] font-semibold transition ${
                   creatorId === m.id
                     ? 'border-brand bg-brand text-white'
-                    : 'border-neutral-300 bg-white text-neutral-600'
+                    : 'border-neutral-300 bg-surface text-neutral-600'
                 }`}
               >
                 {m.name}

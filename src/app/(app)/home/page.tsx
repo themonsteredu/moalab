@@ -2,22 +2,29 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { PIECES, useAppsOverview } from '@/lib/useAppsOverview';
 import { CHECK_ITEMS, type ActivityLog, type CommentRow, type Schedule } from '@/lib/types';
-import { CardSkeleton, ErrorBanner, ProgressBar, SectionTitle, Skeleton } from '@/components/ui';
+import { CardSkeleton, ErrorBanner, ProgressBar, Skeleton } from '@/components/ui';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { CalendarLegend, KIND_META, MonthCalendar, type CalEntry } from '@/components/MonthCalendar';
 import { TeamBoard, useTeamWork } from '@/components/TeamBoard';
-import { ddayClass, ddayLabel, hhmm, korDateFull, logTime, relTime, today, toISODate } from '@/lib/format';
+import { Sparkline, StatCard, Timeline, WeekBars, type TimelineRow } from '@/components/Charts';
+import { ddayClass, ddayLabel, hhmm, korDateFull, parseDate, relTime, today, toISODate } from '@/lib/format';
+
+const WEEK_LABEL = ['일', '월', '화', '수', '목', '금', '토'];
+/** 타임라인이 보는 기간 */
+const TIMELINE_DAYS = 30;
 
 export default function HomePage() {
   const { session, isAdmin, signOut } = useSession();
   const { items, loading, error, reload } = useAppsOverview();
   const { nameOf, members } = useMembers();
+  const router = useRouter();
 
   const todayStr = today();
   const [cursor, setCursor] = useState(() => {
@@ -28,12 +35,11 @@ export default function HomePage() {
 
   const [schedules, setSchedules] = useState<Schedule[] | null>(null);
   const [attendees, setAttendees] = useState<Record<string, string[]>>({});
-  const [myComments, setMyComments] = useState<(CommentRow & { app_title: string })[] | null>(null);
+  const [myComments, setMyComments] = useState<(CommentRow & { app_title: string })[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
 
   const meId = session?.id ?? '';
 
-  /** 달력에 보이는 달 전체 (앞뒤 주 포함) */
   const range = useMemo(() => {
     const from = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     from.setDate(from.getDate() - 7);
@@ -61,10 +67,7 @@ export default function HomePage() {
 
   useEffect(() => {
     const myApps = items.filter((i) => i.app.creator_id === meId);
-    if (myApps.length === 0) {
-      setMyComments([]);
-      return;
-    }
+    if (myApps.length === 0) return setMyComments([]);
     void (async () => {
       const { data } = await supabase
         .from('comments')
@@ -72,7 +75,7 @@ export default function HomePage() {
         .eq('resolved', false)
         .in('app_id', myApps.map((a) => a.app.id))
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(6);
       const titleOf = new Map(items.map((i) => [i.app.id, i.app.title_ko]));
       setMyComments(
         ((data ?? []) as CommentRow[])
@@ -82,7 +85,7 @@ export default function HomePage() {
     })();
   }, [items, meId]);
 
-  /* ------------------------------------------------------- 달력 항목 */
+  /* ------------------------------------------------------------ 달력 */
   const entries = useMemo<CalEntry[]>(() => {
     const out: CalEntry[] = [];
     for (const it of items) {
@@ -117,10 +120,10 @@ export default function HomePage() {
     [entries, picked],
   );
 
-  /* ----------------------------------------------------------- 팀 */
+  /* -------------------------------------------------------- 통계 */
   const teamWork = useTeamWork(members, items, logs);
+  const untouched = teamWork.reduce((s, w) => s + w.reviewUntouched.length, 0);
 
-  /* --------------------------------------------------------- 현황 */
   const stats = useMemo(() => {
     const done = items.filter((i) => i.status === 'done').length;
     const fixing = items.filter((i) => i.status === 'fixing').length;
@@ -133,7 +136,64 @@ export default function HomePage() {
     [items],
   );
 
-  /* ---------------------------------------------------- 내 할 일 */
+  /** 최근 14일 활동 수 — 스파크라인용 */
+  const activityTrend = useMemo(() => {
+    const buckets = new Array(14).fill(0);
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+    for (const l of logs) {
+      const d = new Date(l.created_at);
+      d.setHours(0, 0, 0, 0);
+      const diff = Math.round((base.getTime() - d.getTime()) / 86400000);
+      if (diff >= 0 && diff < 14) buckets[13 - diff]++;
+    }
+    return buckets;
+  }, [logs]);
+
+  /** 이번 주(일~토) 활동 수 */
+  const weekBars = useMemo(() => {
+    const vals = new Array(7).fill(0);
+    const now = new Date();
+    const sun = new Date(now);
+    sun.setDate(now.getDate() - now.getDay());
+    sun.setHours(0, 0, 0, 0);
+    for (const l of logs) {
+      const d = new Date(l.created_at);
+      const diff = Math.floor((d.getTime() - sun.getTime()) / 86400000);
+      if (diff >= 0 && diff < 7) vals[diff]++;
+    }
+    return vals;
+  }, [logs]);
+
+  /** 마감 타임라인 (앞으로 30일) */
+  const timeline = useMemo<{ rows: TimelineRow[]; ticks: string[] }>(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const rows: TimelineRow[] = [];
+    for (const it of items) {
+      const d = it.app.due_date;
+      if (!d || it.status === 'done') continue;
+      const due = parseDate(d);
+      due.setHours(0, 0, 0, 0);
+      const days = Math.round((due.getTime() - start.getTime()) / 86400000);
+      if (days > TIMELINE_DAYS) continue;
+      const end = Math.min(1, Math.max(0.04, days / TIMELINE_DAYS));
+      rows.push({
+        id: it.app.id,
+        label: it.app.title_ko,
+        start: 0,
+        end: days < 0 ? 0.05 : end,
+        color: days < 0 ? '#EF4444' : days <= 3 ? '#F26522' : '#2AD1C8',
+        note: `${it.app.title_ko} — ${ddayLabel(d)}`,
+        href: `/apps/${it.app.id}`,
+      });
+    }
+    rows.sort((a, b) => a.end - b.end);
+    const ticks = ['오늘', '1주', '2주', '3주', '4주'];
+    return { rows: rows.slice(0, 8), ticks };
+  }, [items]);
+
+  /* ------------------------------------------------------- 내 할 일 */
   const myTasks = useMemo(() => {
     const out: { id: string; title: string; sub: string; due: string | null; kind: 'review' | 'fix' }[] = [];
     for (const it of items) {
@@ -144,7 +204,7 @@ export default function HomePage() {
           out.push({
             id: it.app.id,
             title: it.app.title_ko,
-            sub: `${it.currentRound?.round_no ?? 1}차 검증 · ${passed}/${CHECK_ITEMS.length}`,
+            sub: `${it.currentRound?.round_no ?? 1}차 · ${passed}/${CHECK_ITEMS.length}`,
             due: it.app.due_date,
             kind: 'review',
           });
@@ -157,9 +217,14 @@ export default function HomePage() {
     return out.sort((a, b) => (!a.due ? 1 : !b.due ? -1 : a.due < b.due ? -1 : 1));
   }, [items, meId]);
 
-  const overdue = useMemo(
-    () => items.filter((i) => i.status !== 'done' && i.app.due_date && i.app.due_date < todayStr),
-    [items, todayStr],
+  const dueSoon = useMemo(
+    () =>
+      items.filter((i) => {
+        if (i.status === 'done' || !i.app.due_date) return false;
+        const n = Math.round((parseDate(i.app.due_date).getTime() - Date.now()) / 86400000);
+        return n <= 7;
+      }).length,
+    [items],
   );
 
   const honorific = isAdmin ? '원장님' : '선생님';
@@ -167,269 +232,303 @@ export default function HomePage() {
   const greeting = name.endsWith('원장') || name.endsWith('선생') ? `${name}님` : `${name} ${honorific}`;
   const tomorrow = toISODate(new Date(Date.now() + 86400000));
   const pickedLabel = picked === todayStr ? '오늘' : picked === tomorrow ? '내일' : korDateFull(picked);
-
   const moveMonth = (d: number) => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + d, 1));
 
   return (
-    <>
-      <header className="bg-white px-4 pb-3 pt-5">
+    <div className="px-4 pb-8 pt-4 lg:px-0">
+      {/* --------------------------------------------------------- 인사 */}
+      <div className="mb-4 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-400 via-brand to-brand-600 p-4 lg:p-5">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            {session && <Avatar name={session.name} size={36} />}
-            <div>
-              <p className="text-[17px] font-black leading-tight">안녕하세요 {greeting}</p>
-              <p className="text-[12px] text-neutral-500">{korDateFull(todayStr)}</p>
-            </div>
+          <div className="min-w-0">
+            <p className="text-[18px] font-black leading-tight text-white lg:text-[22px]">
+              안녕하세요 {greeting}
+            </p>
+            <p className="mt-1 text-[12.5px] text-white/75">{korDateFull(todayStr)}</p>
           </div>
-          <button onClick={signOut} className="tap shrink-0 text-[12.5px] font-semibold text-neutral-400">
-            로그아웃
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {session && <Avatar name={session.name} size={40} ring />}
+            <button
+              onClick={signOut}
+              className="hidden text-[12.5px] font-semibold text-white/70 hover:text-white lg:block"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
-      </header>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <HeroChip label="내 할 일" value={`${myTasks.length}`} />
+          <HeroChip label="팀 미착수" value={`${untouched}`} tone={untouched > 0 ? 'warn' : 'ok'} />
+          <HeroChip label="7일 내 마감" value={`${dueSoon}`} tone={dueSoon > 0 ? 'warn' : 'ok'} />
+          <HeroChip label="검증 완료" value={`${overallPct}%`} />
+        </div>
+      </div>
 
-      <div className="space-y-5 px-4 pb-8 pt-3">
-        {error && <ErrorBanner message={error} onRetry={() => void reload()} />}
+      {error && (
+        <div className="mb-4">
+          <ErrorBanner message={error} onRetry={() => void reload()} />
+        </div>
+      )}
 
-        {/* ------------------------------------------------------ 달력 */}
-        <section>
-          <div className="mb-2 flex items-center gap-2">
-            <button
-              onClick={() => moveMonth(-1)}
-              aria-label="이전 달"
-              className="tap w-9 rounded-lg border border-neutral-200 bg-white text-neutral-400"
-            >
-              ‹
-            </button>
-            <h2 className="flex-1 text-center text-[15px] font-black">
-              {cursor.getFullYear()}년 {cursor.getMonth() + 1}월
-            </h2>
-            <button
-              onClick={() => moveMonth(1)}
-              aria-label="다음 달"
-              className="tap w-9 rounded-lg border border-neutral-200 bg-white text-neutral-400"
-            >
-              ›
-            </button>
-            <Link href="/schedule" className="tap px-2 text-[12.5px] font-bold text-neutral-400">
-              전체
-            </Link>
-          </div>
+      <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-5">
+        {/* ======================================================= 본문 */}
+        <div className="space-y-4 lg:col-span-2">
+          {/* 달력 */}
+          <section className="card p-3.5">
+            <div className="mb-2.5 flex items-center gap-2">
+              <button onClick={() => moveMonth(-1)} aria-label="이전 달" className="tap w-9 rounded-lg bg-neutral-100 text-neutral-400">
+                ‹
+              </button>
+              <h2 className="flex-1 text-center text-[15px] font-black">
+                {cursor.getFullYear()}년 {cursor.getMonth() + 1}월
+              </h2>
+              <button onClick={() => moveMonth(1)} aria-label="다음 달" className="tap w-9 rounded-lg bg-neutral-100 text-neutral-400">
+                ›
+              </button>
+              <Link href="/schedule" className="tap px-2 text-[12.5px] font-bold text-neutral-400">
+                전체
+              </Link>
+            </div>
 
-          {schedules === null ? (
-            <Skeleton className="h-64 w-full rounded-2xl" />
-          ) : (
-            <MonthCalendar month={cursor} entries={entries} selected={picked} onSelect={setPicked} />
-          )}
-
-          <div className="mt-2">
-            <CalendarLegend />
-          </div>
-
-          {/* 고른 날짜의 일정 */}
-          <div className="mt-2.5">
-            <p className="mb-1.5 text-[12.5px] font-bold text-neutral-500">{pickedLabel}</p>
-            {dayEntries.length === 0 ? (
-              <p className="card px-4 py-3 text-center text-[12.5px] text-neutral-400">일정 없음</p>
+            {schedules === null ? (
+              <Skeleton className="h-64 w-full rounded-xl" />
             ) : (
-              <div className="card divide-y divide-neutral-100">
-                {dayEntries.map((e) => (
+              <MonthCalendar month={cursor} entries={entries} selected={picked} onSelect={setPicked} />
+            )}
+
+            <div className="mt-2.5">
+              <CalendarLegend />
+            </div>
+
+            <div className="mt-3 border-t border-neutral-200/70 pt-3">
+              <p className="mb-1.5 text-[12.5px] font-bold text-neutral-500">{pickedLabel}</p>
+              {dayEntries.length === 0 ? (
+                <p className="py-2 text-center text-[12.5px] text-neutral-400">일정 없음</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {dayEntries.map((e) => (
+                    <li key={e.id}>
+                      <Link href={e.href ?? '/schedule'} className="flex items-start gap-2.5 rounded-lg px-1 py-1.5 hover:bg-neutral-100">
+                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${KIND_META[e.kind].dot}`} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13.5px] font-semibold text-neutral-800">{e.title}</span>
+                          <span className="text-[11.5px] text-neutral-400">
+                            {hhmm(e.time)}
+                            {e.place ? ` · ${e.place}` : ''}
+                            {e.who && e.who.length > 0 ? ` · ${e.who.join(', ')}` : ''}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          {/* 통계 3장 */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <StatCard
+              icon={<Icon name="checkCircle" size={15} />}
+              label="검증 완료"
+              value={`${overallPct}%`}
+              delta={`${stats.done}/${stats.total}`}
+            >
+              <ProgressBar value={overallPct} />
+            </StatCard>
+            <StatCard
+              icon={<Icon name="wrench" size={15} />}
+              label="수정 필요"
+              value={`${stats.fixing}`}
+              delta={stats.fixing > 0 ? '확인 필요' : '없음'}
+              deltaTone={stats.fixing > 0 ? 'down' : 'up'}
+              accentBg="bg-red-500"
+            >
+              <div className="flex gap-1">
+                {[
+                  { n: stats.done, c: 'bg-green-500' },
+                  { n: stats.pending, c: 'bg-neutral-300' },
+                  { n: stats.fixing, c: 'bg-red-500' },
+                ].map((s, i) =>
+                  s.n > 0 ? (
+                    <span key={i} className={`h-1.5 rounded-full ${s.c}`} style={{ flex: s.n }} />
+                  ) : null,
+                )}
+              </div>
+            </StatCard>
+            <StatCard
+              icon={<Icon name="list" size={15} />}
+              label="최근 2주 활동"
+              value={`${activityTrend.reduce((a, b) => a + b, 0)}`}
+              delta="건"
+              accentBg="bg-accent"
+            >
+              <Sparkline data={activityTrend} height={34} />
+            </StatCard>
+          </div>
+
+          {/* 마감 타임라인 */}
+          <section className="card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold">마감 타임라인</h2>
+              <span className="text-[11.5px] text-neutral-400">앞으로 4주</span>
+            </div>
+            {loading ? (
+              <Skeleton className="h-32 w-full rounded-xl" />
+            ) : (
+              <Timeline rows={timeline.rows} ticks={timeline.ticks} onPick={(id) => router.push(`/apps/${id}`)} />
+            )}
+          </section>
+
+          {/* 내 할 일 */}
+          <section>
+            <div className="mb-2.5 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold">
+                내 할 일 {myTasks.length > 0 && <span className="text-brand">{myTasks.length}</span>}
+              </h2>
+              <Link href="/apps" className="text-[12.5px] font-bold text-neutral-400">
+                프로그램 ›
+              </Link>
+            </div>
+            {loading ? (
+              <CardSkeleton rows={2} />
+            ) : myTasks.length === 0 ? (
+              <p className="card flex items-center justify-center gap-1.5 px-4 py-3.5 text-[13px] text-neutral-400">
+                <Icon name="check" size={14} className="text-green-500" />
+                지금 할 일이 없어요
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {myTasks.slice(0, 6).map((t) => (
                   <Link
-                    key={e.id}
-                    href={e.href ?? '/schedule'}
-                    className="flex items-start gap-2.5 px-3.5 py-2.5 active:bg-neutral-50"
+                    key={`${t.kind}-${t.id}`}
+                    href={`/apps/${t.id}`}
+                    className="card flex items-center gap-2.5 p-3 transition hover:border-brand-300"
                   >
-                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${KIND_META[e.kind].dot}`} />
+                    <Icon
+                      name={t.kind === 'fix' ? 'wrench' : 'search'}
+                      size={16}
+                      className={t.kind === 'fix' ? 'text-red-500' : 'text-neutral-400'}
+                    />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-semibold text-neutral-800">{e.title}</span>
-                      <span className="text-[11.5px] text-neutral-500">
-                        {hhmm(e.time)}
-                        {e.place ? ` · ${e.place}` : ''}
-                        {e.who && e.who.length > 0 ? ` · ${e.who.join(', ')}` : ''}
-                      </span>
+                      <span className="block truncate text-[14px] font-bold">{t.title}</span>
+                      <span className="text-[11.5px] text-neutral-400">{t.sub}</span>
                     </span>
+                    {t.due && <span className={`chip shrink-0 ${ddayClass(t.due)}`}>{ddayLabel(t.due)}</span>}
                   </Link>
                 ))}
               </div>
             )}
-          </div>
-        </section>
-
-        {/* -------------------------------------------------- 팀 현황 */}
-        <section>
-          <SectionTitle
-            right={
-              <span className="text-[11.5px] text-neutral-400">
-                미착수 {teamWork.reduce((s, w) => s + w.reviewUntouched.length, 0)}건
-              </span>
-            }
-          >
-            팀 현황 — 누가 뭘 하고 있나
-          </SectionTitle>
-          {loading ? <CardSkeleton rows={3} /> : <TeamBoard work={teamWork} meId={meId} />}
-        </section>
-
-        {/* -------------------------------------------------- 내 할 일 */}
-        <section>
-          <SectionTitle
-            right={
-              <Link href="/apps" className="text-[12.5px] font-bold text-neutral-400">
-                프로그램 ›
-              </Link>
-            }
-          >
-            내 할 일 {myTasks.length > 0 && <span className="text-brand">{myTasks.length}</span>}
-          </SectionTitle>
-          {loading ? (
-            <CardSkeleton rows={2} />
-          ) : myTasks.length === 0 ? (
-            <p className="card flex items-center justify-center gap-1.5 px-4 py-3.5 text-[13px] text-neutral-400">
-              <Icon name="check" size={14} className="text-green-500" />
-              지금 할 일이 없어요
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {myTasks.map((t) => (
-                <Link
-                  key={`${t.kind}-${t.id}`}
-                  href={`/apps/${t.id}`}
-                  className="card flex items-center gap-2.5 p-3 active:bg-neutral-50"
-                >
-                  <Icon
-                    name={t.kind === 'fix' ? 'wrench' : 'search'}
-                    size={16}
-                    className={t.kind === 'fix' ? 'text-red-500' : 'text-neutral-400'}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14.5px] font-bold">{t.title}</span>
-                    <span className="text-[12px] text-neutral-500">{t.sub}</span>
-                  </span>
-                  {t.due && <span className={`chip shrink-0 ${ddayClass(t.due)}`}>{ddayLabel(t.due)}</span>}
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* -------------------------------------------------- 전체 현황 */}
-        <section>
-          <SectionTitle>전체 현황</SectionTitle>
-          <div className="card p-4">
-            <div className="mb-2 flex items-baseline justify-between">
-              <span className="text-[13px] text-neutral-500">검증 완료</span>
-              <span className="text-[20px] font-black leading-none text-brand">{overallPct}%</span>
-            </div>
-            <ProgressBar value={overallPct} />
-            <div className="mt-3 grid grid-cols-4 gap-1.5">
-              <Tile n={stats.total} label="전체" />
-              <Tile n={stats.done} label="완료" tone="green" />
-              <Tile n={stats.fixing} label="수정 필요" tone="red" />
-              <Tile n={stats.pending} label="진행 중" />
-            </div>
-            <div className="mt-3 border-t border-neutral-100 pt-2.5">
-              <p className="mb-1.5 text-[11.5px] font-bold text-neutral-400">프로그램 구성 채움 정도</p>
-              <div className="space-y-1">
-                {pieceStats.map((p) => (
-                  <div key={p.key} className="flex items-center gap-2">
-                    <span className="flex w-[58px] shrink-0 items-center gap-1 text-[11.5px] text-neutral-500">
-                      <Icon name={p.icon} size={11} className="text-neutral-400" />
-                      {p.label}
-                    </span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                      <div
-                        className="h-full rounded-full bg-brand/70"
-                        style={{ width: `${p.total ? (p.n / p.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                    <span className="w-11 shrink-0 text-right text-[11px] font-bold tabular-nums text-neutral-500">
-                      {p.n}/{p.total}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 있을 때만 그린다 */}
-        {myComments && myComments.length > 0 && (
-          <section>
-            <SectionTitle>나를 향한 지적사항</SectionTitle>
-            <div className="space-y-2">
-              {myComments.map((c) => (
-                <Link key={c.id} href={`/apps/${c.app_id}`} className="card block p-3 active:bg-neutral-50">
-                  <p className="text-[11.5px] font-bold text-brand">{c.app_title}</p>
-                  <p className="mt-0.5 line-clamp-2 text-[13.5px] leading-relaxed text-neutral-700">{c.body}</p>
-                  <p className="mt-1 text-[11.5px] text-neutral-400">
-                    {nameOf(c.member_id)} · {relTime(c.created_at)}
-                  </p>
-                </Link>
-              ))}
-            </div>
           </section>
-        )}
 
-        {isAdmin && overdue.length > 0 && (
+          {/* 팀 현황 */}
           <section>
-            <SectionTitle>
-              지연 항목 <span className="text-red-600">{overdue.length}</span>
-            </SectionTitle>
-            <div className="card divide-y divide-neutral-100">
-              {overdue.map((it) => (
-                <Link
-                  key={it.app.id}
-                  href={`/apps/${it.app.id}`}
-                  className="flex items-center justify-between px-4 py-2.5 active:bg-neutral-50"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[14px] font-semibold">{it.app.title_ko}</span>
-                    <span className="text-[11.5px] text-neutral-500">제작 {nameOf(it.app.creator_id)}</span>
-                  </span>
-                  <span className={`chip shrink-0 ${ddayClass(it.app.due_date)}`}>{ddayLabel(it.app.due_date)}</span>
-                </Link>
-              ))}
+            <div className="mb-2.5 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold">팀 현황 — 누가 뭘 하고 있나</h2>
+              <span className="text-[11.5px] text-neutral-400">미착수 {untouched}건</span>
             </div>
+            {loading ? <CardSkeleton rows={3} /> : <TeamBoard work={teamWork} meId={meId} />}
           </section>
-        )}
+        </div>
 
-        {isAdmin && logs.length > 0 && (
-          <section>
-            <SectionTitle
-              right={
-                <Link href="/admin?tab=log" className="text-[12.5px] font-bold text-neutral-400">
-                  전체 ›
+        {/* ======================================================= 오른쪽 */}
+        <div className="mt-4 space-y-4 lg:mt-0">
+          {/* 팀 활동 */}
+          <section className="card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold">팀 활동</h2>
+              {isAdmin && (
+                <Link href="/admin?tab=log" className="text-[12px] font-bold text-accent">
+                  전체
                 </Link>
-              }
-            >
-              최근 활동
-            </SectionTitle>
-            <div className="card px-4 py-3">
-              <ul className="space-y-1.5">
-                {logs.slice(0, 5).map((l) => (
-                  <li key={l.id} className="text-[12.5px] leading-relaxed text-neutral-600">
-                    <span className="text-neutral-400">{logTime(l.created_at)}</span>{' '}
-                    <b className="text-neutral-800">{nameOf(l.member_id)}</b> — {l.action}
+              )}
+            </div>
+            {logs.length === 0 ? (
+              <p className="py-4 text-center text-[12.5px] text-neutral-400">아직 활동이 없어요.</p>
+            ) : (
+              <ul className="space-y-3">
+                {logs.slice(0, 7).map((l) => (
+                  <li key={l.id} className="flex items-start gap-2.5">
+                    <Avatar name={nameOf(l.member_id)} size={28} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-bold text-neutral-800">{nameOf(l.member_id)}</span>
+                      <span className="block truncate text-[11.5px] text-neutral-400">{l.action}</span>
+                    </span>
+                    <span className="shrink-0 whitespace-nowrap text-[10.5px] text-neutral-400">
+                      {relTime(l.created_at)}
+                    </span>
                   </li>
                 ))}
               </ul>
+            )}
+          </section>
+
+          {/* 주간 활동 */}
+          <section className="card p-4">
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold">이번 주 활동</h2>
+              <span className="text-[11.5px] text-neutral-400">
+                {weekBars.reduce((a, b) => a + b, 0)}건
+              </span>
+            </div>
+            <WeekBars values={weekBars} labels={WEEK_LABEL} goal={1} />
+          </section>
+
+          {/* 구성 채움 정도 */}
+          <section className="card p-4">
+            <h2 className="mb-2.5 text-[15px] font-bold">프로그램 구성</h2>
+            <div className="space-y-2">
+              {pieceStats.map((p) => (
+                <div key={p.key} className="flex items-center gap-2">
+                  <span className="flex w-[58px] shrink-0 items-center gap-1 text-[11.5px] text-neutral-500">
+                    <Icon name={p.icon} size={11} className="text-neutral-400" />
+                    {p.label}
+                  </span>
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200">
+                    <div
+                      className="h-full rounded-full bg-brand"
+                      style={{ width: `${p.total ? (p.n / p.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <span className="w-11 shrink-0 text-right text-[11px] font-bold tabular-nums text-neutral-500">
+                    {p.n}/{p.total}
+                  </span>
+                </div>
+              ))}
             </div>
           </section>
-        )}
+
+          {/* 지적사항 */}
+          {myComments.length > 0 && (
+            <section className="card p-4">
+              <h2 className="mb-2.5 text-[15px] font-bold">나를 향한 지적사항</h2>
+              <ul className="space-y-2.5">
+                {myComments.map((c) => (
+                  <li key={c.id}>
+                    <Link href={`/apps/${c.app_id}`} className="block rounded-lg p-1 hover:bg-neutral-100">
+                      <p className="text-[11.5px] font-bold text-brand">{c.app_title}</p>
+                      <p className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-neutral-700">{c.body}</p>
+                      <p className="mt-0.5 text-[11px] text-neutral-400">
+                        {nameOf(c.member_id)} · {relTime(c.created_at)}
+                      </p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
-function Tile({ n, label, tone }: { n: number; label: string; tone?: 'green' | 'red' }) {
+function HeroChip({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' }) {
   return (
-    <div className="rounded-xl bg-neutral-50 py-2 text-center">
-      <p
-        className={`text-[19px] font-black leading-none ${
-          tone === 'green' ? 'text-green-700' : tone === 'red' ? 'text-red-600' : 'text-neutral-800'
-        }`}
-      >
-        {n}
-      </p>
-      <p className="mt-1 text-[10.5px] text-neutral-500">{label}</p>
-    </div>
+    <span className="flex items-center gap-1.5 rounded-lg bg-black/20 px-2.5 py-1.5 backdrop-blur">
+      <span className="text-[11px] text-white/70">{label}</span>
+      <span className={`text-[13px] font-black ${tone === 'warn' ? 'text-yellow-900' : 'text-white'}`}>
+        {value}
+      </span>
+    </span>
   );
 }

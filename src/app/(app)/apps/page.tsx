@@ -105,7 +105,7 @@ export default function AppsPage() {
               key={v.value}
               onClick={() => setView(v.value)}
               className={`tap flex-1 gap-1.5 rounded-lg text-[13.5px] font-bold transition ${
-                view === v.value ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
+                view === v.value ? 'bg-surface text-neutral-900 shadow-sm' : 'text-neutral-500'
               }`}
             >
               <Icon name={v.icon} size={14} />
@@ -158,7 +158,7 @@ export default function AppsPage() {
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
             aria-label="정렬"
-            className="h-8 rounded-lg border border-neutral-300 bg-white px-2 text-[12.5px] font-semibold text-neutral-600"
+            className="h-8 rounded-lg border border-neutral-300 bg-surface px-2 text-[12.5px] font-semibold text-neutral-600"
           >
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>
@@ -260,8 +260,8 @@ function Chip({
         on
           ? 'border-brand bg-brand text-white'
           : dim
-            ? 'border-neutral-200 bg-white text-neutral-300'
-            : 'border-neutral-300 bg-white text-neutral-600'
+            ? 'border-neutral-200 bg-surface text-neutral-300'
+            : 'border-neutral-300 bg-surface text-neutral-600'
       }`}
     >
       {children}

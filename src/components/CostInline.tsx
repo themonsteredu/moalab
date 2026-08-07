@@ -137,7 +137,7 @@ export function CostInline({
           {items.slice(0, 4).map((it) => {
             const c = calcItem(it, sheet.headcount);
             return (
-              <li key={it.id} className="flex items-center gap-2 bg-white px-3 py-2">
+              <li key={it.id} className="flex items-center gap-2 bg-surface px-3 py-2">
                 <span
                   className="h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: categoryColor(it.category) }}
@@ -151,7 +151,7 @@ export function CostInline({
             );
           })}
           {items.length > 4 && (
-            <li className="bg-white px-3 py-2 text-center text-[12px] text-neutral-400">
+            <li className="bg-surface px-3 py-2 text-center text-[12px] text-neutral-400">
               외 {items.length - 4}개
             </li>
           )}

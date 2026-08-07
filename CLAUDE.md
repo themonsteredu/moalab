@@ -28,7 +28,7 @@
 | | |
 |---|---|
 | 프레임워크 | Next.js 14 (App Router) + TypeScript |
-| 스타일 | Tailwind CSS (브랜드 컬러 `#F26522`) |
+| 스타일 | Tailwind CSS · **다크 대시보드** (브랜드 `#F26522`, 보조 `#2AD1C8`) |
 | 폰트 | 에스코어드림 (S-Core Dream, OFL) — jsDelivr CDN |
 | DB / Storage | Supabase |
 | 로그인 | 자체 PIN 4자리 (Supabase Auth 안 씀) |
@@ -80,7 +80,7 @@ npm run dev        # http://localhost:3000
 
 | 경로 | 탭 | 내용 |
 |---|---|---|
-| `/home` | 홈 | **월간 달력** → 팀 현황 → 내 할 일 → 전체 현황 (원장은 지연·활동 추가) |
+| `/home` | 홈 | 대시보드 — 인사 배너 · **달력** · 통계 3장 · 마감 타임라인 · 내 할 일 · 팀 현황<br>(PC 는 오른쪽에 팀 활동 · 주간 활동 · 프로그램 구성) |
 | `/apps` | 프로그램 | 목록(리스트·보드·갤러리) → `/apps/[id]` **프로그램 페이지** |
 | `/cost` | 원가 | 원가표 목록 → `/cost/[sheetId]` 계산서 |
 | `/gallery` | 갤러리 | 앨범/사진 → `/gallery/[albumId]` |
@@ -258,6 +258,7 @@ src/components/
   Brand.tsx                  브랜드 마크 · 멤버 아바타
   Icon.tsx                   인라인 SVG 아이콘 모음 (이모지 대체)
   MonthCalendar.tsx          월간 달력 그리드 (홈·일정 공용)
+  Charts.tsx                 Sparkline · WeekBars · Timeline · StatCard (SVG 직접)
   TeamBoard.tsx              누가 뭘 했나/안 했나 — 사람 단위 협업 현황
   Checklist.tsx              검증자 1명의 5항목 체크 (명시적 저장 / fail 메모 강제)
   RoundHistory.tsx           지난 라운드 접힌 기록
@@ -276,6 +277,14 @@ src/components/
 - 사진 업로드는 **반드시** `uploadFile()` 을 거친다 (리사이즈 후 저장).
 - 로딩 중에 빈 화면을 두지 말고 **스켈레톤**을 보여준다.
 - 자동저장 금지. **명시적 저장 버튼**. (강사들이 잘못 눌렀다 날리면 안 된다)
+- **다크 테마다.** `tailwind.config.ts` 에서 `neutral` 스케일을 통째로 뒤집어 놨다
+  (50 = 가장 어두움, 900 = 가장 밝음). 그래서 화면 코드는 라이트 기준 그대로
+  `text-neutral-900`(본문) / `bg-neutral-50`(옅은 배경) 처럼 쓰면 된다.
+  카드 배경은 `bg-surface`, 한 단계 뜬 면은 `bg-raised`, 페이지는 `bg-canvas`.
+  · 새 색을 쓸 땐 config 에 그 색의 50·100(어두운 틴트)과 700·800(밝은 글자)을 정의할 것
+  · `bg-white` 를 새로 쓰지 말 것 — `bg-surface` 를 쓴다
+- **PC 는 왼쪽 사이드바, 폰은 하단 탭.** 둘 다 `src/components/BottomNav.tsx`
+  (`SideNav` / `BottomNav`). 분기는 `lg:` 브레이크포인트 하나뿐이다.
 - **이모지를 UI 에 쓰지 않는다.** 기기마다 모양·크기가 달라 화면이 지저분해진다.
   아이콘은 전부 `src/components/Icon.tsx` (인라인 SVG). 새 아이콘도 여기에 추가한다.
 - **세로 스크롤을 아낀다.** 폰 한 화면이 812px 인 걸 기준으로 생각한다.

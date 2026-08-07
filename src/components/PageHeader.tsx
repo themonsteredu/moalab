@@ -17,7 +17,7 @@ export function PageHeader({
 }) {
   const router = useRouter();
   return (
-    <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-neutral-200 bg-surface/95 backdrop-blur">
       <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2.5">
         {back &&
           (typeof back === 'string' ? (
