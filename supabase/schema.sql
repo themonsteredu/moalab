@@ -210,7 +210,37 @@ create table if not exists moalab.schedule_members (
 );
 
 -- ---------------------------------------------------------------------
--- 10. 활동 로그
+-- 10. 수업계획안 — 프로그램 하나당 본문 1개 + 첨부파일 N개
+--     (본문은 apps.plan_body, 파일은 아래 테이블)
+-- ---------------------------------------------------------------------
+alter table moalab.apps add column if not exists plan_body text;
+
+create table if not exists moalab.plan_files (
+  id         uuid primary key default gen_random_uuid(),
+  app_id     uuid not null references moalab.apps(id) on delete cascade,
+  file_url   text not null,
+  file_name  text not null,
+  file_size  bigint,
+  created_at timestamptz not null default now()
+);
+create index if not exists plan_files_app_idx on moalab.plan_files(app_id, created_at);
+
+-- ---------------------------------------------------------------------
+-- 11. 프로그램 샘플 이미지 — 제안서·소개용 예시 작품
+--     (수업 현장 사진은 albums/photos 쪽이다. 목적이 다르다)
+-- ---------------------------------------------------------------------
+create table if not exists moalab.app_samples (
+  id         uuid primary key default gen_random_uuid(),
+  app_id     uuid not null references moalab.apps(id) on delete cascade,
+  url        text not null,
+  caption    text,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists app_samples_app_idx on moalab.app_samples(app_id, sort_order);
+
+-- ---------------------------------------------------------------------
+-- 12. 활동 로그
 -- ---------------------------------------------------------------------
 create table if not exists moalab.activity_logs (
   id         uuid primary key default gen_random_uuid(),
@@ -254,7 +284,8 @@ begin
   foreach t in array array[
     'apps','app_reviewers','rounds','checks','comments','comment_files',
     'cost_sheets','cost_items','cost_item_photos',
-    'albums','photos','schedules','schedule_members','activity_logs'
+    'albums','photos','schedules','schedule_members','activity_logs',
+    'plan_files','app_samples'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);
     execute format('drop policy if exists "internal_all" on moalab.%I', t);
@@ -270,13 +301,14 @@ end $$;
 insert into storage.buckets (id, name, public)
 values ('moalab-comment-files','moalab-comment-files', true),
        ('moalab-cost-photos','moalab-cost-photos', true),
-       ('moalab-gallery','moalab-gallery', true)
+       ('moalab-gallery','moalab-gallery', true),
+       ('moalab-plans','moalab-plans', true)
 on conflict (id) do update set public = true;
 
 do $$
 declare b text;
 begin
-  foreach b in array array['moalab-comment-files','moalab-cost-photos','moalab-gallery'] loop
+  foreach b in array array['moalab-comment-files','moalab-cost-photos','moalab-gallery','moalab-plans'] loop
     execute format('drop policy if exists "read_%s"   on storage.objects', b);
     execute format('drop policy if exists "write_%s"  on storage.objects', b);
     execute format('drop policy if exists "update_%s" on storage.objects', b);
@@ -294,15 +326,20 @@ begin
 end $$;
 
 -- =====================================================================
---  초기 멤버 (PIN 은 로그인 후 관리 화면에서 꼭 바꾸세요)
+--  초기 멤버 — 멤버가 하나도 없을 때만 넣는다.
+--  (이미 쓰고 있는 DB 에 다시 실행해도 이름을 바꿔둔 멤버가 되살아나거나
+--   원장이 두 명이 되는 일이 없다. PIN 은 로그인 후 관리 화면에서 꼭 바꾸세요)
 -- =====================================================================
-insert into moalab.members (name, pin, role, sort_order) values
-  ('원장',   '0000', 'admin',   0),
+insert into moalab.members (name, pin, role, sort_order)
+select v.name, v.pin, v.role, v.sort_order
+from (values
+  ('강양희', '0000', 'admin',   0),
   ('이서은', '1111', 'teacher', 1),
   ('주은서', '2222', 'teacher', 2),
   ('강지연', '3333', 'teacher', 3),
   ('윤창진', '4444', 'teacher', 4)
-on conflict (name) do nothing;
+) as v(name, pin, role, sort_order)
+where not exists (select 1 from moalab.members);
 
 -- PostgREST 스키마 캐시 갱신
 notify pgrst, 'reload schema';

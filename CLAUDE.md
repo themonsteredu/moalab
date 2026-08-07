@@ -7,9 +7,11 @@
 
 노션으로 관리하면서 안 되던 세 가지:
 
-1. 강사가 폰에서 보면 표가 가로로 길어서 자기 할 일을 못 찾는다 → **홈은 "내 것만" 보여준다**
+1. 강사가 폰에서 보면 표가 가로로 길어서 자기 할 일을 못 찾는다
+   → **강사 홈은 "내 할 일" 부터, 원장 홈은 "전체 현황·일정" 부터** (`isAdmin` 으로 순서만 바꾼다)
 2. 웹앱을 수정해도 이전 검증 체크가 남아 뭘 다시 봐야 할지 모른다 → **검증 라운드**
-3. 원가·작품 사진·수업계획안이 흩어져 있다 → **한 앱 안에 모음**
+3. 원가·작품 사진·수업계획안이 흩어져 있다
+   → **프로그램 페이지 한 장에 전부** (아래 "프로그램 페이지" 참고)
 
 ## 가장 중요한 전제
 
@@ -59,7 +61,7 @@ npm run dev        # http://localhost:3000
 
 | 이름 | PIN | 역할 |
 |---|---|---|
-| 원장 | 0000 | admin |
+| 강양희 | 0000 | admin |
 | 이서은 | 1111 | teacher |
 | 주은서 | 2222 | teacher |
 | 강지연 | 3333 | teacher |
@@ -78,8 +80,8 @@ npm run dev        # http://localhost:3000
 
 | 경로 | 탭 | 내용 |
 |---|---|---|
-| `/home` | 홈 | 내 할 일, 진행률, 나를 향한 지적, 이번 주 일정 |
-| `/apps` | 검증 | 앱 목록 → `/apps/[id]` 검증 체크리스트·댓글·정보 |
+| `/home` | 홈 | 전체 현황 · 앞으로 2주 일정 · 내 할 일 · 지적사항 (원장은 지연·강사별·활동 추가) |
+| `/apps` | 프로그램 | 목록(리스트·보드·갤러리) → `/apps/[id]` **프로그램 페이지** |
 | `/cost` | 원가 | 원가표 목록 → `/cost/[sheetId]` 계산서 |
 | `/gallery` | 갤러리 | 앨범/사진 → `/gallery/[albumId]` |
 | `/schedule` | 일정 | 월간·주간 달력 |
@@ -100,7 +102,7 @@ npm run dev        # http://localhost:3000
   → 앱 코드에서는 그냥 `supabase.from('apps')` 라고 쓰면 `moalab.apps` 로 간다.
 - SQL 로 직접 볼 때만 스키마를 붙인다: `select * from moalab.apps;`
 - Storage 버킷도 같은 이유로 `moalab-` 접두어를 붙였다
-  (`moalab-comment-files`, `moalab-cost-photos`, `moalab-gallery`).
+  (`moalab-comment-files`, `moalab-cost-photos`, `moalab-gallery`, `moalab-plans`).
   접두어 없이 `gallery` 를 쓰면 남의 버킷을 공개로 덮어쓸 위험이 있다.
 - **Supabase 설정 > API > Exposed schemas 에 `moalab` 이 없으면 아무것도 안 된다.**
   이 경우 `friendlyError()` 가 그 사실을 한글로 알려준다.
@@ -123,6 +125,34 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
 
 검증 환경을 만들 때도 **슈퍼유저가 아니라 진짜 `service_role`** 로 테스트해야
 이 구멍이 잡힌다.
+
+---
+
+## 프로그램 페이지 — "따로국밥" 을 없앤 곳
+
+노션에서 가장 답답했던 게 **웹앱 · 검증 · 수업계획안 · 원가 · 샘플이미지가 다 딴 데** 있던 것이다.
+그래서 `/apps/[id]` 한 페이지에 전부 올렸다. 위에서 아래로 읽으면 그게 곧 일하는 순서다.
+
+| 섹션 | 내용 | 데이터 |
+|---|---|---|
+| 속성 블록 | 상태·라운드·제작자·검증자·마감·학년·링크 | `apps`, `app_reviewers` |
+| ✅ 검증 | 현재 라운드 체크리스트 + 지난 라운드 | `rounds`, `checks` |
+| 📄 수업계획안 | 본문 + 지도안·활동지 파일 | `apps.plan_body`, `plan_files` |
+| 💰 원가 | 1인당·총원가·마진 요약 (고칠 땐 `/cost/[id]`) | `cost_sheets`, `cost_items` |
+| 🖼️ 샘플 이미지 | 제안서용 예시 작품 | `app_samples` |
+| 📸 수업 사진 | 실제 수업 기록 (앨범 링크) | `albums`, `photos` |
+| 💬 댓글 | 스크린샷 첨부 | `comments`, `comment_files` |
+
+- 상단 목차 칩은 스크롤에 따라 따라간다 (`IntersectionObserver`).
+- **샘플 이미지 vs 수업 사진**: 샘플은 "이 수업 하면 이런 게 나온다"(제안서용),
+  수업 사진은 "언제 어느 학교에서 뭘 했다"(기록용). 목적이 달라 저장소를 나눴다.
+
+### 목록은 노션 데이터베이스처럼
+
+`/apps` 는 **리스트 · 보드(상태별) · 갤러리** 세 가지 보기를 제공한다 (선택은 localStorage 에 기억).
+카드마다 **검증·계획안·원가·샘플·사진** 5개가 채워졌는지 배지로 보인다.
+"빠진 것" 필터로 *원가 없는 프로그램만* 같은 걸 바로 뽑을 수 있다.
+관련 계산은 `useAppsOverview` 의 `Completeness` 에 모여 있다.
 
 ---
 
@@ -220,7 +250,11 @@ src/components/
   BottomNav.tsx              하단 탭 (원장이면 '관리' 탭 추가)
   PageHeader.tsx             상단 헤더
   AppForm.tsx                앱 추가/수정 — 저장 시 라운드·체크 자동 생성
-  AppCard.tsx                앱 목록 카드
+  AppCard.tsx                앱 목록 카드 (리스트/보드/갤러리 3종 + PieceRow)
+  LessonPlan.tsx             수업계획안 본문 + 파일 첨부
+  CostInline.tsx             프로그램 페이지 안의 원가 요약
+  SampleImages.tsx           프로그램 샘플 이미지
+  Brand.tsx                  브랜드 마크 · 멤버 아바타
   Checklist.tsx              검증자 1명의 5항목 체크 (명시적 저장 / fail 메모 강제)
   RoundHistory.tsx           지난 라운드 접힌 기록
   CommentThread.tsx          댓글 + 사진 첨부 + 해결됨 토글

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
@@ -9,16 +9,28 @@ import { useMembers } from '@/lib/useMembers';
 import { logActivity } from '@/lib/log';
 import { openNextRound, recomputeAppStatus } from '@/lib/verify';
 import { computeStatus, roundProgress, STATUS_META } from '@/lib/status';
-import { ddayClass, ddayLabel, korDateFull } from '@/lib/format';
+import { ddayClass, ddayLabel, korDate, korDateFull } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
 import { ReviewerChecklist } from '@/components/Checklist';
 import { RoundHistory } from '@/components/RoundHistory';
 import { CommentThread } from '@/components/CommentThread';
+import { LessonPlan } from '@/components/LessonPlan';
+import { CostInline } from '@/components/CostInline';
+import { SampleImages } from '@/components/SampleImages';
 import { AppForm } from '@/components/AppForm';
-import { CardSkeleton, ConfirmDialog, ErrorBanner, ProgressBar, SectionTitle, Sheet, useToast } from '@/components/ui';
-import type { AppRow, CheckRow, CostSheet, Round } from '@/lib/types';
+import { Avatar } from '@/components/Brand';
+import { CardSkeleton, ConfirmDialog, ErrorBanner, ProgressBar, Sheet, useToast } from '@/components/ui';
+import type { Album, AppRow, CheckRow, Photo, Round } from '@/lib/types';
 
-type Tab = 'verify' | 'comment' | 'info';
+/** 프로그램 페이지의 목차. 이 순서가 곧 일하는 순서다. */
+const SECTIONS = [
+  { id: 'verify', icon: '✅', label: '검증' },
+  { id: 'plan', icon: '📄', label: '수업계획안' },
+  { id: 'cost', icon: '💰', label: '원가' },
+  { id: 'sample', icon: '🖼️', label: '샘플' },
+  { id: 'photos', icon: '📸', label: '수업 사진' },
+  { id: 'comment', icon: '💬', label: '댓글' },
+] as const;
 
 export default function AppDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,18 +43,20 @@ export default function AppDetailPage() {
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [checks, setChecks] = useState<CheckRow[]>([]);
-  const [sheet, setSheet] = useState<CostSheet | null>(null);
-  const [photoCount, setPhotoCount] = useState(0);
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [openComments, setOpenComments] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [tab, setTab] = useState<Tab>('verify');
+  const [active, setActive] = useState<string>('verify');
   const [reopenOpen, setReopenOpen] = useState(false);
   const [changeNote, setChangeNote] = useState('');
   const [reopenErr, setReopenErr] = useState('');
   const [reopenBusy, setReopenBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const navRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setError('');
@@ -56,36 +70,37 @@ export default function AppDetailPage() {
       }
       setApp(a as AppRow);
 
-      const [revRes, roundRes, sheetRes] = await Promise.all([
+      const [revRes, roundRes, albumRes, cmtRes] = await Promise.all([
         supabase.from('app_reviewers').select('member_id').eq('app_id', id),
         supabase.from('rounds').select('*').eq('app_id', id).order('round_no', { ascending: false }),
-        supabase.from('cost_sheets').select('*').eq('app_id', id).limit(1).maybeSingle(),
+        supabase.from('albums').select('*').eq('app_id', id).order('class_date', { ascending: false }),
+        supabase.from('comments').select('id', { count: 'exact', head: true }).eq('app_id', id).eq('resolved', false),
       ]);
 
       setReviewerIds((revRes.data ?? []).map((r) => r.member_id));
       const rs = (roundRes.data ?? []) as Round[];
       setRounds(rs);
-      setSheet((sheetRes.data as CostSheet | null) ?? null);
+      setOpenComments(cmtRes.count ?? 0);
+
+      const als = (albumRes.data ?? []) as Album[];
+      setAlbums(als);
+      if (als.length > 0) {
+        const { data: ps } = await supabase
+          .from('photos')
+          .select('*')
+          .in('album_id', als.map((x) => x.id))
+          .order('created_at', { ascending: false })
+          .limit(60);
+        setPhotos((ps ?? []) as Photo[]);
+      } else {
+        setPhotos([]);
+      }
 
       if (rs.length > 0) {
-        const { data: cs } = await supabase
-          .from('checks')
-          .select('*')
-          .in('round_id', rs.map((r) => r.id));
+        const { data: cs } = await supabase.from('checks').select('*').in('round_id', rs.map((r) => r.id));
         setChecks((cs ?? []) as CheckRow[]);
       } else {
         setChecks([]);
-      }
-
-      const { data: albums } = await supabase.from('albums').select('id').eq('app_id', id);
-      if (albums && albums.length > 0) {
-        const { count } = await supabase
-          .from('photos')
-          .select('id', { count: 'exact', head: true })
-          .in('album_id', albums.map((x) => x.id));
-        setPhotoCount(count ?? 0);
-      } else {
-        setPhotoCount(0);
       }
     } catch (e) {
       setError(friendlyError(e, '앱 정보를 불러오지 못했어요. 다시 시도해주세요.'));
@@ -115,6 +130,32 @@ export default function AppDetailPage() {
     }
     return m;
   }, [checks]);
+
+  /** 스크롤에 따라 목차 칩을 따라가게 */
+  useEffect(() => {
+    if (loading) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (visible) setActive(visible.target.id);
+      },
+      { rootMargin: '-120px 0px -60% 0px', threshold: 0 },
+    );
+    for (const s of SECTIONS) {
+      const el = document.getElementById(s.id);
+      if (el) obs.observe(el);
+    }
+    return () => obs.disconnect();
+  }, [loading]);
+
+  const goto = (sid: string) => {
+    const el = document.getElementById(sid);
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY - 104;
+    window.scrollTo({ top, behavior: 'smooth' });
+  };
 
   const reopen = async () => {
     setReopenErr('');
@@ -149,20 +190,6 @@ export default function AppDetailPage() {
     else await load();
   };
 
-  const createSheet = async () => {
-    const { data, error: e } = await supabase
-      .from('cost_sheets')
-      .insert({ app_id: id, title: `${app?.title_ko ?? ''} 원가표`, headcount: 20, sale_price: 0 })
-      .select()
-      .single();
-    if (e) {
-      setError(friendlyError(e));
-      return;
-    }
-    logActivity(session?.id, `${app?.slug} 원가표 생성`, `sheet:${data.id}`);
-    router.push(`/cost/${data.id}`);
-  };
-
   if (loading) {
     return (
       <>
@@ -177,7 +204,7 @@ export default function AppDetailPage() {
   if (!app) {
     return (
       <>
-        <PageHeader title="앱" back="/apps" />
+        <PageHeader title="프로그램" back="/apps" />
         <div className="px-4 py-4">
           <ErrorBanner message={error || '앱을 찾지 못했어요.'} onRetry={() => void load()} />
         </div>
@@ -205,179 +232,270 @@ export default function AppDetailPage() {
         }
       />
 
-      <div className="px-4 pb-8 pt-3">
+      {/* 목차 — 노션 페이지 상단 목차처럼 */}
+      <div
+        ref={navRef}
+        className="sticky top-[53px] z-20 border-b border-neutral-200 bg-white/95 backdrop-blur"
+      >
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 py-2">
+          {SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => goto(s.id)}
+              className={`flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-[12.5px] font-bold transition ${
+                active === s.id ? 'bg-brand text-white' : 'bg-neutral-100 text-neutral-500'
+              }`}
+            >
+              <span className="text-[13px] leading-none">{s.icon}</span>
+              {s.label}
+              {s.id === 'comment' && openComments > 0 && (
+                <span
+                  className={`ml-0.5 rounded-full px-1 text-[10px] ${
+                    active === s.id ? 'bg-white/25' : 'bg-brand text-white'
+                  }`}
+                >
+                  {openComments}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 pb-10 pt-4">
         {error && (
           <div className="mb-3">
             <ErrorBanner message={error} onRetry={() => void load()} />
           </div>
         )}
 
-        {/* 요약 */}
-        <div className="card p-4">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className={`chip ${meta.chip}`}>{meta.label}</span>
-            <span className="chip bg-neutral-100 text-neutral-600">
-              {currentRound?.round_no ?? app.current_round}차 검증 {status === 'done' ? '완료' : '중'}
-            </span>
-            {dday && <span className={`chip ${ddayClass(app.due_date)}`}>{dday}</span>}
-            {app.archived && <span className="chip bg-neutral-200 text-neutral-600">보관됨</span>}
+        {/* ------------------------------------------------ 속성 블록 */}
+        <div className="card overflow-hidden">
+          <div className="border-b border-neutral-100 px-4 py-3.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className={`chip ${meta.chip}`}>{meta.label}</span>
+              <span className="chip bg-neutral-100 text-neutral-600">
+                {currentRound?.round_no ?? app.current_round}차 검증 {status === 'done' ? '완료' : '중'}
+              </span>
+              {dday && <span className={`chip ${ddayClass(app.due_date)}`}>{dday}</span>}
+              {app.archived && <span className="chip bg-neutral-200 text-neutral-600">보관됨</span>}
+            </div>
+            <div className="mt-3 flex items-center gap-2.5">
+              <ProgressBar value={progress} className="flex-1" />
+              <span className="w-10 shrink-0 text-right text-[12px] font-bold text-neutral-500">{progress}%</span>
+            </div>
           </div>
 
-          <div className="mt-3 flex items-center gap-2.5">
-            <ProgressBar value={progress} className="flex-1" />
-            <span className="w-10 shrink-0 text-right text-[12px] font-bold text-neutral-500">{progress}%</span>
-          </div>
-
-          {app.url && (
-            <a
-              href={app.url}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-primary mt-3.5 w-full"
-            >
-              앱 열어보기 ↗
-            </a>
-          )}
-
-          {canReopen && (
-            <button onClick={() => setReopenOpen(true)} className="btn-ghost mt-2 w-full">
-              🔄 수정했음 → 재검증 요청
-            </button>
-          )}
-        </div>
-
-        {/* 탭 */}
-        <div className="mt-4 flex gap-1.5 rounded-xl bg-neutral-200/60 p-1">
-          {(
-            [
-              ['verify', '검증'],
-              ['comment', '댓글'],
-              ['info', '정보'],
-            ] as [Tab, string][]
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              onClick={() => setTab(v)}
-              className={`tap flex-1 rounded-lg text-[14px] font-bold transition ${
-                tab === v ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4">
-          {tab === 'verify' && (
-            <>
-              {!currentRound ? (
-                <p className="py-8 text-center text-[13.5px] text-neutral-400">
-                  아직 검증 라운드가 없어요.
-                </p>
-              ) : reviewerIds.length === 0 ? (
-                <p className="py-8 text-center text-[13.5px] text-neutral-400">
-                  검증자가 배정되지 않았어요. 원장님이 앱 정보를 수정해 검증자를 골라주세요.
-                </p>
+          <dl className="divide-y divide-neutral-100">
+            <Prop icon="👤" label="제작자">
+              <span className="flex items-center gap-1.5">
+                {app.creator_id && <Avatar name={nameOf(app.creator_id)} size={20} />}
+                <span className="font-semibold">{nameOf(app.creator_id)}</span>
+              </span>
+            </Prop>
+            <Prop icon="🔍" label="검증자">
+              {reviewerIds.length === 0 ? (
+                <span className="text-neutral-400">미배정</span>
               ) : (
-                <>
-                  <SectionTitle>{currentRound.round_no}차 검증 (진행 중)</SectionTitle>
-                  {currentRound.change_note && (
-                    <div className="mb-3 rounded-xl bg-brand-50 px-3.5 py-3">
-                      <p className="text-[11.5px] font-bold text-brand-700">이번에 수정한 내용</p>
-                      <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-neutral-700">
-                        {currentRound.change_note}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    {/* 내 카드를 항상 맨 위로 */}
-                    {[...reviewerIds]
-                      .sort((a, b) => (a === session?.id ? -1 : b === session?.id ? 1 : 0))
-                      .map((memberId) => (
-                        <ReviewerChecklist
-                          key={memberId}
-                          appId={id}
-                          appSlug={app.slug}
-                          roundId={currentRound.id}
-                          roundNo={currentRound.round_no}
-                          memberId={memberId}
-                          memberName={nameOf(memberId)}
-                          rows={currentChecks.filter((c) => c.member_id === memberId)}
-                          editable={memberId === session?.id}
-                          onSaved={() => {
-                            toast.show('저장했어요.');
-                            void load();
-                          }}
-                        />
-                      ))}
-                  </div>
-
-                  {!iAmReviewer && (
-                    <p className="mt-3 text-center text-[12.5px] text-neutral-400">
-                      나는 이 앱의 검증자가 아니에요. 보기만 할 수 있어요.
-                    </p>
-                  )}
-                </>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {reviewerIds.map((r) => (
+                    <span key={r} className="flex items-center gap-1 rounded-full bg-neutral-100 py-0.5 pl-0.5 pr-2">
+                      <Avatar name={nameOf(r)} size={18} />
+                      <span className="text-[12.5px] font-semibold">{nameOf(r)}</span>
+                    </span>
+                  ))}
+                </span>
               )}
+            </Prop>
+            <Prop icon="📅" label="마감일">
+              {app.due_date ? korDateFull(app.due_date) : <span className="text-neutral-400">없음</span>}
+            </Prop>
+            <Prop icon="🎓" label="대상 학년">
+              {app.target_grade || <span className="text-neutral-400">미입력</span>}
+            </Prop>
+            <Prop icon="🔗" label="배포 링크">
+              {app.url ? (
+                <a href={app.url} target="_blank" rel="noreferrer" className="break-all text-brand underline">
+                  {app.url}
+                </a>
+              ) : (
+                <span className="text-neutral-400">없음</span>
+              )}
+            </Prop>
+            {app.purpose && (
+              <Prop icon="🎯" label="제작 목적">
+                <span className="whitespace-pre-wrap leading-relaxed">{app.purpose}</span>
+              </Prop>
+            )}
+          </dl>
 
-              {rounds.length > 1 && (
-                <div className="mt-6">
-                  <SectionTitle>지난 검증 기록</SectionTitle>
-                  <RoundHistory rounds={rounds.slice(1)} checksByRound={checksByRound} nameOf={nameOf} />
+          <div className="grid grid-cols-2 gap-2 border-t border-neutral-100 p-3">
+            {app.url ? (
+              <a href={app.url} target="_blank" rel="noreferrer" className="btn-primary">
+                앱 열어보기 ↗
+              </a>
+            ) : (
+              <span />
+            )}
+            {canReopen && (
+              <button onClick={() => setReopenOpen(true)} className="btn-ghost">
+                🔄 재검증 요청
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------ 검증 */}
+        <Section id="verify" icon="✅" title="검증" desc="검증자 전원이 5항목을 통과시켜야 완료됩니다">
+          {!currentRound ? (
+            <p className="py-6 text-center text-[13.5px] text-neutral-400">아직 검증 라운드가 없어요.</p>
+          ) : reviewerIds.length === 0 ? (
+            <p className="py-6 text-center text-[13.5px] leading-relaxed text-neutral-400">
+              검증자가 배정되지 않았어요.
+              <br />
+              원장님이 위 <b>수정</b> 에서 검증자를 골라주세요.
+            </p>
+          ) : (
+            <>
+              {currentRound.change_note && (
+                <div className="mb-3 rounded-xl bg-brand-50 px-3.5 py-3">
+                  <p className="text-[11.5px] font-bold text-brand-700">
+                    {currentRound.round_no}차 — 이번에 수정한 내용
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-relaxed text-neutral-700">
+                    {currentRound.change_note}
+                  </p>
                 </div>
+              )}
+              <div className="space-y-3">
+                {[...reviewerIds]
+                  .sort((a, b) => (a === session?.id ? -1 : b === session?.id ? 1 : 0))
+                  .map((memberId) => (
+                    <ReviewerChecklist
+                      key={memberId}
+                      appId={id}
+                      appSlug={app.slug}
+                      roundId={currentRound.id}
+                      roundNo={currentRound.round_no}
+                      memberId={memberId}
+                      memberName={nameOf(memberId)}
+                      rows={currentChecks.filter((c) => c.member_id === memberId)}
+                      editable={memberId === session?.id}
+                      onSaved={() => {
+                        toast.show('저장했어요.');
+                        void load();
+                      }}
+                    />
+                  ))}
+              </div>
+              {!iAmReviewer && (
+                <p className="mt-3 text-center text-[12.5px] text-neutral-400">
+                  나는 이 앱의 검증자가 아니에요. 보기만 할 수 있어요.
+                </p>
               )}
             </>
           )}
 
-          {tab === 'comment' && <CommentThread appId={id} appSlug={app.slug} />}
-
-          {tab === 'info' && (
-            <div className="space-y-3">
-              <div className="card divide-y divide-neutral-100">
-                <InfoRow label="제작 목적" value={app.purpose || '-'} multiline />
-                <InfoRow label="대상 학년" value={app.target_grade || '-'} />
-                <InfoRow label="제작자" value={nameOf(app.creator_id)} />
-                <InfoRow
-                  label="검증자"
-                  value={reviewerIds.map((r) => nameOf(r)).join(', ') || '미배정'}
-                />
-                <InfoRow label="마감일" value={korDateFull(app.due_date)} />
-                <InfoRow label="배포 링크" value={app.url || '-'} link={app.url ?? undefined} />
-              </div>
-
-              <div className="card divide-y divide-neutral-100">
-                {sheet ? (
-                  <Link href={`/cost/${sheet.id}`} className="tap w-full justify-between px-4 py-3.5 text-[14px]">
-                    <span className="font-semibold">💰 원가계산서 보기</span>
-                    <span className="text-neutral-400">›</span>
-                  </Link>
-                ) : (
-                  <button onClick={createSheet} className="tap w-full justify-between px-4 py-3.5 text-[14px]">
-                    <span className="font-semibold">💰 원가계산서 만들기</span>
-                    <span className="text-neutral-400">+</span>
-                  </button>
-                )}
-                <Link
-                  href={`/gallery?app=${app.id}`}
-                  className="tap w-full justify-between px-4 py-3.5 text-[14px]"
-                >
-                  <span className="font-semibold">🖼️ 이 프로그램 작품 보기</span>
-                  <span className="text-[13px] text-neutral-400">{photoCount}장 ›</span>
-                </Link>
-              </div>
-
-              {isAdmin && (
-                <button onClick={() => setArchiveOpen(true)} className="btn-ghost w-full text-neutral-500">
-                  {app.archived ? '보관 해제' : '이 앱 보관하기'}
-                </button>
-              )}
+          {rounds.length > 1 && (
+            <div className="mt-5">
+              <p className="mb-2 text-[13px] font-bold text-neutral-500">지난 검증 기록</p>
+              <RoundHistory rounds={rounds.slice(1)} checksByRound={checksByRound} nameOf={nameOf} />
             </div>
           )}
-        </div>
+        </Section>
+
+        {/* ------------------------------------------------ 수업계획안 */}
+        <Section id="plan" icon="📄" title="수업계획안" desc="수업 흐름과 지도안·활동지 파일">
+          <LessonPlan appId={id} appSlug={app.slug} initialBody={app.plan_body} />
+        </Section>
+
+        {/* -------------------------------------------------------- 원가 */}
+        <Section id="cost" icon="💰" title="원가" desc="이 프로그램 한 번 돌릴 때 드는 돈">
+          <CostInline appId={id} appTitle={app.title_ko} appSlug={app.slug} />
+        </Section>
+
+        {/* -------------------------------------------------- 샘플 이미지 */}
+        <Section id="sample" icon="🖼️" title="샘플 이미지" desc="제안서·블로그에 쓸 예시 작품">
+          <SampleImages appId={id} appSlug={app.slug} />
+        </Section>
+
+        {/* --------------------------------------------------- 수업 사진 */}
+        <Section
+          id="photos"
+          icon="📸"
+          title="수업 사진"
+          desc="이 프로그램으로 진행한 실제 수업 기록"
+          right={
+            <Link href={`/gallery?app=${id}`} className="text-[12.5px] font-bold text-brand">
+              전체 보기 ›
+            </Link>
+          }
+        >
+          {albums.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 px-4 py-7 text-center">
+              <p className="text-2xl">📸</p>
+              <p className="mt-1.5 text-[13px] font-semibold text-neutral-500">아직 수업 사진이 없어요</p>
+              <Link href="/gallery" className="mt-3 inline-block text-[12.5px] font-bold text-brand">
+                갤러리에서 앨범 만들기 ›
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-4 gap-1.5">
+                {photos.slice(0, 8).map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/gallery/${p.album_id}`}
+                    className="relative aspect-square overflow-hidden rounded-lg bg-neutral-100"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.url} alt={p.caption ?? ''} loading="lazy" className="h-full w-full object-cover" />
+                    {p.has_face && (
+                      <span className="absolute left-0.5 top-0.5 rounded bg-black/60 px-1 text-[9px] font-bold text-white">
+                        얼굴O
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+              <ul className="mt-2.5 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200">
+                {albums.slice(0, 4).map((al) => (
+                  <li key={al.id}>
+                    <Link
+                      href={`/gallery/${al.id}`}
+                      className="flex items-center justify-between px-3 py-2.5 active:bg-neutral-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13.5px] font-semibold">{al.school}</span>
+                        <span className="text-[11.5px] text-neutral-500">
+                          {korDate(al.class_date)}
+                          {al.grade ? ` · ${al.grade}` : ''}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[12px] text-neutral-400">
+                        {photos.filter((p) => p.album_id === al.id).length}장 ›
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Section>
+
+        {/* -------------------------------------------------------- 댓글 */}
+        <Section id="comment" icon="💬" title="댓글" desc="오류는 스크린샷과 함께 올려주세요">
+          <CommentThread appId={id} appSlug={app.slug} />
+        </Section>
+
+        {isAdmin && (
+          <button onClick={() => setArchiveOpen(true)} className="btn-ghost mt-6 w-full text-neutral-500">
+            {app.archived ? '보관 해제' : '이 프로그램 보관하기'}
+          </button>
+        )}
       </div>
 
-      {/* 재검증 요청 */}
+      {/* 재검증 */}
       <Sheet
         open={reopenOpen}
         onClose={() => setReopenOpen(false)}
@@ -423,7 +541,7 @@ export default function AppDetailPage() {
 
       <ConfirmDialog
         open={archiveOpen}
-        title={app.archived ? '보관을 해제할까요?' : '이 앱을 보관할까요?'}
+        title={app.archived ? '보관을 해제할까요?' : '이 프로그램을 보관할까요?'}
         message={app.archived ? '다시 목록에 나타나요.' : '목록에서 숨겨져요. 기록은 지워지지 않아요.'}
         confirmLabel={app.archived ? '해제' : '보관'}
         danger={!app.archived}
@@ -432,44 +550,55 @@ export default function AppDetailPage() {
       />
 
       {toast.node}
-      {/* 검증자 배정이 바뀌면 상태를 다시 맞춰준다 */}
       <StatusSync appId={id} deps={[reviewerIds.length]} />
       {members.length === 0 && null}
     </>
   );
 }
 
-function InfoRow({
-  label,
-  value,
-  multiline,
-  link,
+/* --------------------------------------------------------------- 조각들 */
+
+function Prop({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3 px-4 py-2.5">
+      <dt className="flex w-[86px] shrink-0 items-start gap-1.5 pt-0.5 text-[12.5px] text-neutral-500">
+        <span className="text-[13px] leading-none">{icon}</span>
+        {label}
+      </dt>
+      <dd className="min-w-0 flex-1 text-[13.5px] text-neutral-800">{children}</dd>
+    </div>
+  );
+}
+
+function Section({
+  id,
+  icon,
+  title,
+  desc,
+  right,
+  children,
 }: {
-  label: string;
-  value: string;
-  multiline?: boolean;
-  link?: string;
+  id: string;
+  icon: string;
+  title: string;
+  desc?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="px-4 py-3">
-      <p className="text-[12px] font-semibold text-neutral-500">{label}</p>
-      {link ? (
-        <a
-          href={link}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 block break-all text-[14px] text-brand underline"
-        >
-          {value}
-        </a>
-      ) : (
-        <p
-          className={`mt-1 text-[14px] leading-relaxed text-neutral-800 ${multiline ? 'whitespace-pre-wrap' : ''}`}
-        >
-          {value}
-        </p>
-      )}
-    </div>
+    <section id={id} className="mt-6 scroll-mt-28">
+      <div className="mb-2.5 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-1.5 text-[16px] font-bold text-neutral-900">
+            <span className="text-[17px] leading-none">{icon}</span>
+            {title}
+          </h2>
+          {desc && <p className="mt-0.5 text-[12px] text-neutral-400">{desc}</p>}
+        </div>
+        {right}
+      </div>
+      {children}
+    </section>
   );
 }
 

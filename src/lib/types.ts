@@ -27,6 +27,8 @@ export interface AppRow {
   current_round: number;
   status: AppStatus;
   archived: boolean;
+  /** 수업계획안 본문 */
+  plan_body: string | null;
   created_at: string;
 }
 
@@ -102,6 +104,24 @@ export interface CostItemPhoto {
   id: string;
   item_id: string;
   photo_url: string;
+}
+
+export interface PlanFile {
+  id: string;
+  app_id: string;
+  file_url: string;
+  file_name: string;
+  file_size: number | null;
+  created_at: string;
+}
+
+export interface AppSample {
+  id: string;
+  app_id: string;
+  url: string;
+  caption: string | null;
+  sort_order: number;
+  created_at: string;
 }
 
 export interface Album {

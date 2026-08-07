@@ -5,10 +5,40 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
-import { useAppsOverview } from '@/lib/useAppsOverview';
+import { PIECES, useAppsOverview } from '@/lib/useAppsOverview';
 import { CHECK_ITEMS, type ActivityLog, type CommentRow, type Schedule } from '@/lib/types';
 import { CardSkeleton, EmptyState, ErrorBanner, ProgressBar, SectionTitle, Skeleton } from '@/components/ui';
-import { ddayClass, ddayLabel, hhmm, korDate, korDateFull, logTime, relTime, today, toISODate } from '@/lib/format';
+import { Avatar } from '@/components/Brand';
+import {
+  ddayClass,
+  ddayLabel,
+  hhmm,
+  korDate,
+  korDateFull,
+  logTime,
+  relTime,
+  today,
+  toISODate,
+} from '@/lib/format';
+
+/** 달력에 올라오는 세 종류 */
+type EntryKind = 'due' | 'meeting' | 'visit';
+interface Entry {
+  id: string;
+  kind: EntryKind;
+  title: string;
+  date: string;
+  time?: string | null;
+  place?: string | null;
+  href: string;
+}
+const KIND: Record<EntryKind, { dot: string; chip: string; label: string }> = {
+  due: { dot: 'bg-red-500', chip: 'bg-red-100 text-red-700', label: '마감' },
+  meeting: { dot: 'bg-blue-500', chip: 'bg-blue-100 text-blue-700', label: '회의' },
+  visit: { dot: 'bg-green-500', chip: 'bg-green-100 text-green-700', label: '방문' },
+};
+
+const HORIZON_DAYS = 14;
 
 export default function HomePage() {
   const { session, isAdmin, signOut } = useSession();
@@ -20,26 +50,24 @@ export default function HomePage() {
   const [logs, setLogs] = useState<ActivityLog[] | null>(null);
 
   const meId = session?.id ?? '';
+  const todayStr = today();
+  const horizon = toISODate(new Date(Date.now() + HORIZON_DAYS * 86400000));
 
   const loadExtras = useCallback(async () => {
-    const from = today();
-    const to = toISODate(new Date(Date.now() + 7 * 86400000));
-
     const [schedRes, logRes] = await Promise.all([
-      supabase.from('schedules').select('*').gte('date', from).lte('date', to).order('date').order('start_time'),
+      supabase.from('schedules').select('*').gte('date', todayStr).lte('date', horizon).order('date').order('start_time'),
       isAdmin
-        ? supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(12)
+        ? supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10)
         : Promise.resolve({ data: [] as ActivityLog[] }),
     ]);
     setSchedules((schedRes.data ?? []) as Schedule[]);
     setLogs((logRes.data ?? []) as ActivityLog[]);
-  }, [isAdmin]);
+  }, [isAdmin, todayStr, horizon]);
 
   useEffect(() => {
     void loadExtras();
   }, [loadExtras]);
 
-  // 미해결 댓글 — 내가 만든 앱에 달린 것 (= 나를 향한 지적)
   useEffect(() => {
     if (items.length === 0) {
       setMyComments([]);
@@ -67,12 +95,74 @@ export default function HomePage() {
     })();
   }, [items, meId]);
 
-  /** 내 할 일: 내가 검증자인데 아직 5개를 다 통과시키지 않은 것 + 내가 만든 앱 중 수정 필요 */
+  /* ------------------------------------------------------------ 일정 */
+  const entries = useMemo<Entry[]>(() => {
+    const out: Entry[] = [];
+    for (const it of items) {
+      const d = it.app.due_date;
+      if (!d || d < todayStr || d > horizon) continue;
+      if (it.status === 'done') continue; // 끝난 건 마감으로 안 띄운다
+      out.push({
+        id: `due-${it.app.id}`,
+        kind: 'due',
+        title: `${it.app.title_ko} 제출 마감`,
+        date: d,
+        href: `/apps/${it.app.id}`,
+      });
+    }
+    for (const s of schedules ?? []) {
+      out.push({
+        id: s.id,
+        kind: s.kind,
+        title: s.title,
+        date: s.date,
+        time: s.start_time,
+        place: s.place,
+        href: '/schedule',
+      });
+    }
+    return out.sort(
+      (a, b) => a.date.localeCompare(b.date) || (a.time ?? '99').localeCompare(b.time ?? '99'),
+    );
+  }, [items, schedules, todayStr, horizon]);
+
+  const byDate = useMemo(() => {
+    const m = new Map<string, Entry[]>();
+    for (const e of entries) {
+      const list = m.get(e.date) ?? [];
+      list.push(e);
+      m.set(e.date, list);
+    }
+    return [...m.entries()];
+  }, [entries]);
+
+  const tomorrow = toISODate(new Date(Date.now() + 86400000));
+  const dayLabel = (d: string) => (d === todayStr ? '오늘' : d === tomorrow ? '내일' : korDate(d));
+
+  /* ------------------------------------------------------------ 현황 */
+  const stats = useMemo(() => {
+    const done = items.filter((i) => i.status === 'done').length;
+    const fixing = items.filter((i) => i.status === 'fixing').length;
+    return { total: items.length, done, fixing, pending: items.length - done - fixing };
+  }, [items]);
+  const overallPct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
+
+  /** 5개 구성요소별로 몇 개 프로그램이 채웠나 */
+  const pieceStats = useMemo(
+    () =>
+      PIECES.map((p) => ({
+        ...p,
+        n: items.filter((i) => i.done[p.key]).length,
+        total: items.length,
+      })),
+    [items],
+  );
+
+  /* -------------------------------------------------------- 내 할 일 */
   const myTasks = useMemo(() => {
     const out: { id: string; title: string; sub: string; due: string | null; kind: 'review' | 'fix' }[] = [];
     for (const it of items) {
-      const isReviewer = it.reviewerIds.includes(meId);
-      if (isReviewer) {
+      if (it.reviewerIds.includes(meId)) {
         const mine = it.checks.filter((c) => c.member_id === meId);
         const passed = mine.filter((c) => c.result === 'pass').length;
         if (passed < CHECK_ITEMS.length) {
@@ -95,7 +185,6 @@ export default function HomePage() {
         });
       }
     }
-    // 마감 임박순
     return out.sort((a, b) => {
       if (!a.due) return 1;
       if (!b.due) return -1;
@@ -103,10 +192,6 @@ export default function HomePage() {
     });
   }, [items, meId]);
 
-  const doneCount = items.filter((i) => i.status === 'done').length;
-  const overallPct = items.length > 0 ? Math.round((doneCount / items.length) * 100) : 0;
-
-  /** 원장용: 강사별 남은 검증 개수. 배정이 하나도 없는 사람은 '다 했어요'와 구분한다. */
   const perMember = useMemo(() => {
     if (!isAdmin) return [];
     return members
@@ -125,28 +210,208 @@ export default function HomePage() {
   }, [isAdmin, members, items]);
 
   const overdue = useMemo(
-    () =>
-      items.filter((i) => {
-        if (i.status === 'done' || !i.app.due_date) return false;
-        return i.app.due_date < today();
-      }),
-    [items],
+    () => items.filter((i) => i.status !== 'done' && i.app.due_date && i.app.due_date < todayStr),
+    [items, todayStr],
   );
 
-  const now = new Date();
-
-  // 멤버 이름 자체가 '원장'이면 "원장 원장님"이 되므로 호칭을 붙이지 않는다
   const honorific = isAdmin ? '원장님' : '선생님';
   const name = session?.name ?? '';
   const greeting = name.endsWith('원장') || name.endsWith('선생') ? `${name}님` : `${name} ${honorific}`;
+
+  /* ------------------------------------------------------------ 블록 */
+
+  const StatusBlock = (
+    <section>
+      <SectionTitle
+        right={
+          <Link href="/apps" className="text-[12.5px] font-bold text-neutral-400">
+            프로그램 ›
+          </Link>
+        }
+      >
+        전체 현황
+      </SectionTitle>
+
+      <div className="card p-4">
+        <div className="mb-2 flex items-baseline justify-between">
+          <span className="text-[13px] text-neutral-500">검증 완료</span>
+          <span className="text-[22px] font-black leading-none text-brand">{overallPct}%</span>
+        </div>
+        <ProgressBar value={overallPct} />
+
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          <Tile n={stats.total} label="전체" />
+          <Tile n={stats.done} label="완료" tone="green" />
+          <Tile n={stats.fixing} label="수정 필요" tone="red" />
+          <Tile n={stats.pending} label="진행 중" />
+        </div>
+
+        {/* 프로그램마다 검증·계획안·원가·샘플·사진이 다 있는지 */}
+        <div className="mt-3.5 border-t border-neutral-100 pt-3">
+          <p className="mb-2 text-[11.5px] font-bold text-neutral-400">프로그램 구성 채움 정도</p>
+          <div className="space-y-1.5">
+            {pieceStats.map((p) => (
+              <div key={p.key} className="flex items-center gap-2">
+                <span className="w-[52px] shrink-0 text-[11.5px] text-neutral-500">
+                  {p.icon} {p.label}
+                </span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                  <div
+                    className="h-full rounded-full bg-brand/70"
+                    style={{ width: `${p.total ? (p.n / p.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="w-11 shrink-0 text-right text-[11px] font-bold tabular-nums text-neutral-500">
+                  {p.n}/{p.total}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  const ScheduleBlock = (
+    <section>
+      <SectionTitle
+        right={
+          <Link href="/schedule" className="text-[12.5px] font-bold text-neutral-400">
+            달력 ›
+          </Link>
+        }
+      >
+        앞으로 2주 일정
+      </SectionTitle>
+
+      <div className="mb-2 flex flex-wrap gap-3 px-1">
+        {(['due', 'meeting', 'visit'] as EntryKind[]).map((k) => (
+          <span key={k} className="flex items-center gap-1.5 text-[11.5px] text-neutral-500">
+            <span className={`h-2 w-2 rounded-full ${KIND[k].dot}`} />
+            {KIND[k].label}
+          </span>
+        ))}
+      </div>
+
+      {schedules === null || loading ? (
+        <Skeleton className="h-28 w-full rounded-2xl" />
+      ) : byDate.length === 0 ? (
+        <p className="card px-4 py-7 text-center text-[13px] text-neutral-400">
+          2주 안에 잡힌 일정이 없어요.
+        </p>
+      ) : (
+        <div className="card divide-y divide-neutral-100">
+          {byDate.map(([date, list]) => {
+            const isToday = date === todayStr;
+            return (
+              <div key={date} className="flex gap-3 px-4 py-3">
+                <div className="w-[54px] shrink-0 pt-0.5">
+                  <p
+                    className={`text-[12.5px] font-bold ${
+                      isToday ? 'text-brand' : date === tomorrow ? 'text-neutral-700' : 'text-neutral-400'
+                    }`}
+                  >
+                    {dayLabel(date)}
+                  </p>
+                </div>
+                <ul className="min-w-0 flex-1 space-y-2">
+                  {list.map((e) => (
+                    <li key={e.id}>
+                      <Link href={e.href} className="flex items-start gap-2 active:opacity-70">
+                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${KIND[e.kind].dot}`} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[14px] font-semibold text-neutral-800">
+                            {e.title}
+                          </span>
+                          {(e.time || e.place) && (
+                            <span className="text-[11.5px] text-neutral-500">
+                              {hhmm(e.time)}
+                              {e.place ? ` · ${e.place}` : ''}
+                            </span>
+                          )}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+
+  const MyTasksBlock = (
+    <section>
+      <SectionTitle
+        right={
+          <Link href="/apps" className="text-[12.5px] font-bold text-neutral-400">
+            전체 보기 ›
+          </Link>
+        }
+      >
+        내 할 일 {myTasks.length > 0 && <span className="text-brand">{myTasks.length}</span>}
+      </SectionTitle>
+
+      {loading ? (
+        <CardSkeleton rows={2} />
+      ) : myTasks.length === 0 ? (
+        <EmptyState icon="✅" title="지금 할 일이 없어요" desc="새 검증이 배정되면 여기에 보여요." />
+      ) : (
+        <div className="space-y-2.5">
+          {myTasks.map((t) => (
+            <Link
+              key={`${t.kind}-${t.id}`}
+              href={`/apps/${t.id}`}
+              className="card flex items-center gap-3 p-4 transition active:bg-neutral-50"
+            >
+              <span className="text-xl">{t.kind === 'fix' ? '🛠️' : '🔍'}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-bold">{t.title}</span>
+                <span className="mt-0.5 block truncate text-[12.5px] text-neutral-500">{t.sub}</span>
+              </span>
+              {t.due && <span className={`chip shrink-0 ${ddayClass(t.due)}`}>{ddayLabel(t.due)}</span>}
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+
+  const CommentsBlock = (
+    <section>
+      <SectionTitle>나를 향한 지적사항</SectionTitle>
+      {myComments === null ? (
+        <Skeleton className="h-16 w-full rounded-2xl" />
+      ) : myComments.length === 0 ? (
+        <p className="card px-4 py-6 text-center text-[13px] text-neutral-400">미해결 지적이 없어요.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {myComments.map((c) => (
+            <Link key={c.id} href={`/apps/${c.app_id}`} className="card block p-3.5 active:bg-neutral-50">
+              <p className="text-[12px] font-bold text-brand">{c.app_title}</p>
+              <p className="mt-1 line-clamp-2 text-[13.5px] leading-relaxed text-neutral-700">{c.body}</p>
+              <p className="mt-1 text-[11.5px] text-neutral-400">
+                {nameOf(c.member_id)} · {relTime(c.created_at)}
+              </p>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 
   return (
     <>
       <header className="bg-white px-4 pb-4 pt-6">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[21px] font-black leading-tight">안녕하세요 {greeting}</p>
-            <p className="mt-1 text-[13px] text-neutral-500">{korDateFull(toISODate(now))}</p>
+          <div className="flex items-center gap-3">
+            {session && <Avatar name={session.name} size={42} />}
+            <div>
+              <p className="text-[19px] font-black leading-tight">안녕하세요 {greeting}</p>
+              <p className="mt-0.5 text-[12.5px] text-neutral-500">{korDateFull(todayStr)}</p>
+            </div>
           </div>
           <button onClick={signOut} className="tap shrink-0 text-[12.5px] font-semibold text-neutral-400">
             로그아웃
@@ -157,137 +422,31 @@ export default function HomePage() {
       <div className="space-y-6 px-4 pb-8 pt-4">
         {error && <ErrorBanner message={error} onRetry={() => void reload()} />}
 
-        {/* 전체 진행률 */}
-        <section className="card p-4">
-          <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-[13.5px] font-bold text-neutral-600">전체 검증 진행률</span>
-            <span className="text-[19px] font-black text-brand">{overallPct}%</span>
-          </div>
-          <ProgressBar value={overallPct} />
-          <p className="mt-2 text-[12.5px] text-neutral-500">
-            앱 {items.length}개 중 {doneCount}개 검증 완료
-          </p>
-        </section>
+        {/* 원장은 현황·일정을 먼저, 강사는 자기 할 일을 먼저 본다 */}
+        {isAdmin ? (
+          <>
+            {StatusBlock}
+            {ScheduleBlock}
+            {MyTasksBlock}
+          </>
+        ) : (
+          <>
+            {MyTasksBlock}
+            {ScheduleBlock}
+            {StatusBlock}
+          </>
+        )}
 
-        {/* 내 할 일 */}
-        <section>
-          <SectionTitle
-            right={
-              <Link href="/apps" className="text-[12.5px] font-bold text-neutral-400">
-                전체 보기 ›
-              </Link>
-            }
-          >
-            내 할 일 {myTasks.length > 0 && <span className="text-brand">{myTasks.length}</span>}
-          </SectionTitle>
+        {CommentsBlock}
 
-          {loading ? (
-            <CardSkeleton rows={2} />
-          ) : myTasks.length === 0 ? (
-            <EmptyState icon="✅" title="지금 할 일이 없어요" desc="새 검증이 배정되면 여기에 보여요." />
-          ) : (
-            <div className="space-y-2.5">
-              {myTasks.map((t) => (
-                <Link
-                  key={`${t.kind}-${t.id}`}
-                  href={`/apps/${t.id}`}
-                  className="card flex items-center gap-3 p-4 transition active:bg-neutral-50"
-                >
-                  <span className="text-xl">{t.kind === 'fix' ? '🛠️' : '🔍'}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-bold">{t.title}</span>
-                    <span className="mt-0.5 block truncate text-[12.5px] text-neutral-500">{t.sub}</span>
-                  </span>
-                  {t.due && <span className={`chip shrink-0 ${ddayClass(t.due)}`}>{ddayLabel(t.due)}</span>}
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 미해결 댓글 */}
-        <section>
-          <SectionTitle>나를 향한 지적사항</SectionTitle>
-          {myComments === null ? (
-            <Skeleton className="h-16 w-full rounded-2xl" />
-          ) : myComments.length === 0 ? (
-            <p className="card px-4 py-6 text-center text-[13px] text-neutral-400">미해결 지적이 없어요.</p>
-          ) : (
-            <div className="space-y-2.5">
-              {myComments.map((c) => (
-                <Link key={c.id} href={`/apps/${c.app_id}`} className="card block p-3.5 active:bg-neutral-50">
-                  <p className="text-[12px] font-bold text-brand">{c.app_title}</p>
-                  <p className="mt-1 line-clamp-2 text-[13.5px] leading-relaxed text-neutral-700">{c.body}</p>
-                  <p className="mt-1 text-[11.5px] text-neutral-400">
-                    {nameOf(c.member_id)} · {relTime(c.created_at)}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 이번 주 일정 */}
-        <section>
-          <SectionTitle
-            right={
-              <Link href="/schedule" className="text-[12.5px] font-bold text-neutral-400">
-                달력 ›
-              </Link>
-            }
-          >
-            이번 주 일정
-          </SectionTitle>
-          {schedules === null ? (
-            <Skeleton className="h-16 w-full rounded-2xl" />
-          ) : schedules.length === 0 ? (
-            <p className="card px-4 py-6 text-center text-[13px] text-neutral-400">7일 안에 잡힌 일정이 없어요.</p>
-          ) : (
-            <div className="card divide-y divide-neutral-100">
-              {schedules.slice(0, 3).map((s) => (
-                <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${s.kind === 'visit' ? 'bg-green-500' : 'bg-blue-500'}`} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-semibold">{s.title}</span>
-                    <span className="text-[12px] text-neutral-500">
-                      {korDate(s.date)} {hhmm(s.start_time)} {s.place ? `· ${s.place}` : ''}
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 원장 전용 */}
         {isAdmin && (
           <>
             <section>
-              <SectionTitle>강사별 남은 검증</SectionTitle>
-              <div className="card divide-y divide-neutral-100">
-                {perMember.map((m) => (
-                  <div key={m.name} className="flex items-center justify-between px-4 py-3">
-                    <span className="text-[14px] font-semibold">{m.name}</span>
-                    <span
-                      className={`chip ${
-                        m.assigned === 0
-                          ? 'bg-neutral-100 text-neutral-500'
-                          : m.remain === 0
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-brand-50 text-brand-700'
-                      }`}
-                    >
-                      {m.assigned === 0 ? '배정 없음' : m.remain === 0 ? '다 했어요' : `${m.remain}개 남음`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section>
-              <SectionTitle>지연 항목 {overdue.length > 0 && <span className="text-red-600">{overdue.length}</span>}</SectionTitle>
+              <SectionTitle>
+                지연 항목 {overdue.length > 0 && <span className="text-red-600">{overdue.length}</span>}
+              </SectionTitle>
               {overdue.length === 0 ? (
-                <p className="card px-4 py-6 text-center text-[13px] text-neutral-400">지연된 앱이 없어요.</p>
+                <p className="card px-4 py-6 text-center text-[13px] text-neutral-400">지연된 게 없어요.</p>
               ) : (
                 <div className="card divide-y divide-neutral-100">
                   {overdue.map((it) => (
@@ -307,6 +466,31 @@ export default function HomePage() {
                   ))}
                 </div>
               )}
+            </section>
+
+            <section>
+              <SectionTitle>강사별 남은 검증</SectionTitle>
+              <div className="card divide-y divide-neutral-100">
+                {perMember.map((m) => (
+                  <div key={m.name} className="flex items-center justify-between px-4 py-3">
+                    <span className="flex items-center gap-2">
+                      <Avatar name={m.name} size={26} />
+                      <span className="text-[14px] font-semibold">{m.name}</span>
+                    </span>
+                    <span
+                      className={`chip ${
+                        m.assigned === 0
+                          ? 'bg-neutral-100 text-neutral-500'
+                          : m.remain === 0
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-brand-50 text-brand-700'
+                      }`}
+                    >
+                      {m.assigned === 0 ? '배정 없음' : m.remain === 0 ? '다 했어요' : `${m.remain}개 남음`}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </section>
 
             <section>
@@ -340,5 +524,20 @@ export default function HomePage() {
         )}
       </div>
     </>
+  );
+}
+
+function Tile({ n, label, tone }: { n: number; label: string; tone?: 'green' | 'red' }) {
+  return (
+    <div className="rounded-xl bg-neutral-50 py-2 text-center">
+      <p
+        className={`text-[19px] font-black leading-none ${
+          tone === 'green' ? 'text-green-700' : tone === 'red' ? 'text-red-600' : 'text-neutral-800'
+        }`}
+      >
+        {n}
+      </p>
+      <p className="mt-1 text-[10.5px] text-neutral-500">{label}</p>
+    </div>
   );
 }

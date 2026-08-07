@@ -1,10 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { friendlyError } from '@/lib/supabase';
+import { supabase, friendlyError } from '@/lib/supabase';
 import { computeStatus, roundProgress } from '@/lib/status';
 import type { AppRow, AppStatus, CheckRow, Round } from '@/lib/types';
+
+/** 프로그램 하나에 딸린 것들이 얼마나 채워졌는지 */
+export interface Completeness {
+  verify: boolean;
+  plan: boolean;
+  cost: boolean;
+  sample: boolean;
+  photo: boolean;
+}
 
 export interface AppOverview {
   app: AppRow;
@@ -14,13 +22,19 @@ export interface AppOverview {
   /** 저장된 status 가 아니라 체크 결과로 그 자리에서 다시 계산한 값 */
   status: AppStatus;
   progress: number;
-  /** 미해결 댓글 수 */
   openComments: number;
+  /** 대표 이미지 (샘플 우선, 없으면 수업 사진) */
+  cover: string | null;
+  sampleCount: number;
+  photoCount: number;
+  done: Completeness;
+  /** 5개 중 몇 개가 채워졌나 */
+  filled: number;
 }
 
 /**
  * 목록 화면들이 공통으로 쓰는 앱 요약.
- * 앱이 계속 늘어나도 쿼리 수는 그대로(6개)라 코드를 손댈 일이 없다.
+ * 앱이 계속 늘어나도 쿼리 수는 그대로라 코드를 손댈 일이 없다.
  */
 export function useAppsOverview(includeArchived = false) {
   const [items, setItems] = useState<AppOverview[]>([]);
@@ -33,12 +47,17 @@ export function useAppsOverview(includeArchived = false) {
       let appQ = supabase.from('apps').select('*').order('due_date', { nullsFirst: false });
       if (!includeArchived) appQ = appQ.eq('archived', false);
 
-      const [appsRes, revRes, roundsRes, commentsRes] = await Promise.all([
-        appQ,
-        supabase.from('app_reviewers').select('app_id,member_id'),
-        supabase.from('rounds').select('*').order('round_no', { ascending: false }),
-        supabase.from('comments').select('app_id,resolved').eq('resolved', false),
-      ]);
+      const [appsRes, revRes, roundsRes, commentsRes, planRes, sheetRes, sampleRes, albumRes] =
+        await Promise.all([
+          appQ,
+          supabase.from('app_reviewers').select('app_id,member_id'),
+          supabase.from('rounds').select('*').order('round_no', { ascending: false }),
+          supabase.from('comments').select('app_id').eq('resolved', false),
+          supabase.from('plan_files').select('app_id'),
+          supabase.from('cost_sheets').select('app_id').not('app_id', 'is', null),
+          supabase.from('app_samples').select('app_id,url,sort_order').order('sort_order'),
+          supabase.from('albums').select('id,app_id').not('app_id', 'is', null),
+        ]);
 
       if (appsRes.error) throw appsRes.error;
       const apps = (appsRes.data ?? []) as AppRow[];
@@ -69,9 +88,40 @@ export function useAppsOverview(includeArchived = false) {
         checksByRound.set(c.round_id, list);
       }
 
-      const openByApp = new Map<string, number>();
-      for (const c of commentsRes.data ?? []) {
-        openByApp.set(c.app_id, (openByApp.get(c.app_id) ?? 0) + 1);
+      const count = <T extends { app_id: string }>(rows: T[] | null) => {
+        const m = new Map<string, number>();
+        for (const r of rows ?? []) m.set(r.app_id, (m.get(r.app_id) ?? 0) + 1);
+        return m;
+      };
+      const planCount = count(planRes.data as { app_id: string }[] | null);
+      const sheetCount = count(sheetRes.data as { app_id: string }[] | null);
+      const openByApp = count(commentsRes.data as { app_id: string }[] | null);
+
+      const sampleCover = new Map<string, string>();
+      const sampleCount = new Map<string, number>();
+      for (const s of (sampleRes.data ?? []) as { app_id: string; url: string }[]) {
+        if (!sampleCover.has(s.app_id)) sampleCover.set(s.app_id, s.url);
+        sampleCount.set(s.app_id, (sampleCount.get(s.app_id) ?? 0) + 1);
+      }
+
+      // 앨범 → 사진 수 / 대표 사진
+      const albumToApp = new Map<string, string>();
+      for (const a of (albumRes.data ?? []) as { id: string; app_id: string }[]) {
+        albumToApp.set(a.id, a.app_id);
+      }
+      const photoCount = new Map<string, number>();
+      const photoCover = new Map<string, string>();
+      if (albumToApp.size > 0) {
+        const { data: ps } = await supabase
+          .from('photos')
+          .select('album_id,url')
+          .in('album_id', [...albumToApp.keys()]);
+        for (const p of (ps ?? []) as { album_id: string; url: string }[]) {
+          const appId = albumToApp.get(p.album_id);
+          if (!appId) continue;
+          photoCount.set(appId, (photoCount.get(appId) ?? 0) + 1);
+          if (!photoCover.has(appId)) photoCover.set(appId, p.url);
+        }
       }
 
       setItems(
@@ -79,14 +129,29 @@ export function useAppsOverview(includeArchived = false) {
           const reviewerIds = reviewersByApp.get(app.id) ?? [];
           const currentRound = currentByApp.get(app.id) ?? null;
           const rc = currentRound ? (checksByRound.get(currentRound.id) ?? []) : [];
+          const st = computeStatus(rc, reviewerIds.length);
+
+          const done: Completeness = {
+            verify: st === 'done',
+            plan: Boolean(app.plan_body?.trim()) || (planCount.get(app.id) ?? 0) > 0,
+            cost: (sheetCount.get(app.id) ?? 0) > 0,
+            sample: (sampleCount.get(app.id) ?? 0) > 0,
+            photo: (photoCount.get(app.id) ?? 0) > 0,
+          };
+
           return {
             app,
             reviewerIds,
             currentRound,
             checks: rc,
-            status: computeStatus(rc, reviewerIds.length),
+            status: st,
             progress: roundProgress(rc, reviewerIds.length),
             openComments: openByApp.get(app.id) ?? 0,
+            cover: sampleCover.get(app.id) ?? photoCover.get(app.id) ?? null,
+            sampleCount: sampleCount.get(app.id) ?? 0,
+            photoCount: photoCount.get(app.id) ?? 0,
+            done,
+            filled: Object.values(done).filter(Boolean).length,
           };
         }),
       );
@@ -103,3 +168,12 @@ export function useAppsOverview(includeArchived = false) {
 
   return { items, loading, error, reload };
 }
+
+/** 카드에 찍히는 5개 구성요소 라벨 */
+export const PIECES: { key: keyof Completeness; icon: string; label: string }[] = [
+  { key: 'verify', icon: '✅', label: '검증' },
+  { key: 'plan', icon: '📄', label: '계획안' },
+  { key: 'cost', icon: '💰', label: '원가' },
+  { key: 'sample', icon: '🖼️', label: '샘플' },
+  { key: 'photo', icon: '📸', label: '사진' },
+];

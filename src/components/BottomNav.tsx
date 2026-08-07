@@ -6,7 +6,7 @@ import { useSession } from '@/lib/session';
 
 const TABS = [
   { href: '/home', label: '홈', icon: HomeIcon },
-  { href: '/apps', label: '검증', icon: CheckIcon },
+  { href: '/apps', label: '프로그램', icon: CheckIcon },
   { href: '/cost', label: '원가', icon: WonIcon },
   { href: '/gallery', label: '갤러리', icon: PhotoIcon },
   { href: '/schedule', label: '일정', icon: CalendarIcon },
