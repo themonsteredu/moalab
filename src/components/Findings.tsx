@@ -525,12 +525,19 @@ function AddFindingSheet({
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  /**
+   * 이미 만들어진 지적의 id.
+   * 캡처 올리다 실패했을 때 다시 누르면 지적이 두 개 생기던 걸 막는다 —
+   * 두 번째부터는 새로 만들지 않고 이 행을 고친다.
+   */
+  const createdRef = useRef<string | null>(null);
 
   const reset = () => {
     setFiles([]);
     setBody('');
     setError('');
     setProgress('');
+    createdRef.current = null;
     if (inputRef.current) inputRef.current.value = '';
   };
 
@@ -542,18 +549,30 @@ function AddFindingSheet({
     }
     setBusy(true);
     try {
-      const { data: finding, error: insErr } = await supabase
-        .from('findings')
-        .insert({
-          app_id: appId,
-          round_id: roundId,
-          member_id: session?.id ?? null,
-          body: body.trim(),
-          status: 'open',
-        })
-        .select()
-        .single();
-      if (insErr) throw insErr;
+      let findingId = createdRef.current;
+      if (findingId) {
+        // 앞서 만들어둔 지적 — 글만 다시 맞춘다
+        const { error: upErr } = await supabase
+          .from('findings')
+          .update({ body: body.trim(), updated_at: new Date().toISOString() })
+          .eq('id', findingId);
+        if (upErr) throw upErr;
+      } else {
+        const { data: finding, error: insErr } = await supabase
+          .from('findings')
+          .insert({
+            app_id: appId,
+            round_id: roundId,
+            member_id: session?.id ?? null,
+            body: body.trim(),
+            status: 'open',
+          })
+          .select()
+          .single();
+        if (insErr) throw insErr;
+        findingId = finding.id as string;
+        createdRef.current = findingId;
+      }
 
       if (files.length > 0) {
         setProgress(`캡처 올리는 중… 0/${files.length}`);
@@ -562,13 +581,15 @@ function AddFindingSheet({
         );
         const { error: fErr } = await supabase.from('finding_files').insert(
           uploaded.map((u, i) => ({
-            finding_id: finding.id,
+            finding_id: findingId,
             file_url: u.url,
             file_name: u.name,
             sort_order: i,
           })),
         );
         if (fErr) throw fErr;
+        // 올라간 건 목록에서 뺀다 — 다시 눌렀을 때 두 번 올라가지 않게
+        setFiles([]);
       }
 
       await recomputeAppStatus(appId);
@@ -577,14 +598,20 @@ function AddFindingSheet({
         title: `${appTitle} — 새 지적`,
         body: body.trim(),
         url: `/apps/${appId}`,
-        tag: `finding-${finding.id}`,
+        tag: `finding-${findingId}`,
         fromId: session?.id ?? null,
       });
       reset();
       onClose();
       onSaved();
     } catch (e) {
-      setError(friendlyError(e));
+      // 지적은 이미 저장됐고 캡처만 실패한 경우를 구분해서 알려준다
+      setError(
+        createdRef.current
+          ? `지적은 저장됐어요. 캡처만 못 올렸어요 — ${friendlyError(e, '다시 눌러주세요.')}`
+          : friendlyError(e),
+      );
+      onSaved();
     } finally {
       setBusy(false);
       setProgress('');

@@ -51,13 +51,23 @@ export function friendlyError(e: unknown, fallback = '저장이 안 됐어요. �
   if (!raw) return fallback;
   if (/duplicate key|already exists|unique/i.test(raw)) return '이미 같은 값이 등록돼 있어요.';
   if (/violates foreign key/i.test(raw)) return '연결된 항목이 없어졌어요. 새로고침 후 다시 해주세요.';
-  if (/Failed to fetch|NetworkError|fetch failed/i.test(raw))
+  if (/Failed to fetch|NetworkError|fetch failed|Load failed/i.test(raw))
     return '인터넷 연결이 불안정해요. 잠시 후 다시 눌러주세요.';
   if (/schema must be one of|PGRST106|does not exist.*schema|Could not find the table/i.test(raw))
     return 'DB 설정이 덜 끝났어요. Supabase 설정 > API > Exposed schemas 에 moalab 을 추가해주세요.';
-  if (/row-level security|permission denied|JWT/i.test(raw))
+  // 저장소(Storage) 쪽은 테이블과 원인이 달라서 따로 알려준다
+  if (/Bucket not found|bucket does not exist/i.test(raw))
+    return '첨부를 넣을 저장소가 아직 안 만들어졌어요. 관리자에게 "Storage 버킷 SQL 실행"이라고 알려주세요.';
+  if (/mime type|not supported/i.test(raw))
+    return '이 형식의 파일은 아직 올릴 수 없어요. 관리자에게 알려주세요.';
+  if (/row-level security|permission denied|JWT|Unauthorized/i.test(raw))
     return '권한이 없어요. 관리자에게 알려주세요.';
-  if (/Payload too large|exceeded the maximum/i.test(raw)) return '파일이 너무 커요. 사진 장수를 줄여주세요.';
+  if (/Payload too large|exceeded the maximum|entity too large/i.test(raw))
+    return '파일이 너무 커요. 더 작은 파일로 올려주세요.';
   if (raw.includes('.env.local')) return raw;
-  return fallback;
+
+  // 여기까지 못 걸러낸 건 원인을 짐작할 수 없다.
+  // 폰에서는 콘솔을 못 보니, 캡처해서 물어볼 수 있게 원문을 짧게 덧붙인다.
+  if (typeof console !== 'undefined') console.error('[moalab]', e);
+  return `${fallback} (${raw.slice(0, 120)})`;
 }

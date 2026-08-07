@@ -185,15 +185,18 @@ export default function NoticePage() {
       return;
     }
     setBusy(true);
+
+    // 1) 글 저장. 새 공지는 저장되자마자 '고치기' 로 바꿔둔다 —
+    //    아래 첨부 단계에서 실패했을 때 다시 누르면 공지가 두 개 생기던 버그를 막는다.
+    let target = editing;
     try {
-      let noticeId = editing?.id ?? '';
-      if (editing) {
+      if (target) {
         const { error: e } = await supabase
           .from('notices')
           .update({ title: title.trim(), body: body.trim(), pinned })
-          .eq('id', editing.id);
+          .eq('id', target.id);
         if (e) throw e;
-        logActivity(session?.id, `공지 수정 — ${title.trim()}`, `notice:${editing.id}`);
+        logActivity(session?.id, `공지 수정 — ${title.trim()}`, `notice:${target.id}`);
       } else {
         const { data, error: e } = await supabase
           .from('notices')
@@ -201,24 +204,33 @@ export default function NoticePage() {
           .select()
           .single();
         if (e) throw e;
-        noticeId = data.id as string;
-        logActivity(session?.id, `공지 작성 — ${title.trim()}`, `notice:${noticeId}`);
+        target = data as Notice;
+        setEditing(target);
+        logActivity(session?.id, `공지 작성 — ${title.trim()}`, `notice:${target.id}`);
       }
+    } catch (e) {
+      setBusy(false);
+      setFormErr(friendlyError(e));
+      return;
+    }
 
+    // 2) 첨부. 여기서 실패해도 글은 이미 저장됐으니 그 사실을 분명히 알려준다.
+    try {
       if (dropFileIds.length > 0) {
         const { error: dErr } = await supabase.from('notice_files').delete().in('id', dropFileIds);
         if (dErr) throw dErr;
+        setDropFileIds([]);
       }
 
       if (picked.length > 0) {
         setProgress(`첨부 올리는 중… 0/${picked.length}`);
-        const base = filesOf(noticeId).length;
-        const uploaded = await uploadMany('moalab-notices', picked, `notice-${noticeId}`, (d, t) =>
+        const base = filesOf(target.id).length;
+        const uploaded = await uploadMany('moalab-notices', picked, `notice-${target.id}`, (d, t) =>
           setProgress(`첨부 올리는 중… ${d}/${t}`),
         );
         const { error: fErr } = await supabase.from('notice_files').insert(
           uploaded.map((u, i) => ({
-            notice_id: noticeId,
+            notice_id: target!.id,
             file_url: u.url,
             file_name: u.name,
             file_size: u.size,
@@ -227,28 +239,34 @@ export default function NoticePage() {
           })),
         );
         if (fErr) throw fErr;
+        // 올라간 건 목록에서 뺀다 — 다시 눌렀을 때 두 번 올라가지 않게
+        setPicked([]);
       }
-
-      // 새 공지는 전원에게 알린다 (쓴 사람 빼고)
-      if (!editing) {
-        sendPush({
-          title: `새 공지 — ${title.trim()}`,
-          body: body.trim(),
-          url: '/notice',
-          tag: `notice-${noticeId}`,
-          fromId: session?.id ?? null,
-        });
-      }
-
-      setFormOpen(false);
-      toast.show(editing ? '저장했어요.' : '공지를 올렸어요. 알림도 보냈어요.');
-      await load();
     } catch (e) {
-      setFormErr(friendlyError(e));
-    } finally {
       setBusy(false);
       setProgress('');
+      setFormErr(`공지는 저장됐어요. 첨부만 못 올렸어요 — ${friendlyError(e, '다시 눌러주세요.')}`);
+      await load();
+      return;
     }
+
+    // 3) 새 공지였으면 전원에게 알린다 (쓴 사람 빼고)
+    const isNew = !editing;
+    if (isNew) {
+      sendPush({
+        title: `새 공지 — ${title.trim()}`,
+        body: body.trim(),
+        url: '/notice',
+        tag: `notice-${target.id}`,
+        fromId: session?.id ?? null,
+      });
+    }
+
+    setBusy(false);
+    setProgress('');
+    setFormOpen(false);
+    toast.show(isNew ? '공지를 올렸어요. 알림도 보냈어요.' : '저장했어요.');
+    await load();
   };
 
   const remove = async (id: string) => {
