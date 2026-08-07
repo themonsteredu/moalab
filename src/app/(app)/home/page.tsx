@@ -274,9 +274,9 @@ export default function HomePage() {
     [items],
   );
 
-  const honorific = isAdmin ? '원장님' : '선생님';
+  // 직함은 붙이지 않는다 — 이름 + 님
   const name = session?.name ?? '';
-  const greeting = name.endsWith('원장') || name.endsWith('선생') ? `${name}님` : `${name} ${honorific}`;
+  const greeting = `${name}님`;
   const tomorrow = toISODate(new Date(Date.now() + 86400000));
   const pickedLabel = picked === todayStr ? '오늘' : picked === tomorrow ? '내일' : korDateFull(picked);
   const moveMonth = (d: number) => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + d, 1));

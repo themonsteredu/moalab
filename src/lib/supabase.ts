@@ -56,7 +56,7 @@ export function friendlyError(e: unknown, fallback = '저장이 안 됐어요. �
   if (/schema must be one of|PGRST106|does not exist.*schema|Could not find the table/i.test(raw))
     return 'DB 설정이 덜 끝났어요. Supabase 설정 > API > Exposed schemas 에 moalab 을 추가해주세요.';
   if (/row-level security|permission denied|JWT/i.test(raw))
-    return '권한이 없어요. 원장님께 문의해주세요.';
+    return '권한이 없어요. 관리자에게 알려주세요.';
   if (/Payload too large|exceeded the maximum/i.test(raw)) return '파일이 너무 커요. 사진 장수를 줄여주세요.';
   if (raw.includes('.env.local')) return raw;
   return fallback;

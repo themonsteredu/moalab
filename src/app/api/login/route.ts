@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const admin = getAdminClient();
   if (!admin) {
     return NextResponse.json(
-      { error: '서버 설정이 아직 안 됐어요. 원장님께 문의해주세요.' },
+      { error: '서버 설정이 아직 안 됐어요. 관리자에게 알려주세요.' },
       { status: 500 },
     );
   }

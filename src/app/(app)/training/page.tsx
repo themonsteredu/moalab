@@ -226,7 +226,7 @@ export default function TrainingPage() {
           <EmptyState
             icon="cap"
             title="등록된 과정이 없어요"
-            desc={isAdmin ? '오른쪽 위 과정 추가로 커리큘럼을 만들어보세요.' : '원장님이 과정을 등록하면 여기 보여요.'}
+            desc={isAdmin ? '오른쪽 위 과정 추가로 커리큘럼을 만들어보세요.' : '과정이 등록되면 여기 보여요.'}
           />
         ) : view === 'me' || !isAdmin ? (
           <ul className="space-y-2.5">

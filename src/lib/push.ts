@@ -76,7 +76,7 @@ export function usePush(memberId: string | null) {
     setError('');
     if (!memberId) return;
     if (!vapid) {
-      setError('알림 키가 설정되지 않았어요. 원장님께 알려주세요.');
+      setError('알림 키가 설정되지 않았어요. 관리자에게 알려주세요.');
       return;
     }
     setBusy(true);

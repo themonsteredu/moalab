@@ -13,7 +13,7 @@ async function requireAdmin(req: Request) {
 
   const { data } = await admin.from('members').select('id,role,active').eq('id', actorId).maybeSingle();
   if (!data || !data.active || data.role !== 'admin') {
-    return { error: '원장님만 할 수 있어요.', status: 403 as const, admin: null };
+    return { error: '관리 권한이 있어야 해요.', status: 403 as const, admin: null };
   }
   return { error: null, status: 200 as const, admin, actorId };
 }
