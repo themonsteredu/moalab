@@ -20,6 +20,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
+      <head>
+        {/* 에스코어드림 웹폰트를 조금이라도 빨리 받도록 */}
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="" />
+      </head>
       <body>
         <SessionProvider>{children}</SessionProvider>
       </body>

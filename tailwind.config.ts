@@ -21,6 +21,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          '"S-Core Dream"',
           'Pretendard',
           '-apple-system',
           'BlinkMacSystemFont',
@@ -37,9 +38,25 @@ const config: Config = {
           from: { transform: 'translateY(12px)', opacity: '0' },
           to: { transform: 'translateY(0)', opacity: '1' },
         },
+        'fade-up': {
+          from: { transform: 'translateY(10px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
+        shake: {
+          '0%,100%': { transform: 'translateX(0)' },
+          '20%,60%': { transform: 'translateX(-7px)' },
+          '40%,80%': { transform: 'translateX(7px)' },
+        },
+        pop: {
+          from: { transform: 'scale(.7)', opacity: '.4' },
+          to: { transform: 'scale(1)', opacity: '1' },
+        },
       },
       animation: {
         'slide-up': 'slide-up .18s ease-out',
+        'fade-up': 'fade-up .35s cubic-bezier(.22,1,.36,1) both',
+        shake: 'shake .4s ease-in-out',
+        pop: 'pop .16s cubic-bezier(.34,1.56,.64,1)',
       },
     },
   },

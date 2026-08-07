@@ -17,7 +17,8 @@
 create extension if not exists "pgcrypto";
 
 create schema if not exists moalab;
-grant usage on schema moalab to anon, authenticated;
+-- service_role 을 빼먹으면 PIN 로그인(/api/login)이 "permission denied for schema" 로 죽는다
+grant usage on schema moalab to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------
 -- 1. 멤버
@@ -228,15 +229,18 @@ create index if not exists activity_logs_created_idx on moalab.activity_logs(cre
 --   · 나머지 테이블 : 전부 허용 (사내 5~7명 전용)
 -- =====================================================================
 
--- moalab 스키마는 Supabase 기본 권한 대상이 아니므로 직접 부여한다
-grant all on all tables    in schema moalab to anon, authenticated;
-grant all on all sequences in schema moalab to anon, authenticated;
-alter default privileges in schema moalab grant all on tables    to anon, authenticated;
-alter default privileges in schema moalab grant all on sequences to anon, authenticated;
+-- moalab 스키마는 Supabase 기본 권한 대상이 아니므로 직접 부여한다.
+-- service_role 도 반드시 포함해야 한다 — 로그인·멤버관리 API 가 이 역할로 돈다.
+grant all on all tables    in schema moalab to anon, authenticated, service_role;
+grant all on all sequences in schema moalab to anon, authenticated, service_role;
+alter default privileges in schema moalab grant all on tables    to anon, authenticated, service_role;
+alter default privileges in schema moalab grant all on sequences to anon, authenticated, service_role;
 
 alter table moalab.members enable row level security;
 -- (정책을 만들지 않음 = anon/authenticated 접근 전면 차단)
+-- 단 service_role 은 남겨둔다. PIN 검증은 오직 이 역할로만 이뤄진다.
 revoke all on moalab.members from anon, authenticated;
+grant all on moalab.members to service_role;
 
 create or replace view moalab.members_public as
   select id, name, role, active, sort_order, created_at

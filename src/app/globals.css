@@ -1,3 +1,46 @@
+/* ---------------------------------------------------------------------
+   에스코어드림 (S-Core Dream) — OFL, 상업적 사용 가능
+   실제로 쓰는 굵기 4개만 불러온다 (한글 폰트는 굵기당 1MB 가까이 된다).
+   400 normal · 600 semibold · 700 bold · 900 black
+   font-display: swap 이라 폰트를 받는 동안에도 글자가 바로 보인다.
+--------------------------------------------------------------------- */
+@font-face {
+  font-family: 'S-Core Dream';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src:
+    url('https://cdn.jsdelivr.net/gh/fonts-archive/S-CoreDream/SCDreamRegular.woff2') format('woff2'),
+    url('https://cdn.jsdelivr.net/gh/fonts-archive/S-CoreDream/SCDreamRegular.woff') format('woff');
+}
+@font-face {
+  font-family: 'S-Core Dream';
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src:
+    url('https://cdn.jsdelivr.net/gh/fonts-archive/S-CoreDream/SCDreamBold.woff2') format('woff2'),
+    url('https://cdn.jsdelivr.net/gh/fonts-archive/S-CoreDream/SCDreamBold.woff') format('woff');
+}
+@font-face {
+  font-family: 'S-Core Dream';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src:
+    url('https://cdn.jsdelivr.net/gh/fonts-archive/S-CoreDream/SCDreamExtraBold.woff2') format('woff2'),
+    url('https://cdn.jsdelivr.net/gh/fonts-archive/S-CoreDream/SCDreamExtraBold.woff') format('woff');
+}
+@font-face {
+  font-family: 'S-Core Dream';
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  src:
+    url('https://cdn.jsdelivr.net/gh/fonts-archive/S-CoreDream/SCDreamBlack.woff2') format('woff2'),
+    url('https://cdn.jsdelivr.net/gh/fonts-archive/S-CoreDream/SCDreamBlack.woff') format('woff');
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

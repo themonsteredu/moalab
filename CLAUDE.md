@@ -27,6 +27,7 @@
 |---|---|
 | 프레임워크 | Next.js 14 (App Router) + TypeScript |
 | 스타일 | Tailwind CSS (브랜드 컬러 `#F26522`) |
+| 폰트 | 에스코어드림 (S-Core Dream, OFL) — jsDelivr CDN |
 | DB / Storage | Supabase |
 | 로그인 | 자체 PIN 4자리 (Supabase Auth 안 씀) |
 | 배포 | Vercel |
@@ -106,6 +107,22 @@ npm run dev        # http://localhost:3000
 
 > 새 테이블을 추가할 때도 반드시 `moalab.` 을 붙이고, `schema.sql` 의
 > RLS 목록(`internal_all` 루프)에 테이블 이름을 넣어줘야 한다.
+
+### ⚠️ `service_role` 권한을 빼먹지 말 것
+
+`public` 스키마와 달리 **커스텀 스키마는 Supabase 기본 권한이 안 붙는다.**
+`anon`/`authenticated` 만 주고 `service_role` 을 빠뜨리면
+`/api/login` 이 `permission denied for schema moalab` 으로 죽는다
+(로그인 화면에 이름은 뜨는데 PIN 을 넣으면 실패 → 원인 찾기 어렵다).
+
+```sql
+grant usage on schema moalab to anon, authenticated, service_role;
+grant all on all tables in schema moalab to anon, authenticated, service_role;
+grant all on moalab.members to service_role;   -- members 는 anon revoke 후에도 남겨야 함
+```
+
+검증 환경을 만들 때도 **슈퍼유저가 아니라 진짜 `service_role`** 로 테스트해야
+이 구멍이 잡힌다.
 
 ---
 
@@ -221,6 +238,9 @@ src/components/
 - 사진 업로드는 **반드시** `uploadFile()` 을 거친다 (리사이즈 후 저장).
 - 로딩 중에 빈 화면을 두지 말고 **스켈레톤**을 보여준다.
 - 자동저장 금지. **명시적 저장 버튼**. (강사들이 잘못 눌렀다 날리면 안 된다)
+- 폰트는 **에스코어드림**. `globals.css` 에서 굵기 4개(400·600·700·900)만 불러온다.
+  한글 폰트는 굵기당 1MB 가까이 되니 굵기를 늘리지 말 것. `font-display: swap` 이라
+  폰트를 받는 동안에도 시스템 폰트로 글자가 먼저 보인다.
 - 에러 메시지는 **한글**로, 개발자 용어 없이.
   `Failed to fetch` (X) → "인터넷 연결이 불안정해요. 잠시 후 다시 눌러주세요." (O)
   변환은 `friendlyError()` 에서 한다.
