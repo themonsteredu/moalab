@@ -80,7 +80,7 @@ npm run dev        # http://localhost:3000
 
 | 경로 | 탭 | 내용 |
 |---|---|---|
-| `/home` | 홈 | 전체 현황 · 앞으로 2주 일정 · 내 할 일 · 지적사항 (원장은 지연·강사별·활동 추가) |
+| `/home` | 홈 | **월간 달력** → 팀 현황 → 내 할 일 → 전체 현황 (원장은 지연·활동 추가) |
 | `/apps` | 프로그램 | 목록(리스트·보드·갤러리) → `/apps/[id]` **프로그램 페이지** |
 | `/cost` | 원가 | 원가표 목록 → `/cost/[sheetId]` 계산서 |
 | `/gallery` | 갤러리 | 앨범/사진 → `/gallery/[albumId]` |
@@ -228,6 +228,7 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
 
 ```
 supabase/schema.sql          moalab 스키마·테이블·RLS·Storage 버킷·초기 멤버 (한 번에 실행)
+supabase/seed-apps.sql       노션에서 이관한 웹앱 21개 일괄 등록 (재실행 안전)
 
 src/lib/
   types.ts                   DB 타입 + CHECK_ITEMS(고정 5항목) + 카테고리 상수
@@ -256,6 +257,8 @@ src/components/
   SampleImages.tsx           프로그램 샘플 이미지
   Brand.tsx                  브랜드 마크 · 멤버 아바타
   Icon.tsx                   인라인 SVG 아이콘 모음 (이모지 대체)
+  MonthCalendar.tsx          월간 달력 그리드 (홈·일정 공용)
+  TeamBoard.tsx              누가 뭘 했나/안 했나 — 사람 단위 협업 현황
   Checklist.tsx              검증자 1명의 5항목 체크 (명시적 저장 / fail 메모 강제)
   RoundHistory.tsx           지난 라운드 접힌 기록
   CommentThread.tsx          댓글 + 사진 첨부 + 해결됨 토글
