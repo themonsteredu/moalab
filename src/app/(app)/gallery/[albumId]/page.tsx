@@ -10,6 +10,7 @@ import { logActivity } from '@/lib/log';
 import { downloadPhotosAsZip, safeFileName } from '@/lib/zip';
 import { korDateFull } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
+import { Icon } from '@/components/Icon';
 import { CardSkeleton, ConfirmDialog, EmptyState, ErrorBanner, Sheet, useToast } from '@/components/ui';
 import { PHOTO_TAGS, type Album, type AppRow, type Photo, type PhotoTag } from '@/lib/types';
 
@@ -238,7 +239,7 @@ export default function AlbumPage() {
 
         <div className="mb-3 grid grid-cols-2 gap-2">
           <label htmlFor="album-upload" className="btn-primary cursor-pointer">
-            {uploading || '📷 사진 올리기'}
+            {uploading || '사진 올리기'}
           </label>
           <input
             id="album-upload"
@@ -250,12 +251,12 @@ export default function AlbumPage() {
             className="hidden"
           />
           <button onClick={() => download(true)} disabled={Boolean(zipping)} className="btn-ghost">
-            {zipping || '⬇ 얼굴 없는 것만 받기'}
+            {zipping || '얼굴 없는 것만 받기'}
           </button>
         </div>
 
         {photos.length === 0 ? (
-          <EmptyState icon="📷" title="사진이 없어요" desc="폰에서 여러 장 한 번에 올릴 수 있어요. 올릴 때 자동으로 용량을 줄여요." />
+          <EmptyState icon="camera" title="사진이 없어요" desc="폰에서 여러 장 한 번에 올릴 수 있어요. 올릴 때 자동으로 용량을 줄여요." />
         ) : (
           <div className="grid grid-cols-3 gap-1.5">
             {photos.map((p) => {
@@ -288,7 +289,7 @@ export default function AlbumPage() {
                         on ? 'border-brand bg-brand text-white' : 'border-white/80 bg-black/25 text-transparent'
                       }`}
                     >
-                      ✓
+                      <Icon name="check" size={11} strokeWidth={3} />
                     </span>
                   )}
                 </button>
@@ -442,7 +443,7 @@ function PhotoEditor({
               {isCover ? '대표 사진' : '대표로 지정'}
             </button>
             <a href={photo.url} target="_blank" rel="noreferrer" className="btn-ghost">
-              원본 열기 ↗
+              원본 열기
             </a>
           </div>
 

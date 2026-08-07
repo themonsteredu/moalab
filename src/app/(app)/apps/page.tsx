@@ -10,16 +10,17 @@ import { useAppsOverview, PIECES, type Completeness } from '@/lib/useAppsOvervie
 import { useMembers } from '@/lib/useMembers';
 import { useSession } from '@/lib/session';
 import { STATUS_META } from '@/lib/status';
+import { Icon, type IconName } from '@/components/Icon';
 import type { AppStatus } from '@/lib/types';
 
 type View = 'list' | 'board' | 'gallery';
 type Filter = 'all' | AppStatus | 'mine' | `missing:${keyof Completeness}`;
 type Sort = 'due' | 'name' | 'filled';
 
-const VIEWS: { value: View; icon: string; label: string }[] = [
-  { value: 'list', icon: '☰', label: '리스트' },
-  { value: 'board', icon: '▦', label: '보드' },
-  { value: 'gallery', icon: '▢', label: '갤러리' },
+const VIEWS: { value: View; icon: IconName; label: string }[] = [
+  { value: 'list', icon: 'list', label: '리스트' },
+  { value: 'board', icon: 'board', label: '보드' },
+  { value: 'gallery', icon: 'grid', label: '갤러리' },
 ];
 
 const BOARD_COLS: AppStatus[] = ['fixing', 'pending', 'done'];
@@ -107,7 +108,7 @@ export default function AppsPage() {
                 view === v.value ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
               }`}
             >
-              <span className="text-[12px]">{v.icon}</span>
+              <Icon name={v.icon} size={14} />
               {v.label}
             </button>
           ))}
@@ -143,7 +144,8 @@ export default function AppsPage() {
             const key: Filter = `missing:${p.key}`;
             return (
               <Chip key={p.key} on={filter === key} onClick={() => setFilter(filter === key ? 'all' : key)} dim={n === 0}>
-                {p.icon} {p.label} {n > 0 && <span className="ml-0.5 text-brand">{n}</span>}
+                <Icon name={p.icon} size={12} className="mr-1" />
+                {p.label} {n > 0 && <span className="ml-0.5 text-brand">{n}</span>}
               </Chip>
             );
           })}
@@ -176,7 +178,7 @@ export default function AppsPage() {
           <CardSkeleton rows={4} />
         ) : filtered.length === 0 ? (
           <EmptyState
-            icon="🧩"
+            icon="puzzle"
             title={items.length === 0 ? '아직 등록된 프로그램이 없어요' : '조건에 맞는 게 없어요'}
             desc={
               items.length === 0

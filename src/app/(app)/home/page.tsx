@@ -7,8 +7,9 @@ import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { PIECES, useAppsOverview } from '@/lib/useAppsOverview';
 import { CHECK_ITEMS, type ActivityLog, type CommentRow, type Schedule } from '@/lib/types';
-import { CardSkeleton, EmptyState, ErrorBanner, ProgressBar, SectionTitle, Skeleton } from '@/components/ui';
+import { CardSkeleton, ErrorBanner, ProgressBar, SectionTitle, Skeleton } from '@/components/ui';
 import { Avatar } from '@/components/Brand';
+import { Icon } from '@/components/Icon';
 import {
   ddayClass,
   ddayLabel,
@@ -57,7 +58,7 @@ export default function HomePage() {
     const [schedRes, logRes] = await Promise.all([
       supabase.from('schedules').select('*').gte('date', todayStr).lte('date', horizon).order('date').order('start_time'),
       isAdmin
-        ? supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(10)
+        ? supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(5)
         : Promise.resolve({ data: [] as ActivityLog[] }),
     ]);
     setSchedules((schedRes.data ?? []) as Schedule[]);
@@ -209,6 +210,9 @@ export default function HomePage() {
       .sort((a, b) => b.remain - a.remain || b.assigned - a.assigned);
   }, [isAdmin, members, items]);
 
+  /** 실제로 검증을 맡은 사람만. '배정 없음' 줄만 늘어놔봐야 스크롤만 길어진다. */
+  const assigned = useMemo(() => perMember.filter((m) => m.assigned > 0), [perMember]);
+
   const overdue = useMemo(
     () => items.filter((i) => i.status !== 'done' && i.app.due_date && i.app.due_date < todayStr),
     [items, todayStr],
@@ -252,8 +256,9 @@ export default function HomePage() {
           <div className="space-y-1.5">
             {pieceStats.map((p) => (
               <div key={p.key} className="flex items-center gap-2">
-                <span className="w-[52px] shrink-0 text-[11.5px] text-neutral-500">
-                  {p.icon} {p.label}
+                <span className="flex w-[58px] shrink-0 items-center gap-1 text-[11.5px] text-neutral-500">
+                  <Icon name={p.icon} size={11} className="text-neutral-400" />
+                  {p.label}
                 </span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100">
                   <div
@@ -357,7 +362,10 @@ export default function HomePage() {
       {loading ? (
         <CardSkeleton rows={2} />
       ) : myTasks.length === 0 ? (
-        <EmptyState icon="✅" title="지금 할 일이 없어요" desc="새 검증이 배정되면 여기에 보여요." />
+        <p className="card flex items-center justify-center gap-1.5 px-4 py-3.5 text-[13px] text-neutral-400">
+          <Icon name="check" size={14} className="text-green-500" />
+          지금 할 일이 없어요
+        </p>
       ) : (
         <div className="space-y-2.5">
           {myTasks.map((t) => (
@@ -366,7 +374,11 @@ export default function HomePage() {
               href={`/apps/${t.id}`}
               className="card flex items-center gap-3 p-4 transition active:bg-neutral-50"
             >
-              <span className="text-xl">{t.kind === 'fix' ? '🛠️' : '🔍'}</span>
+              <Icon
+                name={t.kind === 'fix' ? 'wrench' : 'search'}
+                size={17}
+                className={t.kind === 'fix' ? 'text-red-500' : 'text-neutral-400'}
+              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-bold">{t.title}</span>
                 <span className="mt-0.5 block truncate text-[12.5px] text-neutral-500">{t.sub}</span>
@@ -379,14 +391,11 @@ export default function HomePage() {
     </section>
   );
 
-  const CommentsBlock = (
+  // 없으면 섹션을 아예 안 그린다. 빈 카드가 쌓이면 스크롤만 길어진다.
+  const CommentsBlock = !myComments || myComments.length === 0 ? null : (
     <section>
       <SectionTitle>나를 향한 지적사항</SectionTitle>
-      {myComments === null ? (
-        <Skeleton className="h-16 w-full rounded-2xl" />
-      ) : myComments.length === 0 ? (
-        <p className="card px-4 py-6 text-center text-[13px] text-neutral-400">미해결 지적이 없어요.</p>
-      ) : (
+      {(
         <div className="space-y-2.5">
           {myComments.map((c) => (
             <Link key={c.id} href={`/apps/${c.app_id}`} className="card block p-3.5 active:bg-neutral-50">
@@ -441,13 +450,12 @@ export default function HomePage() {
 
         {isAdmin && (
           <>
+            {overdue.length > 0 && (
             <section>
               <SectionTitle>
-                지연 항목 {overdue.length > 0 && <span className="text-red-600">{overdue.length}</span>}
+                지연 항목 <span className="text-red-600">{overdue.length}</span>
               </SectionTitle>
-              {overdue.length === 0 ? (
-                <p className="card px-4 py-6 text-center text-[13px] text-neutral-400">지연된 게 없어요.</p>
-              ) : (
+              {(
                 <div className="card divide-y divide-neutral-100">
                   {overdue.map((it) => (
                     <Link
@@ -467,11 +475,13 @@ export default function HomePage() {
                 </div>
               )}
             </section>
+            )}
 
+            {assigned.length > 0 && (
             <section>
               <SectionTitle>강사별 남은 검증</SectionTitle>
               <div className="card divide-y divide-neutral-100">
-                {perMember.map((m) => (
+                {assigned.map((m) => (
                   <div key={m.name} className="flex items-center justify-between px-4 py-3">
                     <span className="flex items-center gap-2">
                       <Avatar name={m.name} size={26} />
@@ -479,19 +489,16 @@ export default function HomePage() {
                     </span>
                     <span
                       className={`chip ${
-                        m.assigned === 0
-                          ? 'bg-neutral-100 text-neutral-500'
-                          : m.remain === 0
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-brand-50 text-brand-700'
+                        m.remain === 0 ? 'bg-green-100 text-green-800' : 'bg-brand-50 text-brand-700'
                       }`}
                     >
-                      {m.assigned === 0 ? '배정 없음' : m.remain === 0 ? '다 했어요' : `${m.remain}개 남음`}
+                      {m.remain === 0 ? `다 했어요 (${m.assigned}개)` : `${m.remain}개 남음`}
                     </span>
                   </div>
                 ))}
               </div>
             </section>
+            )}
 
             <section>
               <SectionTitle

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { CHECK_ITEMS, type CheckRow, type Round } from '@/lib/types';
 import { shortTime } from '@/lib/format';
+import { Icon } from '@/components/Icon';
 
 const MARK: Record<string, { text: string; cls: string }> = {
   pass: { text: '통과', cls: 'bg-green-100 text-green-800' },
@@ -58,7 +59,11 @@ export function RoundHistory({
                   )}
                 </span>
               </span>
-              <span className={`shrink-0 text-neutral-400 transition ${open ? 'rotate-180' : ''}`}>⌄</span>
+              <Icon
+                name="chevronDown"
+                size={15}
+                className={`shrink-0 text-neutral-300 transition-transform ${open ? 'rotate-180' : ''}`}
+              />
             </button>
 
             {open && (
@@ -89,7 +94,7 @@ export function RoundHistory({
                                 <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-neutral-600">
                                   {label}
                                   {row?.note && (
-                                    <span className="mt-0.5 block text-[12px] text-red-600">↳ {row.note}</span>
+                                    <span className="mt-0.5 block text-[12px] text-red-600">— {row.note}</span>
                                   )}
                                 </span>
                               </li>

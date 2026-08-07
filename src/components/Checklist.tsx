@@ -6,6 +6,7 @@ import { useSession } from '@/lib/session';
 import { logActivity } from '@/lib/log';
 import { recomputeAppStatus } from '@/lib/verify';
 import { ErrorBanner } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 import { relTime } from '@/lib/format';
 import { CHECK_ITEMS, type CheckResult, type CheckRow } from '@/lib/types';
 
@@ -51,6 +52,8 @@ export function ReviewerChecklist({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  // 내 카드만 펼쳐둔다. 검증자 3명이면 5항목 × 3 = 화면이 너무 길어진다.
+  const [open, setOpen] = useState(editable);
 
   const initial = useMemo(() => {
     const map: Record<number, Draft> = {};
@@ -135,28 +138,59 @@ export function ReviewerChecklist({
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-[15px] font-bold">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left ${
+          open ? 'border-b border-neutral-100' : ''
+        }`}
+      >
+        <span className="min-w-0">
+          <span className="block text-[14.5px] font-bold">
             {memberName}
             {editable && <span className="ml-1.5 text-[12px] font-semibold text-brand">(나)</span>}
-          </p>
-          <p className="mt-0.5 text-[12px] text-neutral-500">
+          </span>
+          <span className="mt-0.5 block text-[11.5px] text-neutral-500">
             통과 {passCount}/5
             {failCount > 0 && <span className="ml-1.5 font-semibold text-red-600">실패 {failCount}</span>}
             {savedAt && <span className="ml-1.5 text-neutral-400">· {relTime(savedAt)}</span>}
-          </p>
-        </div>
-        {passCount === CHECK_ITEMS.length && <span className="chip bg-green-100 text-green-800">완료</span>}
-      </div>
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {passCount === CHECK_ITEMS.length ? (
+            <span className="chip bg-green-100 text-green-800">완료</span>
+          ) : (
+            <span className="flex gap-0.5">
+              {CHECK_ITEMS.map((_, i) => {
+                const r = draft[i + 1]?.result ?? 'none';
+                return (
+                  <span
+                    key={i}
+                    className={`h-1.5 w-3 rounded-full ${
+                      r === 'pass' ? 'bg-green-500' : r === 'fail' ? 'bg-red-500' : 'bg-neutral-200'
+                    }`}
+                  />
+                );
+              })}
+            </span>
+          )}
+          <Icon
+            name="chevronDown"
+            size={14}
+            className={`text-neutral-300 transition-transform ${open ? 'rotate-180' : ''}`}
+          />
+        </span>
+      </button>
 
+      {open && (
+      <>
       <ul className="divide-y divide-neutral-100">
         {CHECK_ITEMS.map((label, idx) => {
           const no = idx + 1;
           const d = draft[no] ?? { result: 'none' as CheckResult, note: '' };
           return (
-            <li key={no} className="px-4 py-3">
-              <p className="mb-2 text-[14px] leading-snug text-neutral-800">
+            <li key={no} className="px-3.5 py-2.5">
+              <p className="mb-1.5 text-[13.5px] leading-snug text-neutral-800">
                 <span className="mr-1.5 font-bold text-neutral-400">{no}</span>
                 {label}
               </p>
@@ -213,6 +247,8 @@ export function ReviewerChecklist({
             {busy ? '저장 중…' : dirty ? '검증 결과 저장' : '저장됨'}
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   );

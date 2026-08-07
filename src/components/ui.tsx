@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Icon, type IconName } from '@/components/Icon';
 
 /* ------------------------------------------------------------------ 스켈레톤 */
 
@@ -25,19 +26,19 @@ export function CardSkeleton({ rows = 3 }: { rows?: number }) {
 /* --------------------------------------------------------------------- 빈 상태 */
 
 export function EmptyState({
-  icon = '🗂️',
+  icon = 'puzzle',
   title,
   desc,
   action,
 }: {
-  icon?: string;
+  icon?: IconName;
   title: string;
   desc?: string;
   action?: React.ReactNode;
 }) {
   return (
     <div className="card flex flex-col items-center px-6 py-12 text-center">
-      <div className="mb-3 text-4xl">{icon}</div>
+      <Icon name={icon} size={30} className="mb-3 text-neutral-300" />
       <p className="text-[15px] font-semibold text-neutral-700">{title}</p>
       {desc && <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-500">{desc}</p>}
       {action && <div className="mt-5">{action}</div>}
@@ -51,7 +52,7 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
   if (!message) return null;
   return (
     <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-3.5">
-      <span className="text-lg leading-none">⚠️</span>
+      <Icon name="warning" size={17} className="mt-0.5 text-red-500" />
       <p className="flex-1 text-[13px] leading-relaxed text-red-800">{message}</p>
       {onRetry && (
         <button onClick={onRetry} className="shrink-0 text-[13px] font-bold text-red-700 underline">
@@ -104,7 +105,7 @@ export function Sheet({
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
           <h2 className="text-[16px] font-bold">{title}</h2>
           <button onClick={onClose} aria-label="닫기" className="tap -mr-2 w-11 text-neutral-400">
-            ✕
+            <Icon name="close" size={17} />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>

@@ -10,6 +10,7 @@ import { logActivity } from '@/lib/log';
 import { downloadPhotosAsZip, safeFileName } from '@/lib/zip';
 import { korDate, today } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
+import { Icon } from '@/components/Icon';
 import { CardSkeleton, EmptyState, ErrorBanner, Sheet, useToast } from '@/components/ui';
 import { PHOTO_TAGS, type Album, type AppRow, type Photo, type PhotoTag } from '@/lib/types';
 
@@ -290,7 +291,7 @@ function GalleryInner() {
         ) : mode === 'album' ? (
           filteredAlbums.length === 0 ? (
             <EmptyState
-              icon="📸"
+              icon="camera"
               title={albums.length === 0 ? '앨범이 아직 없어요' : '조건에 맞는 앨범이 없어요'}
               desc={albums.length === 0 ? '수업 하나당 앨범 하나로 정리하면 나중에 찾기 쉬워요.' : undefined}
               action={
@@ -312,7 +313,9 @@ function GalleryInner() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={cover.url} alt="" loading="lazy" className="h-full w-full object-cover" />
                       ) : (
-                        <div className="flex h-full items-center justify-center text-3xl text-neutral-300">🖼️</div>
+                        <div className="flex h-full items-center justify-center text-neutral-300">
+                          <Icon name="image" size={26} />
+                        </div>
                       )}
                     </div>
                     <div className="p-3">
@@ -331,7 +334,7 @@ function GalleryInner() {
             </div>
           )
         ) : filteredPhotos.length === 0 ? (
-          <EmptyState icon="🔍" title="조건에 맞는 사진이 없어요" desc="필터를 바꿔보세요." />
+          <EmptyState icon="search" title="조건에 맞는 사진이 없어요" desc="필터를 바꿔보세요." />
         ) : (
           <>
             <div className="mb-2.5 flex items-center justify-between">
@@ -369,7 +372,7 @@ function GalleryInner() {
                         on ? 'border-brand bg-brand text-white' : 'border-white/80 bg-black/25 text-transparent'
                       }`}
                     >
-                      ✓
+                      <Icon name="check" size={11} strokeWidth={3} />
                     </span>
                   </button>
                 );

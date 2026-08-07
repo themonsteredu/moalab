@@ -9,6 +9,7 @@ import { logActivity } from '@/lib/log';
 import { calcItem, calcSheet, categoryColor, categoryLabel } from '@/lib/cost';
 import { won, won1 } from '@/lib/format';
 import { ErrorBanner } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 import type { CostItem, CostSheet } from '@/lib/types';
 
 /**
@@ -82,7 +83,7 @@ export function CostInline({
           className="flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border
                      border-dashed border-neutral-300 bg-neutral-50/60 px-4 py-7 text-center"
         >
-          <span className="text-2xl">💰</span>
+          <Icon name="won" size={24} className="text-neutral-300" />
           <span className="mt-1.5 text-[13px] font-semibold text-neutral-500">
             {busy ? '만드는 중…' : '원가표 만들기'}
           </span>

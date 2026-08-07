@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { STATUS_META } from '@/lib/status';
 import { ddayClass, ddayLabel } from '@/lib/format';
 import { ProgressBar } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 import { PIECES, type AppOverview } from '@/lib/useAppsOverview';
 
 /** 검증·계획안·원가·샘플·사진 중 뭐가 채워졌는지 한 줄로 */
@@ -20,7 +21,7 @@ export function PieceRow({ item, compact = false }: { item: AppOverview; compact
               on ? 'bg-green-50 text-green-700' : 'bg-neutral-100 text-neutral-300'
             }`}
           >
-            <span className={on ? '' : 'grayscale'}>{p.icon}</span>
+            <Icon name={p.icon} size={11} />
             {!compact && p.label}
           </span>
         );
@@ -52,7 +53,12 @@ export function AppCard({ item, nameOf }: { item: AppOverview; nameOf: (id: stri
           {currentRound?.round_no ?? app.current_round}차 검증{status === 'done' ? ' 완료' : ' 중'}
         </span>
         {dday && <span className={`chip ${ddayClass(app.due_date)}`}>{dday}</span>}
-        {openComments > 0 && <span className="chip bg-brand-50 text-brand-700">💬 미해결 {openComments}</span>}
+        {openComments > 0 && (
+          <span className="chip gap-1 bg-brand-50 text-brand-700">
+            <Icon name="comment" size={11} />
+            미해결 {openComments}
+          </span>
+        )}
       </div>
 
       <div className="mt-2.5">
@@ -82,7 +88,9 @@ export function AppGalleryCard({ item }: { item: AppOverview }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={cover} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full items-center justify-center text-3xl text-neutral-300">🧩</div>
+          <div className="flex h-full items-center justify-center text-neutral-300">
+            <Icon name="puzzle" size={28} />
+          </div>
         )}
       </div>
       <div className="p-3">
@@ -116,7 +124,12 @@ export function AppBoardCard({ item, nameOf }: { item: AppOverview; nameOf: (id:
       <div className="mt-2 flex flex-wrap items-center gap-1">
         <span className="chip bg-neutral-100 text-neutral-500">{currentRound?.round_no ?? 1}차</span>
         {dday && <span className={`chip ${ddayClass(app.due_date)}`}>{dday}</span>}
-        {openComments > 0 && <span className="chip bg-brand-50 text-brand-700">💬{openComments}</span>}
+        {openComments > 0 && (
+          <span className="chip gap-0.5 bg-brand-50 text-brand-700">
+            <Icon name="comment" size={10} />
+            {openComments}
+          </span>
+        )}
       </div>
     </Link>
   );

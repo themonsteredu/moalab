@@ -6,6 +6,7 @@ import { useSession } from '@/lib/session';
 import { uploadFile } from '@/lib/upload';
 import { logActivity } from '@/lib/log';
 import { ConfirmDialog, ErrorBanner, Sheet } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 import type { AppSample } from '@/lib/types';
 
 /**
@@ -113,7 +114,7 @@ export function SampleImages({ appId, appSlug }: { appId: string; appSlug: strin
           className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed
                      border-neutral-300 bg-neutral-50/60 px-4 py-7 text-center"
         >
-          <span className="text-2xl">🖼️</span>
+          <Icon name="image" size={24} className="text-neutral-300" />
           <span className="mt-1.5 text-[13px] font-semibold text-neutral-500">
             {uploading || '예시 작품 사진을 올려주세요'}
           </span>
@@ -185,7 +186,7 @@ export function SampleImages({ appId, appSlug }: { appId: string; appSlug: strin
             </div>
             <div className="grid grid-cols-2 gap-2">
               <a href={viewing.url} target="_blank" rel="noreferrer" className="btn-ghost">
-                원본 열기 ↗
+                원본 열기
               </a>
               <button onClick={() => setDeleting(viewing)} className="btn-ghost text-red-600">
                 삭제

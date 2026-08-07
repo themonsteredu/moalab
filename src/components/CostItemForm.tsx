@@ -6,6 +6,7 @@ import { uploadMany } from '@/lib/upload';
 import { calcItem } from '@/lib/cost';
 import { won1 } from '@/lib/format';
 import { ErrorBanner, Sheet } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 import { COST_CATEGORIES, type CostCategory, type CostItem, type CostItemPhoto } from '@/lib/types';
 
 export interface EditingItem {
@@ -233,9 +234,9 @@ export function CostItemForm({
                 <button
                   onClick={() => removePhoto(p.id)}
                   aria-label="사진 삭제"
-                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-[12px] text-white"
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
                 >
-                  ✕
+                  <Icon name="close" size={12} />
                 </button>
               </div>
             ))}

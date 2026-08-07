@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { computeStatus, roundProgress } from '@/lib/status';
 import type { AppRow, AppStatus, CheckRow, Round } from '@/lib/types';
+import type { IconName } from '@/components/Icon';
 
 /** 프로그램 하나에 딸린 것들이 얼마나 채워졌는지 */
 export interface Completeness {
@@ -170,10 +171,10 @@ export function useAppsOverview(includeArchived = false) {
 }
 
 /** 카드에 찍히는 5개 구성요소 라벨 */
-export const PIECES: { key: keyof Completeness; icon: string; label: string }[] = [
-  { key: 'verify', icon: '✅', label: '검증' },
-  { key: 'plan', icon: '📄', label: '계획안' },
-  { key: 'cost', icon: '💰', label: '원가' },
-  { key: 'sample', icon: '🖼️', label: '샘플' },
-  { key: 'photo', icon: '📸', label: '사진' },
+export const PIECES: { key: keyof Completeness; icon: IconName; label: string }[] = [
+  { key: 'verify', icon: 'checkCircle', label: '검증' },
+  { key: 'plan', icon: 'doc', label: '계획안' },
+  { key: 'cost', icon: 'won', label: '원가' },
+  { key: 'sample', icon: 'image', label: '샘플' },
+  { key: 'photo', icon: 'camera', label: '사진' },
 ];

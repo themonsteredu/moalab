@@ -10,6 +10,7 @@ import { won, won1 } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
 import { CostItemForm, type EditingItem } from '@/components/CostItemForm';
 import { CostChart } from '@/components/CostChart';
+import { Icon } from '@/components/Icon';
 import { CardSkeleton, ConfirmDialog, EmptyState, ErrorBanner, Sheet, useToast } from '@/components/ui';
 import type { CostItem, CostItemPhoto, CostSheet } from '@/lib/types';
 
@@ -174,7 +175,7 @@ export default function CostSheetPage() {
   const kakaoText = useMemo(() => {
     if (!sheet) return '';
     const lines: string[] = [
-      `📋 ${sheet.title}`,
+      `[${sheet.title}]`,
       `참여 인원 ${headcount}명`,
       '',
       ...items.map((it) => {
@@ -246,7 +247,7 @@ export default function CostSheetPage() {
 
         {items.length === 0 ? (
           <EmptyState
-            icon="🧾"
+            icon="receipt"
             title="아직 항목이 없어요"
             desc="재료비·AI API비·강사비를 하나씩 넣어보세요."
             action={
@@ -281,7 +282,7 @@ export default function CostSheetPage() {
                         </a>
                       ) : (
                         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-300">
-                          🖼️
+                          <Icon name="image" size={17} />
                         </div>
                       )}
 
@@ -324,7 +325,7 @@ export default function CostSheetPage() {
                           rel="noreferrer"
                           className="h-9 flex-1 rounded-lg border border-neutral-300 text-center text-[13px] font-semibold leading-9 text-neutral-600"
                         >
-                          구매처 ↗
+                          구매처
                         </a>
                       )}
                       <button
@@ -351,14 +352,17 @@ export default function CostSheetPage() {
             <CostChart totals={totals} />
 
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setShopOpen(true)} className="btn-ghost">
-                🛒 구매 목록 보기
+              <button onClick={() => setShopOpen(true)} className="btn-ghost gap-1.5">
+                <Icon name="cart" size={15} />
+                구매 목록
               </button>
-              <button onClick={() => copy(kakaoText, '원가 요약을')} className="btn-ghost">
-                📋 카톡용 복사
+              <button onClick={() => copy(kakaoText, '원가 요약을')} className="btn-ghost gap-1.5">
+                <Icon name="copy" size={15} />
+                카톡용 복사
               </button>
-              <button onClick={() => setDupOpen(true)} className="btn-ghost">
-                📄 원가표 복제
+              <button onClick={() => setDupOpen(true)} className="btn-ghost gap-1.5">
+                <Icon name="doc" size={15} />
+                원가표 복제
               </button>
               <button onClick={() => setDelSheetOpen(true)} className="btn-ghost text-red-600">
                 원가표 삭제
@@ -481,7 +485,7 @@ export default function CostSheetPage() {
                           />
                         ) : (
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-300">
-                            🖼️
+                            <Icon name="image" size={17} />
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
@@ -498,7 +502,7 @@ export default function CostSheetPage() {
                             rel="noreferrer"
                             className="tap shrink-0 px-2 text-[13px] font-bold text-brand"
                           >
-                            링크 ↗
+                            링크
                           </a>
                         )}
                       </div>
@@ -523,9 +527,10 @@ export default function CostSheetPage() {
                   '구매 목록을',
                 )
               }
-              className="btn-ghost w-full"
+              className="btn-ghost w-full gap-1.5"
             >
-              📋 장보기 리스트 복사
+              <Icon name="copy" size={15} />
+              장보기 리스트 복사
             </button>
           </div>
         )}

@@ -126,7 +126,7 @@ export default function CostListPage() {
           <CardSkeleton rows={3} />
         ) : rows.length === 0 ? (
           <EmptyState
-            icon="💰"
+            icon="won"
             title="원가표가 아직 없어요"
             desc="프로그램 하나당 원가표 하나를 만들어 재료비·API비를 정리해보세요."
             action={

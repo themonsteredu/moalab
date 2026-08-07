@@ -6,19 +6,32 @@ import { useSession } from '@/lib/session';
 import { uploadFile } from '@/lib/upload';
 import { logActivity } from '@/lib/log';
 import { ConfirmDialog, ErrorBanner } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 import { shortTime } from '@/lib/format';
 import type { PlanFile } from '@/lib/types';
 
-function fileIcon(name: string): string {
-  const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  if (['hwp', 'hwpx'].includes(ext)) return '📄';
-  if (['doc', 'docx'].includes(ext)) return '📝';
-  if (['ppt', 'pptx'].includes(ext)) return '📊';
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return '📗';
-  if (ext === 'pdf') return '📕';
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return '🖼️';
-  if (['zip', 'rar', '7z'].includes(ext)) return '🗜️';
-  return '📎';
+/** 확장자를 색 있는 작은 라벨로. 이모지보다 뭐가 들었는지 바로 보인다. */
+function FileBadge({ name }: { name: string }) {
+  const ext = (name.split('.').pop() ?? '').toLowerCase();
+  const tone =
+    ext === 'pdf'
+      ? 'bg-red-50 text-red-600'
+      : ['hwp', 'hwpx', 'doc', 'docx'].includes(ext)
+        ? 'bg-blue-50 text-blue-600'
+        : ['ppt', 'pptx'].includes(ext)
+          ? 'bg-orange-50 text-orange-600'
+          : ['xls', 'xlsx', 'csv'].includes(ext)
+            ? 'bg-green-50 text-green-700'
+            : ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)
+              ? 'bg-purple-50 text-purple-600'
+              : 'bg-neutral-100 text-neutral-500';
+  return (
+    <span
+      className={`flex h-8 w-9 shrink-0 items-center justify-center rounded-md text-[9.5px] font-bold uppercase ${tone}`}
+    >
+      {ext.slice(0, 4) || 'FILE'}
+    </span>
+  );
 }
 
 function humanSize(n: number | null): string {
@@ -178,7 +191,7 @@ export function LessonPlan({
             className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed
                        border-neutral-300 bg-neutral-50/60 px-4 py-6 text-center"
           >
-            <span className="text-2xl">📎</span>
+            <Icon name="clip" size={22} className="text-neutral-300" />
             <span className="mt-1.5 text-[13px] font-semibold text-neutral-500">
               지도안·활동지·PPT 를 올려두세요
             </span>
@@ -188,7 +201,7 @@ export function LessonPlan({
           <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200">
             {files.map((f) => (
               <li key={f.id} className="flex items-center gap-2.5 bg-white px-3 py-2.5">
-                <span className="text-lg leading-none">{fileIcon(f.file_name)}</span>
+                <FileBadge name={f.file_name} />
                 <a
                   href={f.file_url}
                   target="_blank"
@@ -208,7 +221,7 @@ export function LessonPlan({
                   aria-label={`${f.file_name} 삭제`}
                   className="tap w-8 shrink-0 text-neutral-300 hover:text-red-500"
                 >
-                  ✕
+                  <Icon name="close" size={13} />
                 </button>
               </li>
             ))}

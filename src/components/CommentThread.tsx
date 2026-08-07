@@ -6,6 +6,7 @@ import { useSession } from '@/lib/session';
 import { uploadMany } from '@/lib/upload';
 import { logActivity } from '@/lib/log';
 import { ConfirmDialog, ErrorBanner, Skeleton } from '@/components/ui';
+import { Icon } from '@/components/Icon';
 import { relTime } from '@/lib/format';
 import type { CommentFile, CommentRow } from '@/lib/types';
 
@@ -143,9 +144,9 @@ export function CommentThread({ appId, appSlug }: { appId: string; appSlug: stri
                 <button
                   onClick={() => setFiles((v) => v.filter((_, j) => j !== i))}
                   aria-label={`${f.name} 빼기`}
-                  className="text-[13px] text-neutral-400"
+                  className="text-neutral-400"
                 >
-                  ✕
+                  <Icon name="close" size={13} />
                 </button>
               </span>
             ))}
@@ -169,8 +170,9 @@ export function CommentThread({ appId, appSlug }: { appId: string; appSlug: stri
             className="hidden"
             id="comment-files"
           />
-          <label htmlFor="comment-files" className="btn-ghost flex-1 cursor-pointer">
-            📷 사진 첨부
+          <label htmlFor="comment-files" className="btn-ghost flex-1 cursor-pointer gap-1.5">
+            <Icon name="camera" size={15} />
+            사진 첨부
           </label>
           <button onClick={submit} disabled={busy} className="btn-primary flex-1">
             {busy ? '올리는 중…' : '올리기'}

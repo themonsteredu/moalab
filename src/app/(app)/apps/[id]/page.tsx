@@ -19,18 +19,19 @@ import { CostInline } from '@/components/CostInline';
 import { SampleImages } from '@/components/SampleImages';
 import { AppForm } from '@/components/AppForm';
 import { Avatar } from '@/components/Brand';
+import { Icon, type IconName } from '@/components/Icon';
 import { CardSkeleton, ConfirmDialog, ErrorBanner, ProgressBar, Sheet, useToast } from '@/components/ui';
 import type { Album, AppRow, CheckRow, Photo, Round } from '@/lib/types';
 
 /** 프로그램 페이지의 목차. 이 순서가 곧 일하는 순서다. */
 const SECTIONS = [
-  { id: 'verify', icon: '✅', label: '검증' },
-  { id: 'plan', icon: '📄', label: '수업계획안' },
-  { id: 'cost', icon: '💰', label: '원가' },
-  { id: 'sample', icon: '🖼️', label: '샘플' },
-  { id: 'photos', icon: '📸', label: '수업 사진' },
-  { id: 'comment', icon: '💬', label: '댓글' },
-] as const;
+  { id: 'verify', icon: 'checkCircle', label: '검증' },
+  { id: 'plan', icon: 'doc', label: '수업계획안' },
+  { id: 'cost', icon: 'won', label: '원가' },
+  { id: 'sample', icon: 'image', label: '샘플' },
+  { id: 'photos', icon: 'camera', label: '수업 사진' },
+  { id: 'comment', icon: 'comment', label: '댓글' },
+] as const satisfies readonly { id: string; icon: IconName; label: string }[];
 
 export default function AppDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -151,10 +152,14 @@ export default function AppDetailPage() {
   }, [loading]);
 
   const goto = (sid: string) => {
-    const el = document.getElementById(sid);
-    if (!el) return;
-    const top = el.getBoundingClientRect().top + window.scrollY - 104;
-    window.scrollTo({ top, behavior: 'smooth' });
+    window.dispatchEvent(new CustomEvent('moalab:open-section', { detail: sid }));
+    setActive(sid);
+    // 펼쳐지면서 높이가 바뀌므로 한 프레임 뒤에 위치를 잡는다
+    requestAnimationFrame(() => {
+      const el = document.getElementById(sid);
+      if (!el) return;
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 100, behavior: 'smooth' });
+    });
   };
 
   const reopen = async () => {
@@ -246,7 +251,7 @@ export default function AppDetailPage() {
                 active === s.id ? 'bg-brand text-white' : 'bg-neutral-100 text-neutral-500'
               }`}
             >
-              <span className="text-[13px] leading-none">{s.icon}</span>
+              <Icon name={s.icon} size={13} />
               {s.label}
               {s.id === 'comment' && openComments > 0 && (
                 <span
@@ -287,13 +292,13 @@ export default function AppDetailPage() {
           </div>
 
           <dl className="divide-y divide-neutral-100">
-            <Prop icon="👤" label="제작자">
+            <Prop icon="user" label="제작자">
               <span className="flex items-center gap-1.5">
                 {app.creator_id && <Avatar name={nameOf(app.creator_id)} size={20} />}
                 <span className="font-semibold">{nameOf(app.creator_id)}</span>
               </span>
             </Prop>
-            <Prop icon="🔍" label="검증자">
+            <Prop icon="users" label="검증자">
               {reviewerIds.length === 0 ? (
                 <span className="text-neutral-400">미배정</span>
               ) : (
@@ -307,13 +312,13 @@ export default function AppDetailPage() {
                 </span>
               )}
             </Prop>
-            <Prop icon="📅" label="마감일">
+            <Prop icon="calendar" label="마감일">
               {app.due_date ? korDateFull(app.due_date) : <span className="text-neutral-400">없음</span>}
             </Prop>
-            <Prop icon="🎓" label="대상 학년">
+            <Prop icon="cap" label="대상 학년">
               {app.target_grade || <span className="text-neutral-400">미입력</span>}
             </Prop>
-            <Prop icon="🔗" label="배포 링크">
+            <Prop icon="link" label="배포 링크">
               {app.url ? (
                 <a href={app.url} target="_blank" rel="noreferrer" className="break-all text-brand underline">
                   {app.url}
@@ -323,7 +328,7 @@ export default function AppDetailPage() {
               )}
             </Prop>
             {app.purpose && (
-              <Prop icon="🎯" label="제작 목적">
+              <Prop icon="target" label="제작 목적">
                 <span className="whitespace-pre-wrap leading-relaxed">{app.purpose}</span>
               </Prop>
             )}
@@ -331,22 +336,24 @@ export default function AppDetailPage() {
 
           <div className="grid grid-cols-2 gap-2 border-t border-neutral-100 p-3">
             {app.url ? (
-              <a href={app.url} target="_blank" rel="noreferrer" className="btn-primary">
-                앱 열어보기 ↗
+              <a href={app.url} target="_blank" rel="noreferrer" className="btn-primary gap-1.5">
+                앱 열어보기
+                <Icon name="external" size={14} />
               </a>
             ) : (
               <span />
             )}
             {canReopen && (
-              <button onClick={() => setReopenOpen(true)} className="btn-ghost">
-                🔄 재검증 요청
+              <button onClick={() => setReopenOpen(true)} className="btn-ghost gap-1.5">
+                <Icon name="refresh" size={14} />
+                재검증 요청
               </button>
             )}
           </div>
         </div>
 
         {/* ------------------------------------------------------ 검증 */}
-        <Section id="verify" icon="✅" title="검증" desc="검증자 전원이 5항목을 통과시켜야 완료됩니다">
+        <Section id="verify" icon="checkCircle" title="검증" defaultOpen badge={`${progress}%`}>
           {!currentRound ? (
             <p className="py-6 text-center text-[13.5px] text-neutral-400">아직 검증 라운드가 없어요.</p>
           ) : reviewerIds.length === 0 ? (
@@ -405,26 +412,26 @@ export default function AppDetailPage() {
         </Section>
 
         {/* ------------------------------------------------ 수업계획안 */}
-        <Section id="plan" icon="📄" title="수업계획안" desc="수업 흐름과 지도안·활동지 파일">
+        <Section id="plan" icon="doc" title="수업계획안">
           <LessonPlan appId={id} appSlug={app.slug} initialBody={app.plan_body} />
         </Section>
 
         {/* -------------------------------------------------------- 원가 */}
-        <Section id="cost" icon="💰" title="원가" desc="이 프로그램 한 번 돌릴 때 드는 돈">
+        <Section id="cost" icon="won" title="원가">
           <CostInline appId={id} appTitle={app.title_ko} appSlug={app.slug} />
         </Section>
 
         {/* -------------------------------------------------- 샘플 이미지 */}
-        <Section id="sample" icon="🖼️" title="샘플 이미지" desc="제안서·블로그에 쓸 예시 작품">
+        <Section id="sample" icon="image" title="샘플 이미지">
           <SampleImages appId={id} appSlug={app.slug} />
         </Section>
 
         {/* --------------------------------------------------- 수업 사진 */}
         <Section
           id="photos"
-          icon="📸"
+          icon="camera"
           title="수업 사진"
-          desc="이 프로그램으로 진행한 실제 수업 기록"
+          badge={photos.length > 0 ? `${photos.length}장` : undefined}
           right={
             <Link href={`/gallery?app=${id}`} className="text-[12.5px] font-bold text-brand">
               전체 보기 ›
@@ -432,8 +439,8 @@ export default function AppDetailPage() {
           }
         >
           {albums.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 px-4 py-7 text-center">
-              <p className="text-2xl">📸</p>
+            <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 px-4 py-6 text-center">
+              <Icon name="camera" size={22} className="text-neutral-300" />
               <p className="mt-1.5 text-[13px] font-semibold text-neutral-500">아직 수업 사진이 없어요</p>
               <Link href="/gallery" className="mt-3 inline-block text-[12.5px] font-bold text-brand">
                 갤러리에서 앨범 만들기 ›
@@ -484,7 +491,7 @@ export default function AppDetailPage() {
         </Section>
 
         {/* -------------------------------------------------------- 댓글 */}
-        <Section id="comment" icon="💬" title="댓글" desc="오류는 스크린샷과 함께 올려주세요">
+        <Section id="comment" icon="comment" title="댓글" badge={openComments > 0 ? `미해결 ${openComments}` : undefined}>
           <CommentThread appId={id} appSlug={app.slug} />
         </Section>
 
@@ -558,46 +565,75 @@ export default function AppDetailPage() {
 
 /* --------------------------------------------------------------- 조각들 */
 
-function Prop({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
+function Prop({ icon, label, children }: { icon: IconName; label: string; children: React.ReactNode }) {
   return (
-    <div className="flex gap-3 px-4 py-2.5">
-      <dt className="flex w-[86px] shrink-0 items-start gap-1.5 pt-0.5 text-[12.5px] text-neutral-500">
-        <span className="text-[13px] leading-none">{icon}</span>
+    <div className="flex gap-3 px-4 py-2">
+      <dt className="flex w-[80px] shrink-0 items-center gap-1.5 text-[12.5px] text-neutral-500">
+        <Icon name={icon} size={13} className="text-neutral-400" />
         {label}
       </dt>
-      <dd className="min-w-0 flex-1 text-[13.5px] text-neutral-800">{children}</dd>
+      <dd className="min-w-0 flex-1 text-[13.5px] leading-snug text-neutral-800">{children}</dd>
     </div>
   );
 }
 
+/**
+ * 접이식 섹션.
+ * 전부 펼쳐두면 프로그램 페이지가 6000px 를 넘어가 폰에서 스크롤이 고역이라
+ * 기본은 '검증'만 열어두고 나머지는 제목만 보여준다.
+ */
 function Section({
   id,
   icon,
   title,
-  desc,
+  badge,
   right,
+  defaultOpen = false,
   children,
 }: {
   id: string;
-  icon: string;
+  icon: IconName;
   title: string;
-  desc?: string;
+  badge?: string;
   right?: React.ReactNode;
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  // 목차에서 이 섹션을 누르면 자동으로 펼친다
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === id) setOpen(true);
+    };
+    window.addEventListener('moalab:open-section', onOpen);
+    return () => window.removeEventListener('moalab:open-section', onOpen);
+  }, [id]);
+
   return (
-    <section id={id} className="mt-6 scroll-mt-28">
-      <div className="mb-2.5 flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="flex items-center gap-1.5 text-[16px] font-bold text-neutral-900">
-            <span className="text-[17px] leading-none">{icon}</span>
-            {title}
-          </h2>
-          {desc && <p className="mt-0.5 text-[12px] text-neutral-400">{desc}</p>}
+    <section id={id} className="mt-3 scroll-mt-28">
+      <div className="card overflow-hidden">
+        <div className="flex items-center gap-2 pr-3">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="flex min-h-[52px] flex-1 items-center gap-2 px-4 text-left"
+          >
+            <Icon name={icon} size={16} className={open ? 'text-brand' : 'text-neutral-400'} />
+            <span className="text-[15px] font-bold text-neutral-900">{title}</span>
+            {badge && (
+              <span className="chip bg-neutral-100 text-neutral-500">{badge}</span>
+            )}
+            <Icon
+              name="chevronDown"
+              size={15}
+              className={`ml-auto text-neutral-300 transition-transform ${open ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {open && right}
         </div>
-        {right}
+        {open && <div className="border-t border-neutral-100 p-3.5">{children}</div>}
       </div>
-      {children}
     </section>
   );
 }

@@ -513,8 +513,8 @@ function ScheduleForm({
           <div className="flex gap-2">
             {(
               [
-                ['meeting', '🔵 회의'],
-                ['visit', '🟢 학교 방문 수업'],
+                ['meeting', '회의'],
+                ['visit', '학교 방문 수업'],
               ] as [ScheduleKind, string][]
             ).map(([v, label]) => (
               <button
