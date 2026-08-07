@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { computeStatus, roundProgress } from '@/lib/status';
-import type { AppRow, AppStatus, CheckRow, Round } from '@/lib/types';
+import { isOpenFinding, type AppRow, type AppStatus, type Finding, type Round, type RoundSignoff } from '@/lib/types';
 import type { IconName } from '@/components/Icon';
 
 /** 프로그램 하나에 딸린 것들이 얼마나 채워졌는지 */
@@ -19,7 +19,12 @@ export interface AppOverview {
   app: AppRow;
   reviewerIds: string[];
   currentRound: Round | null;
-  checks: CheckRow[];
+  /** 현재 라운드의 지적 */
+  findings: Finding[];
+  /** 안 닫힌 지적 */
+  openFindings: Finding[];
+  /** 이 라운드에 '검증 완료' 를 누른 검증자 id */
+  signedIds: string[];
   /** 저장된 status 가 아니라 체크 결과로 그 자리에서 다시 계산한 값 */
   status: AppStatus;
   progress: number;
@@ -77,16 +82,29 @@ export function useAppsOverview(includeArchived = false) {
       }
 
       const roundIds = [...currentByApp.values()].map((r) => r.id);
-      let checks: CheckRow[] = [];
+      // 지적과 검증완료 표시. 앱이 몇 개든 쿼리 2개로 끝난다
+      let findings: Finding[] = [];
+      let signoffs: RoundSignoff[] = [];
       if (roundIds.length > 0) {
-        const { data } = await supabase.from('checks').select('*').in('round_id', roundIds);
-        checks = (data ?? []) as CheckRow[];
+        const [fRes, sRes] = await Promise.all([
+          supabase.from('findings').select('*').in('round_id', roundIds),
+          supabase.from('round_signoffs').select('*').in('round_id', roundIds),
+        ]);
+        findings = (fRes.data ?? []) as Finding[];
+        signoffs = (sRes.data ?? []) as RoundSignoff[];
       }
-      const checksByRound = new Map<string, CheckRow[]>();
-      for (const c of checks) {
-        const list = checksByRound.get(c.round_id) ?? [];
-        list.push(c);
-        checksByRound.set(c.round_id, list);
+      const findingsByRound = new Map<string, Finding[]>();
+      for (const f of findings) {
+        if (!f.round_id) continue;
+        const list = findingsByRound.get(f.round_id) ?? [];
+        list.push(f);
+        findingsByRound.set(f.round_id, list);
+      }
+      const signedByRound = new Map<string, string[]>();
+      for (const s of signoffs) {
+        const list = signedByRound.get(s.round_id) ?? [];
+        list.push(s.member_id);
+        signedByRound.set(s.round_id, list);
       }
 
       const count = <T extends { app_id: string }>(rows: T[] | null) => {
@@ -129,8 +147,12 @@ export function useAppsOverview(includeArchived = false) {
         apps.map((app) => {
           const reviewerIds = reviewersByApp.get(app.id) ?? [];
           const currentRound = currentByApp.get(app.id) ?? null;
-          const rc = currentRound ? (checksByRound.get(currentRound.id) ?? []) : [];
-          const st = computeStatus(rc, reviewerIds.length);
+          const rc = currentRound ? (findingsByRound.get(currentRound.id) ?? []) : [];
+          // 지금 배정된 검증자의 '검증 완료' 만 센다
+          const signedIds = (currentRound ? (signedByRound.get(currentRound.id) ?? []) : []).filter((mid) =>
+            reviewerIds.includes(mid),
+          );
+          const st = computeStatus(rc, reviewerIds.length, signedIds.length);
 
           const done: Completeness = {
             verify: st === 'done',
@@ -144,9 +166,11 @@ export function useAppsOverview(includeArchived = false) {
             app,
             reviewerIds,
             currentRound,
-            checks: rc,
+            findings: rc,
+            openFindings: rc.filter((f) => isOpenFinding(f.status)),
+            signedIds,
             status: st,
-            progress: roundProgress(rc, reviewerIds.length),
+            progress: roundProgress(reviewerIds.length, signedIds.length),
             openComments: openByApp.get(app.id) ?? 0,
             cover: sampleCover.get(app.id) ?? photoCover.get(app.id) ?? null,
             sampleCount: sampleCount.get(app.id) ?? 0,

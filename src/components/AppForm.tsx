@@ -5,7 +5,7 @@ import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { logActivity } from '@/lib/log';
-import { ensureChecks, getCurrentRound, openFirstRound, recomputeAppStatus } from '@/lib/verify';
+import { getCurrentRound, openFirstRound, recomputeAppStatus } from '@/lib/verify';
 import { ErrorBanner, MultiPicker, Sheet } from '@/components/ui';
 import type { AppRow } from '@/lib/types';
 
@@ -99,12 +99,15 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
             .from('app_reviewers')
             .insert(added.map((member_id) => ({ app_id: editing.app.id, member_id })));
         }
-        // 새로 들어온 검증자에게는 현재 라운드의 빈 체크를 만들어준다
-        const round = await getCurrentRound(editing.app.id);
-        if (round) {
-          if (added.length > 0) await ensureChecks(round.id, added);
-          if (removed.length > 0) {
-            await supabase.from('checks').delete().eq('round_id', round.id).in('member_id', removed);
+        // 빠진 검증자의 '검증 완료' 표시는 지운다 (남아 있으면 정족수가 어긋난다)
+        if (removed.length > 0) {
+          const round = await getCurrentRound(editing.app.id);
+          if (round) {
+            await supabase
+              .from('round_signoffs')
+              .delete()
+              .eq('round_id', round.id)
+              .in('member_id', removed);
           }
         }
         await recomputeAppStatus(editing.app.id);
@@ -117,7 +120,7 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
         await supabase
           .from('app_reviewers')
           .insert(reviewerIds.map((member_id) => ({ app_id: app.id, member_id })));
-        await openFirstRound(app.id, reviewerIds);
+        await openFirstRound(app.id);
 
         logActivity(session?.id, `${s} 앱 등록 — 1차 검증 시작`, `app:${app.id}`);
         onSaved(app.id);

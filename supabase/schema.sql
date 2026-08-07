@@ -80,7 +80,61 @@ create table if not exists moalab.rounds (
 create index if not exists rounds_app_idx on moalab.rounds(app_id);
 
 -- ---------------------------------------------------------------------
--- 5. 체크 결과 (라운드 × 검증자 × 항목 1~5)
+-- 5. 검증 — 캡처 + 지적 + 답변
+--
+--    검증은 "고정 5항목에 O/X" 가 아니라 **화면을 캡처해서 뭐가 이상한지 적는 것**이다.
+--    5항목 표는 정작 어디가 왜 안 되는지가 안 남아서 걷어냈다.
+--
+--    findings         지적 한 건 = 캡처 여러 장 + 무엇이 이상한지
+--    finding_replies  그 지적에 대한 답변 스레드 (수정완료 / 수정불가 / 다시확인 + 글)
+--    round_signoffs   검증자가 "이 라운드 다 봤다" 고 표시한 기록
+-- ---------------------------------------------------------------------
+create table if not exists moalab.findings (
+  id         uuid primary key default gen_random_uuid(),
+  app_id     uuid not null references moalab.apps(id) on delete cascade,
+  round_id   uuid references moalab.rounds(id) on delete set null,
+  member_id  uuid references moalab.members(id) on delete set null,   -- 지적한 사람
+  body       text not null,                        -- 무엇이 어떻게 이상한지 (필수)
+  -- open 지적됨 / fixed 수정완료 / recheck 다시확인 / wontfix 수정불가 / closed 확인완료
+  status     text not null default 'open',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists findings_app_idx   on moalab.findings(app_id, created_at desc);
+create index if not exists findings_round_idx on moalab.findings(round_id);
+
+-- 캡처 이미지. 말로만 적으면 어디를 말하는지 못 찾는다
+create table if not exists moalab.finding_files (
+  id         uuid primary key default gen_random_uuid(),
+  finding_id uuid not null references moalab.findings(id) on delete cascade,
+  file_url   text not null,
+  file_name  text,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists finding_files_finding_idx on moalab.finding_files(finding_id, sort_order);
+
+-- 답변 스레드. 제작자만이 아니라 누구나 붙일 수 있다
+create table if not exists moalab.finding_replies (
+  id         uuid primary key default gen_random_uuid(),
+  finding_id uuid not null references moalab.findings(id) on delete cascade,
+  member_id  uuid references moalab.members(id) on delete set null,
+  state      text not null,                        -- fixed | wontfix | recheck
+  body       text not null,                        -- 글 없이 상태만 바꾸는 건 막는다
+  created_at timestamptz not null default now()
+);
+create index if not exists finding_replies_finding_idx on moalab.finding_replies(finding_id, created_at);
+
+create table if not exists moalab.round_signoffs (
+  round_id  uuid not null references moalab.rounds(id) on delete cascade,
+  member_id uuid not null references moalab.members(id) on delete cascade,
+  signed_at timestamptz not null default now(),
+  primary key (round_id, member_id)
+);
+
+-- ---------------------------------------------------------------------
+-- 5-1. (구) 고정 5항목 체크 — 더 이상 화면에서 쓰지 않는다
+--      지난 기록을 지우지 않으려고 테이블만 남겨뒀다. 새 코드는 findings 를 쓴다.
 -- ---------------------------------------------------------------------
 create table if not exists moalab.checks (
   id         uuid primary key default gen_random_uuid(),
@@ -373,6 +427,7 @@ declare t text;
 begin
   foreach t in array array[
     'apps','app_reviewers','rounds','checks','check_files','comments','comment_files',
+    'findings','finding_files','finding_replies','round_signoffs',
     'cost_sheets','cost_items','cost_item_photos',
     'albums','photos','schedules','schedule_members','activity_logs',
     'plan_files','app_samples',

@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { PIECES, useAppsOverview } from '@/lib/useAppsOverview';
-import { CHECK_ITEMS, type ActivityLog, type CommentRow, type Schedule } from '@/lib/types';
+import type { ActivityLog, CommentRow, Schedule } from '@/lib/types';
 import { CardSkeleton, ErrorBanner, ProgressBar, Skeleton } from '@/components/ui';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
@@ -207,21 +207,29 @@ export default function HomePage() {
   const myTasks = useMemo(() => {
     const out: { id: string; title: string; sub: string; due: string | null; kind: 'review' | 'fix' }[] = [];
     for (const it of items) {
-      if (it.reviewerIds.includes(meId)) {
-        const mine = it.checks.filter((c) => c.member_id === meId);
-        const passed = mine.filter((c) => c.result === 'pass').length;
-        if (passed < CHECK_ITEMS.length) {
+      // 검증자인데 아직 '검증 완료' 를 안 누른 것
+      if (it.reviewerIds.includes(meId) && !it.signedIds.includes(meId)) {
+        const found = it.findings.filter((f) => f.member_id === meId).length;
+        out.push({
+          id: it.app.id,
+          title: it.app.title_ko,
+          sub: `${it.currentRound?.round_no ?? 1}차 검증${found > 0 ? ` · 내 지적 ${found}` : ''}`,
+          due: it.app.due_date,
+          kind: 'review',
+        });
+      }
+      // 내가 만든 프로그램에 답 안 한 지적이 있는 것
+      if (it.app.creator_id === meId) {
+        const need = it.openFindings.filter((f) => f.status === 'open' || f.status === 'recheck').length;
+        if (need > 0) {
           out.push({
             id: it.app.id,
             title: it.app.title_ko,
-            sub: `${it.currentRound?.round_no ?? 1}차 · ${passed}/${CHECK_ITEMS.length}`,
+            sub: `답변 대기 ${need}건`,
             due: it.app.due_date,
-            kind: 'review',
+            kind: 'fix',
           });
         }
-      }
-      if (it.app.creator_id === meId && it.status === 'fixing') {
-        out.push({ id: it.app.id, title: it.app.title_ko, sub: '수정 필요', due: it.app.due_date, kind: 'fix' });
       }
     }
     return out.sort((a, b) => (!a.due ? 1 : !b.due ? -1 : a.due < b.due ? -1 : 1));

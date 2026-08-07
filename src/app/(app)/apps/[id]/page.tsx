@@ -8,11 +8,10 @@ import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { logActivity } from '@/lib/log';
 import { openNextRound, recomputeAppStatus } from '@/lib/verify';
-import { computeStatus, roundProgress, STATUS_META } from '@/lib/status';
+import { computeStatus, openFindings, roundProgress, STATUS_META } from '@/lib/status';
 import { ddayClass, ddayLabel, korDate, korDateFull } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
-import { ReviewerChecklist } from '@/components/Checklist';
-import { RoundHistory } from '@/components/RoundHistory';
+import { Findings, FindingHistory, bundleFindings } from '@/components/Findings';
 import { CommentThread } from '@/components/CommentThread';
 import { LessonPlan } from '@/components/LessonPlan';
 import { CostInline } from '@/components/CostInline';
@@ -21,7 +20,16 @@ import { AppForm } from '@/components/AppForm';
 import { Avatar } from '@/components/Brand';
 import { Icon, type IconName } from '@/components/Icon';
 import { CardSkeleton, ConfirmDialog, ErrorBanner, ProgressBar, Sheet, useToast } from '@/components/ui';
-import type { Album, AppRow, CheckFile, CheckRow, Photo, Round } from '@/lib/types';
+import type {
+  Album,
+  AppRow,
+  Finding,
+  FindingFile,
+  FindingReply,
+  Photo,
+  Round,
+  RoundSignoff,
+} from '@/lib/types';
 
 /** 프로그램 페이지의 목차. 이 순서가 곧 일하는 순서다. */
 const SECTIONS = [
@@ -43,8 +51,10 @@ export default function AppDetailPage() {
   const [app, setApp] = useState<AppRow | null>(null);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
-  const [checks, setChecks] = useState<CheckRow[]>([]);
-  const [checkFiles, setCheckFiles] = useState<CheckFile[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const [findingFiles, setFindingFiles] = useState<FindingFile[]>([]);
+  const [findingReplies, setFindingReplies] = useState<FindingReply[]>([]);
+  const [signoffs, setSignoffs] = useState<RoundSignoff[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [openComments, setOpenComments] = useState(0);
@@ -98,22 +108,36 @@ export default function AppDetailPage() {
         setPhotos([]);
       }
 
-      if (rs.length > 0) {
-        const { data: cs } = await supabase.from('checks').select('*').in('round_id', rs.map((r) => r.id));
-        const rows = (cs ?? []) as CheckRow[];
-        setChecks(rows);
+      // 지적 + 캡처 + 답변 + 검증완료 표시. 라운드가 늘어도 쿼리 수는 그대로다
+      const { data: fds } = await supabase
+        .from('findings')
+        .select('*')
+        .eq('app_id', id)
+        .order('created_at', { ascending: false });
+      const fdRows = (fds ?? []) as Finding[];
+      setFindings(fdRows);
 
-        // 지적사항 캡처는 실패한 항목에만 붙는다 — 그 행만 물어본다
-        const failIds = rows.filter((c) => c.result === 'fail').map((c) => c.id);
-        if (failIds.length > 0) {
-          const { data: fs } = await supabase.from('check_files').select('*').in('check_id', failIds);
-          setCheckFiles((fs ?? []) as CheckFile[]);
-        } else {
-          setCheckFiles([]);
-        }
+      if (fdRows.length > 0) {
+        const ids = fdRows.map((f) => f.id);
+        const [flRes, rpRes] = await Promise.all([
+          supabase.from('finding_files').select('*').in('finding_id', ids).order('sort_order'),
+          supabase.from('finding_replies').select('*').in('finding_id', ids).order('created_at'),
+        ]);
+        setFindingFiles((flRes.data ?? []) as FindingFile[]);
+        setFindingReplies((rpRes.data ?? []) as FindingReply[]);
       } else {
-        setChecks([]);
-        setCheckFiles([]);
+        setFindingFiles([]);
+        setFindingReplies([]);
+      }
+
+      if (rs.length > 0) {
+        const { data: so } = await supabase
+          .from('round_signoffs')
+          .select('*')
+          .in('round_id', rs.map((r) => r.id));
+        setSignoffs((so ?? []) as RoundSignoff[]);
+      } else {
+        setSignoffs([]);
       }
     } catch (e) {
       setError(friendlyError(e, '앱 정보를 불러오지 못했어요. 다시 시도해주세요.'));
@@ -127,35 +151,24 @@ export default function AppDetailPage() {
   }, [load]);
 
   const currentRound = rounds[0] ?? null;
-  const currentChecks = useMemo(
-    () => (currentRound ? checks.filter((c) => c.round_id === currentRound.id) : []),
-    [checks, currentRound],
+
+  const bundle = useMemo(
+    () => bundleFindings(findings, findingFiles, findingReplies, signoffs),
+    [findings, findingFiles, findingReplies, signoffs],
   );
-  const status = computeStatus(currentChecks, reviewerIds.length);
-  const progress = roundProgress(currentChecks, reviewerIds.length);
 
-  const checksByRound = useMemo(() => {
-    const m = new Map<string, CheckRow[]>();
-    for (const c of checks) {
-      const list = m.get(c.round_id) ?? [];
-      list.push(c);
-      m.set(c.round_id, list);
-    }
-    return m;
-  }, [checks]);
-
-  const filesByCheck = useMemo(() => {
-    const m = new Map<string, CheckFile[]>();
-    for (const f of checkFiles) {
-      const list = m.get(f.check_id) ?? [];
-      list.push(f);
-      m.set(f.check_id, list);
-    }
-    return m;
-  }, [checkFiles]);
-
-  /** 지적사항에 답할 수 있는 사람 = 만든 사람 또는 원장 */
-  const canRespond = Boolean(isAdmin || (app?.creator_id && app.creator_id === session?.id));
+  const currentFindings = useMemo(
+    () => (currentRound ? findings.filter((f) => f.round_id === currentRound.id) : []),
+    [findings, currentRound],
+  );
+  // 지금 검증자로 배정된 사람의 표시만 센다.
+  // 배정에서 빠진 사람의 낡은 기록이 남아 있으면 정족수가 부풀려진다
+  const signedCount = currentRound
+    ? signoffs.filter((s) => s.round_id === currentRound.id && reviewerIds.includes(s.member_id)).length
+    : 0;
+  const status = computeStatus(currentFindings, reviewerIds.length, signedCount);
+  const progress = roundProgress(reviewerIds.length, signedCount);
+  const openCount = openFindings(currentFindings).length;
 
   /** 스크롤에 따라 목차 칩을 따라가게 */
   useEffect(() => {
@@ -195,7 +208,7 @@ export default function AppDetailPage() {
     }
     setReopenBusy(true);
     try {
-      const round = await openNextRound(id, changeNote.trim(), reviewerIds);
+      const round = await openNextRound(id, changeNote.trim());
       logActivity(session?.id, `${app?.slug} ${round.round_no}차 재검증 요청`, `app:${id}`);
       setReopenOpen(false);
       setChangeNote('');
@@ -312,7 +325,9 @@ export default function AppDetailPage() {
             </div>
             <div className="mt-3 flex items-center gap-2.5">
               <ProgressBar value={progress} className="flex-1" />
-              <span className="w-10 shrink-0 text-right text-[12px] font-bold text-neutral-500">{progress}%</span>
+              <span className="w-16 shrink-0 text-right text-[12px] font-bold text-neutral-500">
+                검증 {signedCount}/{reviewerIds.length}
+              </span>
             </div>
           </div>
 
@@ -378,15 +393,15 @@ export default function AppDetailPage() {
         </div>
 
         {/* ------------------------------------------------------ 검증 */}
-        <Section id="verify" icon="checkCircle" title="검증" defaultOpen badge={`${progress}%`}>
+        <Section
+          id="verify"
+          icon="checkCircle"
+          title="검증"
+          defaultOpen
+          badge={openCount > 0 ? `지적 ${openCount}` : `${signedCount}/${reviewerIds.length}`}
+        >
           {!currentRound ? (
             <p className="py-6 text-center text-[13.5px] text-neutral-400">아직 검증 라운드가 없어요.</p>
-          ) : reviewerIds.length === 0 ? (
-            <p className="py-6 text-center text-[13.5px] leading-relaxed text-neutral-400">
-              검증자가 배정되지 않았어요.
-              <br />
-              원장님이 위 <b>수정</b> 에서 검증자를 골라주세요.
-            </p>
           ) : (
             <>
               {currentRound.change_note && (
@@ -399,47 +414,26 @@ export default function AppDetailPage() {
                   </p>
                 </div>
               )}
-              <div className="space-y-3">
-                {[...reviewerIds]
-                  .sort((a, b) => (a === session?.id ? -1 : b === session?.id ? 1 : 0))
-                  .map((memberId) => (
-                    <ReviewerChecklist
-                      key={memberId}
-                      appId={id}
-                      appSlug={app.slug}
-                      roundId={currentRound.id}
-                      roundNo={currentRound.round_no}
-                      memberId={memberId}
-                      memberName={nameOf(memberId)}
-                      rows={currentChecks.filter((c) => c.member_id === memberId)}
-                      filesByCheck={filesByCheck}
-                      editable={memberId === session?.id}
-                      canRespond={canRespond}
-                      nameOf={nameOf}
-                      onSaved={() => {
-                        toast.show('저장했어요.');
-                        void load();
-                      }}
-                    />
-                  ))}
-              </div>
-              {!iAmReviewer && (
-                <p className="mt-3 text-center text-[12.5px] text-neutral-400">
-                  나는 이 앱의 검증자가 아니에요. 보기만 할 수 있어요.
-                </p>
-              )}
+
+              <Findings
+                appId={id}
+                appSlug={app.slug}
+                round={currentRound}
+                reviewerIds={reviewerIds}
+                bundle={bundle}
+                nameOf={nameOf}
+                onChanged={() => {
+                  toast.show('저장했어요.');
+                  void load();
+                }}
+              />
             </>
           )}
 
           {rounds.length > 1 && (
             <div className="mt-5">
               <p className="mb-2 text-[13px] font-bold text-neutral-500">지난 검증 기록</p>
-              <RoundHistory
-                rounds={rounds.slice(1)}
-                checksByRound={checksByRound}
-                filesByCheck={filesByCheck}
-                nameOf={nameOf}
-              />
+              <FindingHistory rounds={rounds.slice(1)} bundle={bundle} nameOf={nameOf} />
             </div>
           )}
         </Section>

@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { relTime } from '@/lib/format';
-import { CHECK_ITEMS, type ActivityLog, type MemberPublic } from '@/lib/types';
+import type { ActivityLog, MemberPublic } from '@/lib/types';
 import type { AppOverview } from '@/lib/useAppsOverview';
 
 export interface MemberWork {
@@ -16,7 +16,8 @@ export interface MemberWork {
   /** 손도 안 댄 검증 (5항목 중 0개) */
   reviewUntouched: { id: string; title: string }[];
   /** 하다 만 검증 */
-  reviewPartial: { id: string; title: string; passed: number }[];
+  /** 지적은 남겼지만 아직 '검증 완료' 를 안 누른 것 */
+  reviewPartial: { id: string; title: string; found: number }[];
   /** 내가 만든 프로그램 */
   madeTotal: number;
   /** 내가 만든 것 중 수정이 필요한 것 */
@@ -55,12 +56,12 @@ export function useTeamWork(
           }
           if (!it.reviewerIds.includes(m.id)) continue;
           reviewTotal++;
-          const mine = it.checks.filter((c) => c.member_id === m.id);
-          const passed = mine.filter((c) => c.result === 'pass').length;
-          const touched = mine.some((c) => c.result !== 'none');
-          if (passed >= CHECK_ITEMS.length) reviewDone++;
-          else if (!touched) reviewUntouched.push({ id: it.app.id, title: it.app.title_ko });
-          else reviewPartial.push({ id: it.app.id, title: it.app.title_ko, passed });
+          // 검증 완료를 눌렀나 / 지적이라도 남겼나 / 아무것도 안 했나
+          const signed = it.signedIds.includes(m.id);
+          const found = it.findings.filter((f) => f.member_id === m.id).length;
+          if (signed) reviewDone++;
+          else if (found === 0) reviewUntouched.push({ id: it.app.id, title: it.app.title_ko });
+          else reviewPartial.push({ id: it.app.id, title: it.app.title_ko, found });
         }
 
         return {
@@ -173,7 +174,7 @@ export function TeamBoard({ work, meId }: { work: MemberWork[]; meId: string }) 
                     className="flex items-center gap-1 rounded-md bg-neutral-100 px-1.5 py-1 text-[11px] font-semibold text-neutral-600"
                   >
                     <Icon name="search" size={10} />
-                    {a.title} {a.passed}/5
+                    {a.title} 지적 {a.found}
                   </Link>
                 ))}
                 {w.needFix.slice(0, 2).map((a) => (

@@ -8,17 +8,16 @@ import { useAppsOverview, type AppOverview } from '@/lib/useAppsOverview';
 import { STATUS_META } from '@/lib/status';
 import { ddayClass, ddayLabel, relTime } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
-import { RESPONSE_META } from '@/components/Checklist';
 import { Icon } from '@/components/Icon';
 import { CardSkeleton, EmptyState, ErrorBanner, ProgressBar } from '@/components/ui';
-import { CHECK_ITEMS, type CheckRow } from '@/lib/types';
+import { FINDING_META, type Finding } from '@/lib/types';
 
 type Tab = 'mine' | 'answer' | 'all';
 
 /**
  * 프로그램검증 — 검증만 따로 모아 보는 화면.
  * 프로그램계획(/apps)은 "무엇을 만드나"를, 여기는 "그게 돌아가나"만 본다.
- * 위에서부터 내가 지금 손대야 할 것 → 내 답을 기다리는 것 → 전체 순서다.
+ * 위에서부터 내가 지금 봐야 할 것 → 내가 답해야 할 지적 → 전체 순서다.
  */
 export default function VerifyPage() {
   const { session, isAdmin } = useSession();
@@ -27,29 +26,26 @@ export default function VerifyPage() {
   /** null = 아직 사람이 안 골랐다 → 할 일이 있는 칸을 대신 열어준다 */
   const [picked, setPicked] = useState<Tab | null>(null);
 
-  /** 내가 검증자인데 아직 미확인 항목이 남은 프로그램 */
+  /** 내가 검증자인데 아직 '검증 완료' 를 안 누른 프로그램 */
   const mine = useMemo(
     () =>
       items.filter(
-        (it) =>
-          session &&
-          it.reviewerIds.includes(session.id) &&
-          it.checks.some((c) => c.member_id === session.id && c.result === 'none'),
+        (it) => session && it.reviewerIds.includes(session.id) && !it.signedIds.includes(session.id),
       ),
     [items, session],
   );
 
-  /** 내가 만든(또는 원장이면 전부) 프로그램에서 아직 답 안 한 지적 */
+  /** 내가 만든(원장이면 전부) 프로그램에서 아직 답이 없는 지적 */
   const waiting = useMemo(() => {
-    const out: { it: AppOverview; check: CheckRow }[] = [];
+    const out: { it: AppOverview; finding: Finding }[] = [];
     for (const it of items) {
       const isOwner = isAdmin || (it.app.creator_id && it.app.creator_id === session?.id);
       if (!isOwner) continue;
-      for (const c of it.checks) {
-        if (c.result === 'fail' && c.response_state === 'none') out.push({ it, check: c });
+      for (const f of it.openFindings) {
+        if (f.status === 'open' || f.status === 'recheck') out.push({ it, finding: f });
       }
     }
-    return out.sort((a, b) => b.check.updated_at.localeCompare(a.check.updated_at));
+    return out.sort((a, b) => b.finding.updated_at.localeCompare(a.finding.updated_at));
   }, [items, isAdmin, session]);
 
   const all = useMemo(
@@ -112,27 +108,24 @@ export default function VerifyPage() {
             <EmptyState
               icon="checkCircle"
               title="답변할 지적이 없어요"
-              desc="검증자가 실패로 표시하면 여기로 모여요."
+              desc="검증자가 캡처와 함께 지적을 남기면 여기로 모여요."
             />
           ) : (
             <ul className="space-y-2.5">
-              {waiting.map(({ it, check }) => (
-                <li key={check.id}>
+              {waiting.map(({ it, finding }) => (
+                <li key={finding.id}>
                   <Link href={`/apps/${it.app.id}`} className="card block p-3.5 transition hover:bg-raised">
                     <p className="flex flex-wrap items-center gap-1.5">
-                      <span className="chip bg-red-100 text-red-700">실패</span>
+                      <span className={`chip ${FINDING_META[finding.status].chip}`}>
+                        {FINDING_META[finding.status].label}
+                      </span>
                       <span className="text-[13.5px] font-bold text-neutral-800">{it.app.title_ko}</span>
                     </p>
-                    <p className="mt-1.5 text-[12.5px] font-semibold text-neutral-500">
-                      {check.item_no}. {CHECK_ITEMS[check.item_no - 1]}
+                    <p className="mt-1.5 line-clamp-3 whitespace-pre-wrap text-[13px] leading-relaxed text-neutral-700">
+                      {finding.body}
                     </p>
-                    {check.note && (
-                      <p className="mt-1 line-clamp-3 rounded-lg bg-red-50 px-2.5 py-2 text-[13px] leading-relaxed text-red-800">
-                        {check.note}
-                      </p>
-                    )}
                     <p className="mt-1.5 text-[11.5px] text-neutral-400">
-                      {nameOf(check.member_id)} · {relTime(check.updated_at)} · 눌러서 답하기
+                      {nameOf(finding.member_id)} · {relTime(finding.created_at)} · 눌러서 답하기
                     </p>
                   </Link>
                 </li>
@@ -144,7 +137,7 @@ export default function VerifyPage() {
             <EmptyState
               icon="checkCircle"
               title="지금 볼 검증이 없어요"
-              desc="내가 검증자로 배정된 프로그램에 미확인 항목이 생기면 여기 보여요."
+              desc="내가 검증자로 배정된 프로그램이 생기면 여기 보여요."
             />
           ) : (
             <ul className="space-y-2.5">
@@ -178,8 +171,11 @@ function VerifyCard({
 }) {
   const meta = STATUS_META[it.status];
   const dday = ddayLabel(it.app.due_date);
-  const answered = it.checks.filter((c) => c.result === 'fail' && c.response_state !== 'none');
-  const openFails = it.checks.filter((c) => c.result === 'fail' && c.response_state === 'none');
+  /** 상태별로 몇 건인지 — 지적이 어디에 걸려 있는지 한눈에 */
+  const byStatus = it.openFindings.reduce<Record<string, number>>((acc, f) => {
+    acc[f.status] = (acc[f.status] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <li>
@@ -197,25 +193,21 @@ function VerifyCard({
 
         <div className="mt-2.5 flex items-center gap-2">
           <ProgressBar value={it.progress} className="flex-1" />
-          <span className="w-9 shrink-0 text-right text-[11px] font-bold tabular-nums text-neutral-500">
-            {it.progress}%
+          <span className="w-16 shrink-0 text-right text-[11px] font-bold tabular-nums text-neutral-500">
+            검증 {it.signedIds.length}/{it.reviewerIds.length}
           </span>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {dday && <span className={`chip ${ddayClass(it.app.due_date)}`}>{dday}</span>}
-          {openFails.length > 0 && (
-            <span className="chip bg-red-100 text-red-700">답변 대기 {openFails.length}</span>
-          )}
-          {answered.map((c) => {
-            const m = RESPONSE_META[c.response_state as 'fixed' | 'explained'];
-            return (
-              <span key={c.id} className={`chip ${m.chip}`}>
-                {c.item_no}번 {m.label}
+          {(['open', 'recheck', 'fixed'] as const).map((k) =>
+            byStatus[k] ? (
+              <span key={k} className={`chip ${FINDING_META[k].chip}`}>
+                {FINDING_META[k].label} {byStatus[k]}
               </span>
-            );
-          })}
-          {meId && it.checks.some((c) => c.member_id === meId && c.result === 'none') && (
+            ) : null,
+          )}
+          {meId && it.reviewerIds.includes(meId) && !it.signedIds.includes(meId) && (
             <span className="chip bg-brand-50 text-brand-700">
               <Icon name="target" size={11} className="mr-1" />내 확인 필요
             </span>

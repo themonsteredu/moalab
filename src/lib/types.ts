@@ -1,6 +1,5 @@
 export type Role = 'admin' | 'teacher';
 export type AppStatus = 'pending' | 'fixing' | 'done';
-export type CheckResult = 'none' | 'pass' | 'fail';
 export type CostCategory = 'material' | 'api' | 'instructor' | 'transport' | 'etc';
 export type PhotoTag = 'work' | 'activity' | 'board' | 'group';
 export type ScheduleKind = 'meeting' | 'visit';
@@ -47,31 +46,73 @@ export interface Round {
   closed_at: string | null;
 }
 
-export interface CheckRow {
+/* ------------------------------------------------------------------ 검증
+   검증은 "고정 5항목에 O/X" 가 아니라
+   **화면을 캡처해서 뭐가 이상한지 적고, 거기에 답을 다는 것**이다. */
+
+/** 지적 한 건의 상태. open·fixed·recheck 는 아직 살아있는 것으로 센다 */
+export type FindingStatus = 'open' | 'fixed' | 'recheck' | 'wontfix' | 'closed';
+
+/** 답변에서 고를 수 있는 것 (글은 필수) */
+export type ReplyState = 'fixed' | 'wontfix' | 'recheck';
+
+export interface Finding {
   id: string;
-  round_id: string;
-  member_id: string;
-  item_no: number;
-  result: CheckResult;
-  note: string | null;
+  app_id: string;
+  round_id: string | null;
+  /** 지적한 사람 */
+  member_id: string | null;
+  body: string;
+  status: FindingStatus;
+  created_at: string;
   updated_at: string;
-  /** 제작자·원장이 남긴 답변 */
-  response: string | null;
-  response_state: ResponseState;
-  responded_by: string | null;
-  responded_at: string | null;
 }
 
-/** 지적사항에 대한 답변 상태 */
-export type ResponseState = 'none' | 'fixed' | 'explained';
-
-/** 지적사항 캡처 */
-export interface CheckFile {
+export interface FindingFile {
   id: string;
-  check_id: string;
+  finding_id: string;
   file_url: string;
   file_name: string | null;
+  sort_order: number;
   created_at: string;
+}
+
+export interface FindingReply {
+  id: string;
+  finding_id: string;
+  member_id: string | null;
+  state: ReplyState;
+  body: string;
+  created_at: string;
+}
+
+export interface RoundSignoff {
+  round_id: string;
+  member_id: string;
+  signed_at: string;
+}
+
+export const FINDING_META: Record<
+  FindingStatus,
+  { label: string; chip: string; box: string; open: boolean }
+> = {
+  open: { label: '지적됨', chip: 'bg-red-100 text-red-700', box: 'border-red-200', open: true },
+  fixed: { label: '수정완료', chip: 'bg-blue-100 text-blue-700', box: 'border-blue-200', open: true },
+  recheck: { label: '다시확인', chip: 'bg-amber-100 text-amber-800', box: 'border-amber-200', open: true },
+  wontfix: { label: '수정불가', chip: 'bg-neutral-200 text-neutral-600', box: 'border-neutral-200', open: false },
+  closed: { label: '확인완료', chip: 'bg-green-100 text-green-800', box: 'border-green-200', open: false },
+};
+
+/** 답변 버튼 3개 — 이 순서 그대로 화면에 나온다 */
+export const REPLY_STATES: { value: ReplyState; label: string; on: string; hint: string }[] = [
+  { value: 'fixed', label: '수정완료', on: 'bg-blue-600 text-white', hint: '무엇을 어떻게 고쳤는지 적어주세요.' },
+  { value: 'wontfix', label: '수정불가', on: 'bg-neutral-600 text-white', hint: '왜 이대로 두는지 적어주세요.' },
+  { value: 'recheck', label: '다시확인', on: 'bg-amber-500 text-white', hint: '무엇을 더 봐야 하는지 적어주세요.' },
+];
+
+/** 아직 살아있는 지적인가 (프로그램을 '수정 필요' 로 만드는 것) */
+export function isOpenFinding(s: FindingStatus): boolean {
+  return FINDING_META[s].open;
 }
 
 export interface CommentRow {
@@ -244,17 +285,6 @@ export const TRAINING_STATES: { value: TrainingState; label: string; cls: string
   { value: 'doing', label: '진행 중', cls: 'bg-amber-100 text-amber-800', on: 'bg-amber-500 text-white' },
   { value: 'done', label: '이수', cls: 'bg-green-100 text-green-800', on: 'bg-green-600 text-white' },
 ];
-
-/** 고정 5항목 — 절대 늘리거나 줄이지 말 것 (DB check 제약과 맞물림) */
-export const CHECK_ITEMS = [
-  '폰에서 정상적으로 열린다',
-  '게이트 코드 / 반코드 입력이 된다',
-  'AI 응답이 정상이다 (오류·무응답 없음)',
-  '학생 입력값이 저장된다',
-  '오탈자·용어·학년 수준 확인',
-] as const;
-
-export const CHECK_ITEM_COUNT = CHECK_ITEMS.length;
 
 export const COST_CATEGORIES: { value: CostCategory; label: string; color: string }[] = [
   { value: 'material', label: '재료비', color: '#F26522' },

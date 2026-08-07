@@ -1,5 +1,4 @@
-import type { AppStatus, CheckRow } from './types';
-import { CHECK_ITEM_COUNT } from './types';
+import { isOpenFinding, type AppStatus, type Finding } from './types';
 
 export const STATUS_META: Record<AppStatus, { label: string; chip: string; dot: string }> = {
   done: { label: '검증 완료', chip: 'bg-green-100 text-green-800', dot: 'bg-green-500' },
@@ -8,23 +7,31 @@ export const STATUS_META: Record<AppStatus, { label: string; chip: string; dot: 
 };
 
 /**
- * 앱 상태는 사람이 고르지 않는다. 현재 라운드의 체크 결과로만 결정된다.
- *  - 검증자 전원 × 5항목 전부 pass → done
- *  - 하나라도 fail                → fixing
- *  - 그 외                        → pending
+ * 앱 상태는 사람이 고르지 않는다. 현재 라운드의 지적 + 검증 완료 표시로만 결정된다.
+ *  - 안 닫힌 지적이 하나라도 있으면          → fixing 수정 필요
+ *  - 지적 0건 + 검증자 전원이 '검증 완료'    → done
+ *  - 그 외                                   → pending
+ *
+ * 지적이 없다고 바로 done 이 되면 "아무도 안 봤다" 와 "다 봤는데 문제없다" 가
+ * 구분되지 않는다. 그래서 검증자의 명시적인 '검증 완료' 를 요구한다.
  */
-export function computeStatus(checks: Pick<CheckRow, 'result'>[], reviewerCount: number): AppStatus {
-  if (checks.some((c) => c.result === 'fail')) return 'fixing';
+export function computeStatus(
+  findings: Pick<Finding, 'status'>[],
+  reviewerCount: number,
+  signedCount: number,
+): AppStatus {
+  if (findings.some((f) => isOpenFinding(f.status))) return 'fixing';
   if (reviewerCount === 0) return 'pending';
-  const need = reviewerCount * CHECK_ITEM_COUNT;
-  const passed = checks.filter((c) => c.result === 'pass').length;
-  return passed >= need ? 'done' : 'pending';
+  return signedCount >= reviewerCount ? 'done' : 'pending';
 }
 
-/** 진행률 0~100 (현재 라운드 기준, pass 한 칸 수 / 전체 칸 수) */
-export function roundProgress(checks: Pick<CheckRow, 'result'>[], reviewerCount: number): number {
-  const need = reviewerCount * CHECK_ITEM_COUNT;
-  if (need === 0) return 0;
-  const passed = checks.filter((c) => c.result === 'pass').length;
-  return Math.min(100, Math.round((passed / need) * 100));
+/** 진행률 0~100 — 검증자 중 몇 명이 '검증 완료' 를 눌렀나 */
+export function roundProgress(reviewerCount: number, signedCount: number): number {
+  if (reviewerCount === 0) return 0;
+  return Math.min(100, Math.round((signedCount / reviewerCount) * 100));
+}
+
+/** 안 닫힌 지적만 */
+export function openFindings<T extends Pick<Finding, 'status'>>(findings: T[]): T[] {
+  return findings.filter((f) => isOpenFinding(f.status));
 }
