@@ -182,6 +182,14 @@ export interface PlanFile {
   file_url: string;
   file_name: string;
   file_size: number | null;
+  /** 올린 사람 */
+  member_id: string | null;
+  /** 이번 판에서 바꾼 것 */
+  note: string | null;
+  /** 같은 문서의 판들은 같은 group_id 를 갖는다 */
+  group_id: string;
+  /** 1판, 2판, … 클수록 최신 */
+  version: number;
   created_at: string;
 }
 

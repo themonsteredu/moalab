@@ -333,6 +333,19 @@ create table if not exists moalab.plan_files (
 );
 create index if not exists plan_files_app_idx on moalab.plan_files(app_id, created_at);
 
+-- 수업계획안은 A 가 올리고 → A 가 고쳐 올리고 → B 가 또 고쳐 올린다.
+-- 평면 목록으로 쌓으면 '지도안_최종2.hwp' 가 여러 개 생겨서 뭐가 최신인지 모른다.
+-- 그래서 같은 문서의 판(版)을 group_id 로 묶고 version 으로 줄을 세운다.
+alter table moalab.plan_files add column if not exists member_id uuid
+  references moalab.members(id) on delete set null;   -- 올린 사람
+alter table moalab.plan_files add column if not exists note     text;   -- 이번에 바꾼 것
+alter table moalab.plan_files add column if not exists group_id uuid;   -- 같은 문서면 같은 값
+alter table moalab.plan_files add column if not exists version  int not null default 1;
+
+-- 예전에 올린 파일은 각자 하나의 문서(1판)로 본다
+update moalab.plan_files set group_id = id where group_id is null;
+create index if not exists plan_files_group_idx on moalab.plan_files(group_id, version desc);
+
 -- ---------------------------------------------------------------------
 -- 11. 프로그램 샘플 이미지 — 제안서·소개용 예시 작품
 --     (수업 현장 사진은 albums/photos 쪽이다. 목적이 다르다)

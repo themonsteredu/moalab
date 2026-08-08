@@ -151,6 +151,17 @@ export default function PrintPage() {
 
   const openFindings = findings.filter((f) => FINDING_META[f.status].open);
 
+  /** 계획안은 문서별 최신 판만 싣는다 (지난 판까지 넣으면 문서가 지저분해진다) */
+  const latestPlans = useMemo(() => {
+    const m = new Map<string, PlanFile>();
+    for (const f of planFiles) {
+      const g = f.group_id ?? f.id;
+      const cur = m.get(g);
+      if (!cur || f.version > cur.version) m.set(g, f);
+    }
+    return [...m.values()].sort((a, b) => a.file_name.localeCompare(b.file_name, 'ko'));
+  }, [planFiles]);
+
   if (sessionLoading || !session || loading) {
     return <p className="p-10 text-center text-[14px] text-neutral-500">인쇄할 내용을 준비하고 있어요…</p>;
   }
@@ -269,18 +280,27 @@ export default function PrintPage() {
 
       {/* ------------------------------------------------ 수업계획안 */}
       {parts.has('plan') && (
-        <Section title="수업계획안" sub={`첨부 ${planFiles.length}개`}>
-          {planFiles.length === 0 ? (
+        <Section title="수업계획안" sub={`문서 ${latestPlans.length}개`}>
+          {latestPlans.length === 0 ? (
             <Empty>첨부된 계획안이 없습니다.</Empty>
           ) : (
             <>
               <ul className="space-y-1">
-                {planFiles.map((f) => (
-                  <li key={f.id} className="flex items-baseline justify-between gap-3 border-b border-neutral-200 py-1.5">
-                    <span className="text-[12.5px]">{f.file_name}</span>
-                    <span className="shrink-0 text-[11px] text-neutral-500">
-                      {f.file_size ? `${Math.round(f.file_size / 1024)}KB` : ''}
-                    </span>
+                {latestPlans.map((f) => (
+                  <li key={f.id} className="border-b border-neutral-200 py-1.5">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[12.5px]">
+                        {f.file_name}
+                        {f.version > 1 && <span className="ml-1.5 font-bold">{f.version}판</span>}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-neutral-500">
+                        {nameOf(f.member_id)} · {korDateFull(f.created_at.slice(0, 10))}
+                        {f.file_size ? ` · ${Math.round(f.file_size / 1024)}KB` : ''}
+                      </span>
+                    </div>
+                    {f.note && (
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-neutral-600">{f.note}</p>
+                    )}
                   </li>
                 ))}
               </ul>
