@@ -28,6 +28,7 @@ const cases = [
   ['The schema must be one of the following: public, graphql_public', 'Exposed schemas'],
   // Storage
   ['Bucket not found', '저장소'],
+  ['Bucket not found (moalab-plans)', "'moalab-plans'"],
   // 권한
   ['new row violates row-level security policy for table "notices"', '권한'],
   // 네트워크

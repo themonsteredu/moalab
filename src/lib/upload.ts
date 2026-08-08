@@ -31,7 +31,9 @@ export async function uploadFile(
     contentType: blob.type || file.type || 'application/octet-stream',
     upsert: false,
   });
-  if (error) throw error;
+  // 어느 버킷이 문제인지 메시지에 남긴다 — 폰에서는 콘솔을 못 보니
+  // "저장소가 없다" 만 뜨면 어느 걸 만들어야 하는지 알 수 없다
+  if (error) throw new Error(`${error.message} (${bucket})`);
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return { url: data.publicUrl, name: file.name, size: blob.size };

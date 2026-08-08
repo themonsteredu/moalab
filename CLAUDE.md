@@ -49,7 +49,8 @@ cp .env.example .env.local
 
 # 3) DB 스키마
 #    Supabase 대시보드 > SQL Editor 에 supabase/schema.sql 을 통째로 붙여넣고 실행
-#    (여러 번 실행해도 안전 / Storage 버킷 3개와 초기 멤버 5명까지 같이 만들어짐)
+#    (여러 번 실행해도 안전 / Storage 버킷 5개와 초기 멤버 5명까지 같이 만들어짐)
+#    ※ 예전에 돌린 DB 라면 그 뒤에 생긴 버킷이 없다 → supabase/storage.sql 만 다시 붙여넣기
 
 # 4) ★ Supabase 설정 > API > Exposed schemas 에 moalab 추가 후 Save
 #    이걸 빼먹으면 앱이 데이터를 하나도 못 읽는다
@@ -383,6 +384,7 @@ playwright 는 아이콘을 다시 만들 때만 필요해서 `package.json` 에
 
 ```
 supabase/schema.sql          moalab 스키마·테이블·RLS·Storage 버킷·초기 멤버 (한 번에 실행)
+supabase/storage.sql         Storage 버킷 5개만 따로 — 버킷이 나중에 늘어났을 때 이것만 다시 돌린다
 supabase/seed-apps.sql       노션에서 이관한 웹앱 21개 일괄 등록 (재실행 안전)
 
 src/lib/

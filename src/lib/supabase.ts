@@ -71,8 +71,10 @@ export function friendlyError(e: unknown, fallback = '저장이 안 됐어요. �
   if (missingColumn || /PGRST204/i.test(raw))
     return `${missingColumn ? `'${missingColumn}' ` : ''}칸이 아직 DB 에 없어요. 관리자에게 "moalab SQL 실행"이라고 알려주세요. (막 만들었다면 20초쯤 뒤 다시 눌러주세요)`;
   // 저장소(Storage) 쪽은 테이블과 원인이 달라서 따로 알려준다
-  if (/Bucket not found|bucket does not exist/i.test(raw))
-    return '첨부를 넣을 저장소가 아직 안 만들어졌어요. 관리자에게 "Storage 버킷 SQL 실행"이라고 알려주세요.';
+  if (/Bucket not found|bucket does not exist/i.test(raw)) {
+    const bucket = raw.match(/\((moalab-[\w-]+)\)/)?.[1];
+    return `첨부를 넣을 저장소${bucket ? ` '${bucket}'` : ''}가 아직 안 만들어졌어요. 관리자에게 "Storage 버킷 SQL 실행"이라고 알려주세요.`;
+  }
   if (/mime type|not supported/i.test(raw))
     return '이 형식의 파일은 아직 올릴 수 없어요. 관리자에게 알려주세요.';
   if (/row-level security|permission denied|JWT|Unauthorized/i.test(raw))
