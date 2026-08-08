@@ -53,8 +53,23 @@ export function friendlyError(e: unknown, fallback = '저장이 안 됐어요. �
   if (/violates foreign key/i.test(raw)) return '연결된 항목이 없어졌어요. 새로고침 후 다시 해주세요.';
   if (/Failed to fetch|NetworkError|fetch failed|Load failed/i.test(raw))
     return '인터넷 연결이 불안정해요. 잠시 후 다시 눌러주세요.';
-  if (/schema must be one of|PGRST106|does not exist.*schema|Could not find the table/i.test(raw))
-    return 'DB 설정이 덜 끝났어요. Supabase 설정 > API > Exposed schemas 에 moalab 을 추가해주세요.';
+  /* ------------------------------------------------------------------
+     아래 세 가지는 원인이 전혀 다른데 예전엔 한 문구로 뭉쳐서 오진을 했다.
+       · PGRST106 : 스키마 자체가 노출 안 됨      → Exposed schemas 문제
+       · PGRST205 : 그 '표' 가 없음               → SQL 을 안 돌린 것
+       · PGRST204 : 그 '컬럼' 이 없음             → SQL 을 덜 돌린 것
+     표·컬럼 이름을 그대로 짚어줘야 무엇을 실행해야 할지 알 수 있다.
+  ------------------------------------------------------------------ */
+  if (/schema must be one of|PGRST106/i.test(raw))
+    return 'Supabase 설정 > API > Exposed schemas 에 moalab 을 추가해주세요.';
+
+  const missingTable = raw.match(/Could not find the table '(?:[\w]+\.)?([\w]+)'/i)?.[1];
+  if (missingTable || /PGRST205/i.test(raw))
+    return `${missingTable ? `'${missingTable}' ` : ''}표가 아직 DB 에 없어요. 관리자에게 "moalab SQL 실행"이라고 알려주세요. (막 만들었다면 20초쯤 뒤 다시 눌러주세요)`;
+
+  const missingColumn = raw.match(/Could not find the '([\w]+)' column/i)?.[1];
+  if (missingColumn || /PGRST204/i.test(raw))
+    return `${missingColumn ? `'${missingColumn}' ` : ''}칸이 아직 DB 에 없어요. 관리자에게 "moalab SQL 실행"이라고 알려주세요. (막 만들었다면 20초쯤 뒤 다시 눌러주세요)`;
   // 저장소(Storage) 쪽은 테이블과 원인이 달라서 따로 알려준다
   if (/Bucket not found|bucket does not exist/i.test(raw))
     return '첨부를 넣을 저장소가 아직 안 만들어졌어요. 관리자에게 "Storage 버킷 SQL 실행"이라고 알려주세요.';

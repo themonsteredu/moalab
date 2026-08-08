@@ -386,6 +386,7 @@ src/app/(app)/
                              메뉴 하나가 폴더 하나. 순서는 BottomNav.tsx 가 정한다.
 src/app/print/[id]/          인쇄 / PDF 저장 (레이아웃 밖 — 사이드바·탭 없음)
 scripts/make-icons.mjs       로고에서 앱 아이콘 뽑기
+scripts/friendly-error.test.mjs  에러 문구 갈래 테스트 (node 로 바로 실행)
 
 src/components/
   ui.tsx                     Sheet, ConfirmDialog, Skeleton, EmptyState, Toast 등
@@ -450,6 +451,11 @@ src/components/
   `Failed to fetch` (X) → "인터넷 연결이 불안정해요. 잠시 후 다시 눌러주세요." (O)
   변환은 `friendlyError()` 에서 한다.
   · Storage(버킷 없음·형식 미지원)는 테이블 에러와 원인이 달라 따로 문구를 준다
+  · **원인이 다른 것을 한 문구로 뭉치지 말 것.** `PGRST106`(스키마 미노출) /
+    `PGRST205`(표 없음) / `PGRST204`(컬럼 없음)를 예전엔 하나로 묶어서,
+    정작 `notice_files` 표가 없는 걸 "Exposed schemas 에 moalab 을 추가하세요" 로
+    안내해 원장이 엉뚱한 곳을 봤다. 지금은 **없는 표·칸 이름을 그대로 짚어준다.**
+    회귀를 막으려고 `scripts/friendly-error.test.mjs` 를 뒀다 (`node` 로 바로 실행)
   · **못 알아본 에러는 원문을 120자까지 괄호로 덧붙인다.** 폰에서는 콘솔을 못 보니
     "저장이 안 됐어요" 만 띄우면 무엇도 알 수 없다 — 캡처해서 물어볼 수 있어야 한다
 
