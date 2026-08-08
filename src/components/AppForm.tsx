@@ -108,7 +108,6 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
     if (!/^[a-z0-9-]+$/.test(s)) return setError('앱 이름은 영문 소문자·숫자·하이픈만 쓸 수 있어요.');
     if (!titleKo.trim()) return setError('한글 표시명을 입력해주세요.');
     if (!creatorId) return setError('제작자를 골라주세요.');
-    if (reviewerIds.length === 0) return setError('검증자를 최소 1명 골라주세요.');
     if (url.trim() && !/^https?:\/\//i.test(url.trim()))
       return setError('배포 링크는 http:// 또는 https:// 로 시작해야 해요.');
 
@@ -158,9 +157,12 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
         const { data: app, error: insErr } = await supabase.from('apps').insert(payload).select().single();
         if (insErr) throw insErr;
 
-        await supabase
-          .from('app_reviewers')
-          .insert(reviewerIds.map((member_id) => ({ app_id: app.id, member_id })));
+        // 검증자는 안 골라도 된다 — 각자 프로그램 화면에서 자기 이름을 눌러 참여한다
+        if (reviewerIds.length > 0) {
+          await supabase
+            .from('app_reviewers')
+            .insert(reviewerIds.map((member_id) => ({ app_id: app.id, member_id })));
+        }
         await openFirstRound(app.id);
 
         logActivity(session?.id, `${s} 앱 등록 — 1차 검증 시작`, `app:${app.id}`);
@@ -355,10 +357,11 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
         </div>
 
         <div>
-          <span className="label">검증자 (1~3명)</span>
-          <MultiPicker options={members} selected={reviewerIds} onChange={setReviewerIds} max={3} />
-          <p className="mt-2 text-[12px] text-neutral-500">
-            고른 사람 수 × 5개 항목만큼 체크 칸이 자동으로 만들어져요.
+          <span className="label">검증자 — 안 골라도 돼요</span>
+          <MultiPicker options={members} selected={reviewerIds} onChange={setReviewerIds} max={6} />
+          <p className="mt-2 text-[12px] leading-relaxed text-neutral-500">
+            비워두고 저장해도 괜찮아요. 검증은 <b>각자 프로그램 화면에서 자기 이름을 눌러</b>{' '}
+            참여해요. 여기서 미리 정해두고 싶을 때만 고르세요.
           </p>
         </div>
       </div>
