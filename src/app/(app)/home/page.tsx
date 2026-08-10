@@ -13,6 +13,7 @@ import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { CalendarLegend, KIND_META, MonthCalendar, type CalEntry } from '@/components/MonthCalendar';
 import { TeamBoard, useTeamWork } from '@/components/TeamBoard';
+import { PushToggle } from '@/components/PushToggle';
 import { Sparkline, StatCard, Timeline, WeekBars, type TimelineRow } from '@/components/Charts';
 import { ddayClass, ddayLabel, hhmm, korDate, korDateFull, parseDate, relTime, today, toISODate } from '@/lib/format';
 
@@ -312,6 +313,12 @@ export default function HomePage() {
         >
           로그아웃
         </button>
+      </div>
+
+      {/* 알림 — 강사도 여기서 켠다 (관리 화면은 원장만 들어갈 수 있다).
+          이미 켠 사람에게는 한 줄로 접힌다 */}
+      <div className="mb-4">
+        <PushToggle />
       </div>
 
       {error && (
