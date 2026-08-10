@@ -117,7 +117,13 @@ export default function ExpensePage() {
 
   const totals = useMemo(() => expenseTotals(shown, receiptCount), [shown, receiptCount]);
   const days = useMemo(() => groupByDate(shown), [shown]);
-  const filtered = cat !== 'all' || who !== 'all' || onlyNoReceipt;
+  const filterCount = (cat !== 'all' ? 1 : 0) + (who !== 'all' ? 1 : 0) + (onlyNoReceipt ? 1 : 0);
+  const filtered = filterCount > 0;
+  const resetFilters = () => {
+    setCat('all');
+    setWho('all');
+    setOnlyNoReceipt(false);
+  };
 
   const toggleApprove = async (r: Expense) => {
     if (!isAdmin) return;
@@ -255,32 +261,66 @@ export default function ExpensePage() {
           )}
         </div>
 
-        {/* 필터 */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-1.5">
-            <FilterChip on={cat === 'all'} onClick={() => setCat('all')}>
-              전체
-            </FilterChip>
-            {EXPENSE_CATEGORIES.map((c) => (
-              <FilterChip key={c.value} on={cat === c.value} onClick={() => setCat(c.value)}>
-                {c.label}
-              </FilterChip>
-            ))}
+        {/* 필터 — 접어둔다. 칩을 다 늘어놓으면 폰에서 네 줄(200px)을 먹고
+            그만큼 정작 봐야 할 지출 목록이 화면 밖으로 밀린다.
+            (갤러리와 같은 방식) */}
+        <details className="card overflow-hidden" open={filterCount > 0}>
+          <summary className="tap cursor-pointer list-none px-4 text-[14px] font-bold text-neutral-700">
+            필터
+            {filterCount > 0 && <span className="chip ml-1 bg-brand text-white">{filterCount}</span>}
+          </summary>
+          <div className="space-y-3 border-t border-neutral-100 p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="ex-f-cat">
+                  구분
+                </label>
+                <select
+                  id="ex-f-cat"
+                  value={cat}
+                  onChange={(e) => setCat(e.target.value as 'all' | ExpenseCategory)}
+                  className="field"
+                >
+                  <option value="all">전체</option>
+                  {EXPENSE_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="ex-f-who">
+                  결의자
+                </label>
+                <select id="ex-f-who" value={who} onChange={(e) => setWho(e.target.value)} className="field">
+                  <option value="all">전원</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <label className="flex min-h-[44px] items-center gap-3 rounded-xl bg-neutral-50 px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={onlyNoReceipt}
+                onChange={(e) => setOnlyNoReceipt(e.target.checked)}
+                className="h-5 w-5 accent-[#F26522]"
+              />
+              <span className="text-[14px] font-semibold">영수증 없는 것만</span>
+            </label>
+
+            {filterCount > 0 && (
+              <button onClick={resetFilters} className="btn-ghost w-full">
+                필터 초기화
+              </button>
+            )}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            <FilterChip on={who === 'all'} onClick={() => setWho('all')}>
-              전원
-            </FilterChip>
-            {members.map((m) => (
-              <FilterChip key={m.id} on={who === m.id} onClick={() => setWho(m.id)}>
-                {m.name}
-              </FilterChip>
-            ))}
-            <FilterChip on={onlyNoReceipt} onClick={() => setOnlyNoReceipt((v) => !v)}>
-              영수증 없는 것만
-            </FilterChip>
-          </div>
-        </div>
+        </details>
 
         {/* 날짜별 목록 */}
         {rows === null ? (
@@ -296,14 +336,7 @@ export default function ExpensePage() {
             }
             action={
               filtered ? (
-                <button
-                  onClick={() => {
-                    setCat('all');
-                    setWho('all');
-                    setOnlyNoReceipt(false);
-                  }}
-                  className="btn-ghost px-5"
-                >
+                <button onClick={resetFilters} className="btn-ghost px-5">
                   필터 지우기
                 </button>
               ) : (
@@ -459,27 +492,6 @@ export default function ExpensePage() {
 
       {toast.node}
     </>
-  );
-}
-
-function FilterChip({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition ${
-        on ? 'border-brand bg-brand text-white' : 'border-neutral-200 bg-surface text-neutral-600'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

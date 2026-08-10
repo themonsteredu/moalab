@@ -329,9 +329,12 @@ export default function HomePage() {
 
       <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-5">
         {/* ======================================================= 본문 */}
-        <div className="space-y-4 lg:col-span-2">
+        {/* 순서를 역할에 따라 바꾼다 (CLAUDE.md 1번 원칙).
+            강사는 '내 할 일' 부터, 원장은 '전체 현황·일정' 부터.
+            내용은 그대로 두고 order-* 만 다르게 주므로 분기는 이 숫자들뿐이다. */}
+        <div className="flex flex-col gap-4 lg:col-span-2">
           {/* 달력 */}
-          <section className="card p-3.5">
+          <section className={`card p-3.5 ${isAdmin ? 'order-1' : 'order-4'}`}>
             <div className="mb-2.5 flex items-center gap-2">
               <button onClick={() => moveMonth(-1)} aria-label="이전 달" className="tap w-9 rounded-lg bg-neutral-100 text-neutral-400">
                 ‹
@@ -387,7 +390,7 @@ export default function HomePage() {
           </section>
 
           {/* 통계 3장 */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className={`grid grid-cols-2 gap-3 lg:grid-cols-3 ${isAdmin ? 'order-2' : 'order-5'}`}>
             <StatCard
               icon={<Icon name="checkCircle" size={15} />}
               label="검증 완료"
@@ -428,7 +431,7 @@ export default function HomePage() {
           </div>
 
           {/* 마감 타임라인 */}
-          <section className="card p-4">
+          <section className="card p-4 order-3">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[15px] font-bold">마감 타임라인</h2>
               <span className="text-[11.5px] text-neutral-400">앞으로 4주</span>
@@ -442,7 +445,7 @@ export default function HomePage() {
 
           {/* 공지 — 전체 공지를 홈에서도 훑을 수 있게 */}
           {noticeCards.total > 0 && (
-            <section>
+            <section className={isAdmin ? 'order-4' : 'order-2'}>
               <div className="mb-2.5 flex items-center justify-between">
                 <h2 className="text-[15px] font-bold">
                   공지사항{' '}
@@ -481,7 +484,7 @@ export default function HomePage() {
           )}
 
           {/* 내 할 일 */}
-          <section>
+          <section className={isAdmin ? 'order-5' : 'order-1'}>
             <div className="mb-2.5 flex items-center justify-between">
               <h2 className="text-[15px] font-bold">
                 내 할 일 {myTasks.length > 0 && <span className="text-brand">{myTasks.length}</span>}
@@ -521,8 +524,8 @@ export default function HomePage() {
             )}
           </section>
 
-          {/* 팀 현황 */}
-          <section>
+          {/* 팀 현황 — 둘 다 맨 아래 */}
+          <section className="order-6">
             <div className="mb-2.5 flex items-center justify-between">
               <h2 className="text-[15px] font-bold">팀 현황 — 누가 뭘 하고 있나</h2>
               <span className="text-[11.5px] text-neutral-400">미착수 {untouched}건</span>
@@ -532,7 +535,10 @@ export default function HomePage() {
         </div>
 
         {/* ======================================================= 오른쪽 */}
-        <div className="mt-4 space-y-4 lg:mt-0">
+        {/* PC 전용 오른쪽 묶음. 폰에서는 감춘다 —
+            아래로 483px 이 더 붙어서 정작 내 할 일·팀 현황이 저 밑으로 밀렸다.
+            (활동 로그는 관리 화면에, 프로그램 구성은 /apps 카드 배지에 그대로 있다) */}
+        <div className="hidden space-y-4 lg:mt-0 lg:block">
           {/* 팀 활동 */}
           <section className="card p-4">
             <div className="mb-3 flex items-center justify-between">

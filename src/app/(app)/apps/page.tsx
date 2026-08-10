@@ -223,7 +223,7 @@ export default function AppsPage() {
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
             aria-label="정렬"
-            className="h-8 rounded-lg border border-neutral-300 bg-surface px-2 text-[12.5px] font-semibold text-neutral-600"
+            className="h-11 rounded-lg border border-neutral-300 bg-surface px-2 text-[12.5px] font-semibold text-neutral-600"
           >
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>
@@ -259,7 +259,9 @@ export default function AppsPage() {
               {!searching && groups.length > 1 ? (
                 <button
                   onClick={() => setOpenTopics(allOpen ? [] : groups.map((g) => g.topic))}
-                  className="text-[12px] font-bold text-neutral-400"
+                  /* py 로 손가락이 닿는 면을 넓히고 -my 로 되돌린다 —
+                     글씨 줄은 그대로인데 탭 영역만 44px 이 된다 */
+                  className="-my-3 py-3 text-[12px] font-bold text-neutral-400"
                 >
                   {allOpen ? '전부 접기' : '전부 펼치기'}
                 </button>
@@ -270,14 +272,14 @@ export default function AppsPage() {
                 <span className="flex items-center gap-3">
                   <button
                     onClick={() => setMoveOpen(true)}
-                    className="flex items-center gap-1 text-[12px] font-bold text-brand"
+                    className="-my-3 flex items-center gap-1 py-3 text-[12px] font-bold text-brand"
                   >
                     <Icon name="check" size={13} />
                     주제로 옮기기
                   </button>
                   <button
                     onClick={() => setTopicsOpen(true)}
-                    className="flex items-center gap-1 text-[12px] font-bold text-neutral-400"
+                    className="-my-3 flex items-center gap-1 py-3 text-[12px] font-bold text-neutral-400"
                   >
                     <Icon name="tree" size={13} />
                     주제 관리

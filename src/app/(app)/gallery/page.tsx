@@ -262,7 +262,7 @@ function GalleryInner() {
               </div>
             </div>
 
-            <label className="flex items-center gap-3 rounded-xl bg-neutral-50 px-3 py-2.5">
+            <label className="flex min-h-[44px] items-center gap-3 rounded-xl bg-neutral-50 px-3 py-2.5">
               <input
                 type="checkbox"
                 checked={noFaceOnly}

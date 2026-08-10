@@ -113,12 +113,15 @@ export function Timeline({
   }
   return (
     <div>
-      <div className="space-y-2">
+      {/* 막대 줄을 누르면 그 프로그램으로 간다.
+          줄 높이가 17px 이면 폰에서 손가락으로 못 맞춘다 —
+          줄 간격(8px)을 줄여 그만큼 탭 높이로 돌렸다 (17 → 29px, 전체 길이는 거의 그대로) */}
+      <div className="space-y-0.5">
         {rows.map((r) => (
           <button
             key={r.id}
             onClick={() => onPick?.(r.id)}
-            className="flex w-full items-center gap-2 text-left"
+            className="-mx-1 flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left active:bg-neutral-100"
             title={r.note}
           >
             <span className="w-[74px] shrink-0 truncate text-[11.5px] font-semibold text-neutral-500">
