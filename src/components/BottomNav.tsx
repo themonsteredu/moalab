@@ -31,6 +31,8 @@ export const WORK_NAV: NavItem[] = [
 
 export const RESOURCE_NAV: NavItem[] = [
   { href: '/cost', label: '원가', icon: 'won' },
+  // 원가(계획) 바로 아래에 지출(실제)을 둔다 — 돈 얘기는 붙어 있어야 비교가 된다
+  { href: '/expense', label: '지출결의서', icon: 'receipt' },
   { href: '/gallery', label: '갤러리', icon: 'image' },
   { href: '/schedule', label: '일정', icon: 'calendar' },
   { href: '/admin', label: '관리', icon: 'users', admin: true },
@@ -44,7 +46,7 @@ const PHONE_TABS: NavItem[] = [
   { href: '/verify', label: '검증', icon: 'checkCircle' },
 ];
 
-const MORE_HREFS = ['/mock', '/training', '/cost', '/gallery', '/schedule', '/admin'];
+const MORE_HREFS = ['/mock', '/training', '/cost', '/expense', '/gallery', '/schedule', '/admin'];
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/');

@@ -317,6 +317,71 @@ export const TRAINING_STATES: { value: TrainingState; label: string; cls: string
   { value: 'done', label: '이수', cls: 'bg-green-100 text-green-800', on: 'bg-green-600 text-white' },
 ];
 
+/* ------------------------------------------------------------- 지출결의서
+   원가(cost_sheets)는 '앞으로 얼마 들까'(계획),
+   지출(expenses)은 '실제로 얼마 썼나'(증빙)다. 섞으면 둘 다 못 쓴다. */
+
+export type ExpenseCategory =
+  | 'material'
+  | 'transport'
+  | 'meal'
+  | 'book'
+  | 'supply'
+  | 'outsource'
+  | 'etc';
+
+export type PayMethod = 'card' | 'cash' | 'transfer';
+
+export interface Expense {
+  id: string;
+  /** 지출일 — 날짜별·월별로 묶는 기준 */
+  spent_on: string;
+  amount: number;
+  category: ExpenseCategory;
+  /** 사용 내용 — 회계가 읽는 칸이라 필수 */
+  purpose: string;
+  vendor: string | null;
+  pay_method: PayMethod;
+  /** 결의자(쓴 사람) */
+  member_id: string | null;
+  app_id: string | null;
+  school: string | null;
+  note: string | null;
+  approved: boolean;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
+export interface ExpenseFile {
+  id: string;
+  expense_id: string;
+  file_url: string;
+  file_name: string;
+  file_size: number | null;
+  /** 사진이면 인쇄물에 그대로 실린다 (한글·PDF 는 이름만) */
+  is_image: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+/** 회계에서 쓰는 계정 이름에 맞췄다. 색은 소계 그래프·배지에 쓴다 */
+export const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string; color: string }[] = [
+  { value: 'material', label: '재료비', color: '#F26522' },
+  { value: 'transport', label: '교통비', color: '#A855F7' },
+  { value: 'meal', label: '식비', color: '#E0483A' },
+  { value: 'book', label: '도서·교구', color: '#2E7DD1' },
+  { value: 'supply', label: '사무·소모품', color: '#12A67A' },
+  { value: 'outsource', label: '외주·용역비', color: '#C2871B' },
+  { value: 'etc', label: '기타', color: '#8A8A8A' },
+];
+
+export const PAY_METHODS: { value: PayMethod; label: string }[] = [
+  { value: 'card', label: '카드' },
+  { value: 'cash', label: '현금' },
+  { value: 'transfer', label: '계좌이체' },
+];
+
 export const COST_CATEGORIES: { value: CostCategory; label: string; color: string }[] = [
   { value: 'material', label: '재료비', color: '#F26522' },
   { value: 'api', label: 'AI API비', color: '#2E7DD1' },

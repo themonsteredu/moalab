@@ -49,7 +49,7 @@ cp .env.example .env.local
 
 # 3) DB 스키마
 #    Supabase 대시보드 > SQL Editor 에 supabase/schema.sql 을 통째로 붙여넣고 실행
-#    (여러 번 실행해도 안전 / Storage 버킷 5개와 초기 멤버 5명까지 같이 만들어짐)
+#    (여러 번 실행해도 안전 / Storage 버킷 6개와 초기 멤버 5명까지 같이 만들어짐)
 #    ※ 예전에 돌린 DB 라면 그 뒤에 생긴 버킷이 없다 → supabase/storage.sql 만 다시 붙여넣기
 
 # 4) ★ Supabase 설정 > API > Exposed schemas 에 moalab 추가 후 Save
@@ -91,6 +91,7 @@ npm run dev        # http://localhost:3000
 | `/mock` | 모의수업 | 날짜·발표자만 잡고, 끝나면 "좋았던 점 / 고칠 점" 두 칸 |
 | `/training` | 강사양성 | 과정 × 강사 이수 상태 (미이수·진행 중·이수) |
 | `/cost` | 원가 | 원가표 목록 → `/cost/[sheetId]` 계산서 |
+| `/expense` | 지출결의서 | 쓴 돈 + 영수증 → 달별 문서로 인쇄 (`/print/expense`) |
 | `/gallery` | 갤러리 | 앨범/사진 → `/gallery/[albumId]` |
 | `/schedule` | 일정 | 월간·주간 달력 |
 | `/admin` | 관리 | **원장만.** 멤버, 앱 추가, 전체 현황, 활동 로그 |
@@ -115,7 +116,8 @@ npm run dev        # http://localhost:3000
   → 앱 코드에서는 그냥 `supabase.from('apps')` 라고 쓰면 `moalab.apps` 로 간다.
 - SQL 로 직접 볼 때만 스키마를 붙인다: `select * from moalab.apps;`
 - Storage 버킷도 같은 이유로 `moalab-` 접두어를 붙였다
-  (`moalab-comment-files`, `moalab-cost-photos`, `moalab-gallery`, `moalab-plans`).
+  (`moalab-comment-files`, `moalab-cost-photos`, `moalab-gallery`, `moalab-plans`,
+  `moalab-notices`, `moalab-receipts`).
   접두어 없이 `gallery` 를 쓰면 남의 버킷을 공개로 덮어쓸 위험이 있다.
 - **Supabase 설정 > API > Exposed schemas 에 `moalab` 이 없으면 아무것도 안 된다.**
   이 경우 `friendlyError()` 가 그 사실을 한글로 알려준다.
@@ -370,6 +372,42 @@ playwright 는 아이콘을 다시 만들 때만 필요해서 `package.json` 에
   학교와 인원 협의할 때 이 숫자를 보고 판단한다.
 - 인원·판매가는 화면에서 즉시 반영되지만 **저장은 명시적 버튼**이다.
 
+### 지출결의서 = 쓴 돈 한 줄 + 영수증
+
+> **원가와 지출은 다른 것이다.** 원가(`cost_sheets`)는 *앞으로 얼마 들까*(계획),
+> 지출(`expenses`)은 *실제로 얼마 썼나*(증빙)다. 섞으면 둘 다 못 쓴다.
+
+영수증을 서랍에 모아두면 연말에 아무도 못 맞춘다. 그래서 **쓴 그 자리에서 폰으로**
+네 가지만 넣는다 — **언제 · 얼마 · 무엇에 · 영수증 사진**. 나머지(프로그램·학교·비고)는
+`더 넣을 것` 안에 접어뒀다. 필수를 늘리면 아무도 안 쓴다.
+
+- 지출 한 줄 = `moalab.expenses` 한 행. 영수증은 `expense_files` 로 **여러 장** 붙는다
+  (카드전표 + 간이영수증이 같이 오는 경우가 흔하다). 버킷은 `moalab-receipts`.
+- **`사용 내용`(purpose) 은 필수다.** 회계가 실제로 읽는 칸이 이것뿐이다.
+  금액·날짜만 있는 줄은 나중에 아무 의미가 없다.
+- 구분 7개(`재료비·교통비·식비·도서·교구·사무·소모품·외주·용역비·기타`)는 회계 계정 이름에 맞췄다.
+- 원장이 **확인**(`approved`)을 누른다. 강사는 자기 것만 수정, 원장은 전부.
+- 금액 칸은 입력하는 동안에도 **콤마를 찍는다.** 폰에서 0 을 몇 개 쳤는지 눈으로 못 센다.
+  숫자 아닌 글자는 버린다 (`4만5,000원` → `45000`).
+- 달 계산은 `'YYYY-MM'` **문자열**로 한다 (`src/lib/expense.ts`). Date 로 왔다갔다 하면
+  시간대 때문에 1일·말일이 앞뒤 달로 샌다. 연 경계·윤년은 테스트로 막아뒀다.
+
+#### 달 단위 문서로 인쇄 — `/print/expense?month=2026-08`
+
+목록 화면의 **인쇄** 에서 넣을 것을 체크해 새 창으로 연다
+(`구분별 소계 · 날짜별 소계 · 지출 명세 표 · 영수증 첨부`).
+
+- **명세 표의 번호(No.)와 영수증 사진의 번호가 같다.** 증빙은 "이 금액의 영수증이 이것" 이
+  연결돼야 의미가 있어서, 번호로 묶는 게 이 문서의 핵심이다.
+- 표지에 **결의자·확인 서명란**을 넣었다 (종이로 넘길 때 필요하다).
+- **영수증 없는 지출은 문서 끝에 따로 모아 빨간 칸으로 싣는다.** 숨기면 그게 제일 늦게 터진다.
+- 한글·PDF 첨부는 인쇄물에 본문을 실을 방법이 없어서 **파일 이름만** 적고 그 사실을 밝힌다.
+- 프로그램 인쇄와 같이 **PDF 라이브러리를 쓰지 않는다** (브라우저 인쇄).
+  이 경로는 고정 경로라서 빌드 때 미리 그려보려 하니 `Suspense` 로 감싸야 한다
+  (`useSearchParams` 를 쓰기 때문).
+- 목록에 걸어둔 **구분·사람 필터가 인쇄에도 그대로** 넘어가고, 그런 경우 문서에
+  "일부만 뽑은 문서입니다" 를 박아둔다. 부분 문서가 전체로 오해되면 안 된다.
+
 ### 로그인 / 권한
 
 - 회원가입 없음. 이름 버튼 → PIN 4자리. 세션은 localStorage 30일 (`src/lib/session.tsx`).
@@ -384,7 +422,7 @@ playwright 는 아이콘을 다시 만들 때만 필요해서 `package.json` 에
 
 ```
 supabase/schema.sql          moalab 스키마·테이블·RLS·Storage 버킷·초기 멤버 (한 번에 실행)
-supabase/storage.sql         Storage 버킷 5개만 따로 — 버킷이 나중에 늘어났을 때 이것만 다시 돌린다
+supabase/storage.sql         Storage 버킷 6개만 따로 — 버킷이 나중에 늘어났을 때 이것만 다시 돌린다
 supabase/seed-apps.sql       노션에서 이관한 웹앱 21개 일괄 등록 (재실행 안전)
 
 src/lib/
@@ -405,11 +443,13 @@ src/lib/
   useAppsOverview.ts         앱 요약(상태·진행률·미해결 댓글) — 목록 화면 공용
   push.ts                    usePush(구독 켜기·끄기) + sendPush(발송 요청)
   print.ts                   인쇄에 넣을 묶음 정의(PRINT_PARTS) + parts 파싱
+  expense.ts                 지출 — 달 계산(shiftMonth·monthRange), 합계, 날짜별 묶기, 금액 입력
 
 src/app/(app)/
   home/ notice/ apps/ verify/ mock/ training/ cost/ gallery/ schedule/ admin/
                              메뉴 하나가 폴더 하나. 순서는 BottomNav.tsx 가 정한다.
-src/app/print/[id]/          인쇄 / PDF 저장 (레이아웃 밖 — 사이드바·탭 없음)
+src/app/print/[id]/          프로그램 인쇄 / PDF 저장 (레이아웃 밖 — 사이드바·탭 없음)
+src/app/print/expense/       월별 지출결의서 인쇄 (같은 이유로 레이아웃 밖)
 scripts/make-icons.mjs       로고에서 앱 아이콘 뽑기
 scripts/friendly-error.test.mjs  에러 문구 갈래 테스트 (node 로 바로 실행)
 
@@ -435,6 +475,7 @@ src/components/
   CommentThread.tsx          댓글 + 사진 첨부 + 해결됨 토글
   CostItemForm.tsx           원가 항목 입력 (사진·구매처·재사용)
   CostChart.tsx              구분별 도넛 + 막대 (SVG 직접 그림, 라이브러리 없음)
+  (지출결의서는 화면 하나로 끝나서 별도 컴포넌트를 안 뺐다 — src/app/(app)/expense/page.tsx)
 ```
 
 ---
@@ -557,12 +598,20 @@ src/components/
 - [x] **인쇄 / PDF 저장** — 검증·계획안·원가·샘플·사진을 체크해서 A4 문서로.
       브라우저 인쇄를 쓰므로 라이브러리 없음
 
+### ✅ 11단계 — 지출결의서 (영수증 증빙 → 달별 문서)
+- [x] `moalab.expenses` + `expense_files` + `moalab-receipts` 버킷
+- [x] 폰에서 **날짜·금액·구분·내용·영수증 사진** 만으로 한 건 등록 (나머지는 접어둠)
+- [x] 달 넘기기 · 구분/사람/영수증없음 필터 · 구분별 소계 막대 · 원장 **확인**
+- [x] **`/print/expense`** — 구분별·날짜별 소계 + 명세 표 + **번호가 일치하는 영수증 첨부**,
+      서명란, 영수증 없는 건 빨간 칸으로 따로
+- [x] 달 계산(연 경계·윤년)·합계·금액 입력 테스트 33건, 영수증 실패 시 재시도 중복 저장 방지 확인
+
 ### 다음에 하면 좋을 것
 
 - [ ] **모의수업·강사양성은 뼈대만 만든 상태다.** 실제로 어떤 칸이 필요한지
       (모의수업 참석자 체크? 강사양성 과정 목록?) 원장 확인 후 채운다.
 - [ ] 사진 Storage 실제 파일 삭제 — 지금은 DB 레코드만 지운다 (버킷에 파일이 남음).
-      지적 캡처(`finding_files`)도 같은 문제라 정리 스크립트가 하나 필요하다.
+      지적 캡처(`finding_files`)·영수증(`expense_files`)도 같은 문제라 정리 스크립트가 하나 필요하다.
 - [ ] 댓글에 답글(스레드) — 지금은 평면 목록
 - [ ] UI 강조색을 로고 teal(`#06BDBD`)로 맞출지 — 지금은 오렌지 그대로다 (원장 취향 확인 필요)
 

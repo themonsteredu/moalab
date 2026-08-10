@@ -474,6 +474,51 @@ create table if not exists moalab.training_records (
 );
 create index if not exists training_records_member_idx on moalab.training_records(member_id);
 
+-- ---------------------------------------------------------------------
+-- 16. 지출결의서 — 쓴 돈과 영수증을 한 줄에 묶어둔다
+--
+--   나중에 회계처리할 때 필요한 건 딱 네 가지다:
+--   **언제 · 얼마 · 무엇에 · 영수증 어디**.
+--   그래서 이 표 한 줄이 곧 지출결의서 한 건이고, 영수증은 그 줄에 붙는다.
+--   월별 문서는 spent_on 으로 묶어서 뽑는다 (인쇄 화면이 그 일을 한다).
+--
+--   ※ 원가(cost_sheets)와 다른 것: 원가는 '앞으로 얼마 들까'(계획),
+--     지출은 '실제로 얼마 썼나'(증빙)다. 섞으면 둘 다 못 쓴다.
+-- ---------------------------------------------------------------------
+create table if not exists moalab.expenses (
+  id          uuid primary key default gen_random_uuid(),
+  spent_on    date not null,                        -- 지출일 = 월별로 묶는 기준
+  amount      numeric not null default 0,           -- 금액(원)
+  category    text not null default 'material',     -- material|transport|meal|book|supply|outsource|etc
+  purpose     text not null,                        -- 사용 내용 (회계가 읽는 칸)
+  vendor      text,                                 -- 사용처·상호
+  pay_method  text not null default 'card',          -- card|cash|transfer
+  member_id   uuid references moalab.members(id) on delete set null,  -- 결의자(쓴 사람)
+  app_id      uuid references moalab.apps(id)    on delete set null,  -- 관련 프로그램(선택)
+  school      text,                                 -- 학교·현장(선택)
+  note        text,                                 -- 비고
+  approved    boolean not null default false,       -- 원장 확인
+  approved_by uuid references moalab.members(id) on delete set null,
+  approved_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists expenses_month_idx  on moalab.expenses(spent_on desc);
+create index if not exists expenses_member_idx on moalab.expenses(member_id);
+create index if not exists expenses_app_idx    on moalab.expenses(app_id);
+
+-- 영수증 — 한 건에 여러 장 (카드전표 + 간이영수증 같이 붙는 경우가 흔하다)
+create table if not exists moalab.expense_files (
+  id         uuid primary key default gen_random_uuid(),
+  expense_id uuid not null references moalab.expenses(id) on delete cascade,
+  file_url   text not null,
+  file_name  text not null,
+  file_size  bigint,
+  is_image   boolean not null default true,   -- 사진이면 인쇄물에 그대로 실린다
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists expense_files_expense_idx on moalab.expense_files(expense_id, sort_order);
+
 -- =====================================================================
 --  권한 + RLS
 --   · members       : RLS on, 정책 없음 → anon 키로는 읽기/쓰기 전부 차단
@@ -511,7 +556,8 @@ begin
     'albums','photos','schedules','schedule_members','activity_logs',
     'plan_files','app_samples',
     'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',
-    'training_courses','training_records'
+    'training_courses','training_records',
+    'expenses','expense_files'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);
     execute format('drop policy if exists "internal_all" on moalab.%I', t);
@@ -521,7 +567,7 @@ begin
 end $$;
 
 -- =====================================================================
---  Storage 버킷 5개 — 공개 읽기 + 인증된 쓰기
+--  Storage 버킷 6개 — 공개 읽기 + 인증된 쓰기
 --  이름 앞에 moalab- 을 붙여 기존 버킷을 건드리지 않는다.
 --
 --  ★ 버킷은 나중에 늘어난다. 처음엔 3개였고 plans·notices 는 뒤에 추가됐다.
@@ -534,13 +580,17 @@ values ('moalab-comment-files','moalab-comment-files', true),
        ('moalab-cost-photos','moalab-cost-photos', true),
        ('moalab-gallery','moalab-gallery', true),
        ('moalab-plans','moalab-plans', true),
-       ('moalab-notices','moalab-notices', true)
+       ('moalab-notices','moalab-notices', true),
+       ('moalab-receipts','moalab-receipts', true)
 on conflict (id) do update set public = true;
 
 do $$
 declare b text;
 begin
-  foreach b in array array['moalab-comment-files','moalab-cost-photos','moalab-gallery','moalab-plans','moalab-notices'] loop
+  foreach b in array array[
+    'moalab-comment-files','moalab-cost-photos','moalab-gallery',
+    'moalab-plans','moalab-notices','moalab-receipts'
+  ] loop
     execute format('drop policy if exists "read_%s"   on storage.objects', b);
     execute format('drop policy if exists "write_%s"  on storage.objects', b);
     execute format('drop policy if exists "update_%s" on storage.objects', b);
