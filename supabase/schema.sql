@@ -46,7 +46,7 @@ create table if not exists moalab.apps (
   creator_id    uuid references moalab.members(id) on delete set null,
   due_date      date,
   current_round int not null default 1,
-  status        text not null default 'pending',   -- pending | fixing | done
+  status        text not null default 'pending',   -- pending | fixing | recheck | done
   archived      boolean not null default false,
   created_at    timestamptz not null default now()
 );

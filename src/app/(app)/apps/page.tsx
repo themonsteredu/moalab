@@ -16,7 +16,8 @@ import { Icon, type IconName } from '@/components/Icon';
 import type { AppStatus } from '@/lib/types';
 
 type View = 'tree' | 'list' | 'board' | 'gallery';
-type Filter = 'all' | AppStatus | 'mine' | `missing:${keyof Completeness}`;
+/** 'todo' = 검증 완료를 뺀 것 = 아직 손이 필요한 것. 목록의 기본값이다 */
+type Filter = 'todo' | 'all' | AppStatus | 'mine' | `missing:${keyof Completeness}`;
 type Sort = 'due' | 'name' | 'filled';
 
 const VIEWS: { value: View; icon: IconName; label: string }[] = [
@@ -30,7 +31,7 @@ const VIEWS: { value: View; icon: IconName; label: string }[] = [
 const NO_TOPIC = '주제 없음';
 const OPEN_KEY = 'moalab.apps.openTopics';
 
-const BOARD_COLS: AppStatus[] = ['fixing', 'pending', 'done'];
+const BOARD_COLS: AppStatus[] = ['fixing', 'recheck', 'pending', 'done'];
 
 const SORTS: { value: Sort; label: string }[] = [
   { value: 'due', label: '마감 임박순' },
@@ -50,7 +51,9 @@ export default function AppsPage() {
   const [view, setView] = useState<View>('tree');
   /** 펼쳐둔 주제 (접힘이 기본 — 폰에서 21개를 다 늘어놓으면 끝까지 스크롤해야 한다) */
   const [openTopics, setOpenTopics] = useState<string[]>([]);
-  const [filter, setFilter] = useState<Filter>('all');
+  // 기본은 '할 일' — 검증 완료된 건 목록에서 빼둔다.
+  // 다 끝난 것이 목록을 채우고 있으면 지금 봐야 할 게 뭔지 안 보인다.
+  const [filter, setFilter] = useState<Filter>('todo');
   const [sort, setSort] = useState<Sort>('due');
   const [q, setQ] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -82,7 +85,9 @@ export default function AppsPage() {
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     const out = items.filter((it) => {
-      if (filter === 'mine') {
+      if (filter === 'todo') {
+        if (it.status === 'done') return false;
+      } else if (filter === 'mine') {
         const mine = it.app.creator_id === session?.id || it.reviewerIds.includes(session?.id ?? '');
         if (!mine) return false;
       } else if (filter.startsWith('missing:')) {
@@ -137,14 +142,22 @@ export default function AppsPage() {
   /** 주제별 프로그램 수 — 주제 관리에서 지울 때 경고에 쓴다 */
   const countOfTopic = (topicId: string) => items.filter((i) => i.app.topic_id === topicId).length;
 
-  /** 검색 중이면 저절로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다 */
-  const searching = q.trim().length > 0 || filter !== 'all';
+  /**
+   * 검색·필터가 걸리면 저절로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다.
+   *
+   * ★ 기본값인 'todo' 는 여기서 빼야 한다. 안 그러면 **첫 화면부터 전부 펼쳐져서**
+   *   주제를 접어둔 이유(폰 첫 화면에 전체 구조가 보이게)가 사라진다.
+   *   실제로 그렇게 만들었다가 /apps 가 812px → 2030px 이 됐다.
+   */
+  const searching = q.trim().length > 0 || (filter !== 'all' && filter !== 'todo');
   const isOpen = (t: string) => searching || openTopics.includes(t);
   const toggleTopic = (t: string) =>
     setOpenTopics((v) => (v.includes(t) ? v.filter((x) => x !== t) : [...v, t]));
   const allOpen = groups.length > 0 && groups.every((g) => isOpen(g.topic));
 
   const doneCount = items.filter((i) => i.status === 'done').length;
+  /** 검증 완료를 뺀 수 = '할 일' 칩에 붙는 숫자 */
+  const todoCount = items.length - doneCount;
   /** 5개 항목 중 안 채워진 게 있는 프로그램 수 */
   const missingCount = (k: keyof Completeness) => items.filter((i) => !i.done[k]).length;
 
@@ -189,13 +202,16 @@ export default function AppsPage() {
 
         {/* 필터 — 상태 + "빠진 것" */}
         <div className="no-scrollbar -mx-4 mb-2 flex gap-2 overflow-x-auto px-4">
+          <Chip on={filter === 'todo'} onClick={() => setFilter('todo')}>
+            할 일 {todoCount}
+          </Chip>
           <Chip on={filter === 'all'} onClick={() => setFilter('all')}>
             전체 {items.length}
           </Chip>
           <Chip on={filter === 'mine'} onClick={() => setFilter('mine')}>
             내 담당
           </Chip>
-          {(['fixing', 'pending', 'done'] as AppStatus[]).map((s) => (
+          {(['fixing', 'recheck', 'pending', 'done'] as AppStatus[]).map((s) => (
             <Chip key={s} on={filter === s} onClick={() => setFilter(s)}>
               {STATUS_META[s].label}
             </Chip>
@@ -208,7 +224,7 @@ export default function AppsPage() {
             const n = missingCount(p.key);
             const key: Filter = `missing:${p.key}`;
             return (
-              <Chip key={p.key} on={filter === key} onClick={() => setFilter(filter === key ? 'all' : key)} dim={n === 0}>
+              <Chip key={p.key} on={filter === key} onClick={() => setFilter(filter === key ? 'todo' : key)} dim={n === 0}>
                 <Icon name={p.icon} size={12} className="mr-1" />
                 {p.label} {n > 0 && <span className="ml-0.5 text-brand">{n}</span>}
               </Chip>
@@ -244,13 +260,21 @@ export default function AppsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState
             icon="puzzle"
-            title={items.length === 0 ? '아직 등록된 프로그램이 없어요' : '조건에 맞는 게 없어요'}
+            title={
+              items.length === 0
+                ? '아직 등록된 프로그램이 없어요'
+                : filter === 'todo'
+                  ? '지금 손볼 프로그램이 없어요'
+                  : '조건에 맞는 게 없어요'
+            }
             desc={
               items.length === 0
                 ? isAdmin
                   ? '위 “+ 새 앱” 버튼으로 첫 프로그램을 등록해보세요.'
                   : '프로그램이 등록되면 여기에 보여요.'
-                : '필터나 검색어를 바꿔보세요.'
+                : filter === 'todo'
+                  ? '전부 검증 완료예요. 다 보려면 위 “전체” 를 누르세요.'
+                  : '필터나 검색어를 바꿔보세요.'
             }
           />
         ) : view === 'tree' ? (

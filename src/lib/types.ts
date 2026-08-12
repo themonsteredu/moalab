@@ -1,5 +1,11 @@
 export type Role = 'admin' | 'teacher';
-export type AppStatus = 'pending' | 'fixing' | 'done';
+/**
+ * 앱 상태. 사람이 고르지 않고 지적 상태로만 계산된다 (src/lib/status.ts).
+ * `recheck` 다시확인 = 답변은 달렸고 **검증자가 다시 봐야 하는** 것.
+ * 예전엔 이것도 `fixing` 수정 필요로 뭉쳐 있어서, 공을 누가 갖고 있는지
+ * (제작자가 고칠 차례인지 / 검증자가 확인할 차례인지) 목록에서 구분되지 않았다.
+ */
+export type AppStatus = 'pending' | 'fixing' | 'recheck' | 'done';
 export type CostCategory = 'material' | 'api' | 'instructor' | 'transport' | 'etc';
 export type PhotoTag = 'work' | 'activity' | 'board' | 'group';
 export type ScheduleKind = 'meeting' | 'visit';

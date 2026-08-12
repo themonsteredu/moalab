@@ -207,7 +207,9 @@ export default function PrintPage() {
         </div>
 
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-          <Row label="상태" value={STATUS_META[app.status].label} />
+          {/* 여기만 DB 의 status 컬럼을 그대로 읽는다 (다른 화면은 지적으로 직접 계산).
+              모르는 값이 들어와도 문서가 안 깨지게 기본값을 둔다 */}
+          <Row label="상태" value={STATUS_META[app.status]?.label ?? '진행 중'} />
           <Row label="검증 라운드" value={`${app.current_round}차`} />
           <Row label="제작자" value={app.creator_id ? nameOf(app.creator_id) : '-'} />
           <Row

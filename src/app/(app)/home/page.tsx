@@ -149,7 +149,9 @@ export default function HomePage() {
   const stats = useMemo(() => {
     const done = items.filter((i) => i.status === 'done').length;
     const fixing = items.filter((i) => i.status === 'fixing').length;
-    return { total: items.length, done, fixing, pending: items.length - done - fixing };
+    // 다시확인 = 답변은 달렸고 검증자가 다시 봐야 하는 것. 수정 필요와 섞지 않는다
+    const recheck = items.filter((i) => i.status === 'recheck').length;
+    return { total: items.length, done, fixing, recheck, pending: items.length - done - fixing - recheck };
   }, [items]);
   const overallPct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
 
@@ -403,14 +405,16 @@ export default function HomePage() {
               icon={<Icon name="wrench" size={15} />}
               label="수정 필요"
               value={`${stats.fixing}`}
-              delta={stats.fixing > 0 ? '확인 필요' : '없음'}
-              deltaTone={stats.fixing > 0 ? 'down' : 'up'}
+              /* '다시확인' 이 몇 건인지도 여기서 보여준다 — 수정 필요와 다른 일이다 */
+              delta={stats.recheck > 0 ? `다시확인 ${stats.recheck}` : stats.fixing > 0 ? '확인 필요' : '없음'}
+              deltaTone={stats.fixing > 0 || stats.recheck > 0 ? 'down' : 'up'}
               accentBg="bg-red-500"
             >
               <div className="flex gap-1">
                 {[
                   { n: stats.done, c: 'bg-green-500' },
                   { n: stats.pending, c: 'bg-neutral-300' },
+                  { n: stats.recheck, c: 'bg-amber-500' },
                   { n: stats.fixing, c: 'bg-red-500' },
                 ].map((s, i) =>
                   s.n > 0 ? (

@@ -51,7 +51,8 @@ export default function VerifyPage() {
   const all = useMemo(
     () =>
       [...items].sort((a, b) => {
-        const rank = { fixing: 0, pending: 1, done: 2 } as const;
+        // 급한 것부터: 고칠 것 → 다시 볼 것 → 아직 안 본 것 → 끝난 것
+        const rank = { fixing: 0, recheck: 1, pending: 2, done: 3 } as const;
         if (rank[a.status] !== rank[b.status]) return rank[a.status] - rank[b.status];
         return a.progress - b.progress;
       }),
