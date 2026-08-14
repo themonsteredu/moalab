@@ -72,16 +72,22 @@ export async function recomputeAppStatus(appId: string): Promise<AppStatus> {
   const round = await getCurrentRound(appId);
   if (!round) return 'pending';
 
-  const [{ data: findings }, { count: reviewerCount }, { count: signedCount }] = await Promise.all([
+  const [{ data: findings }, { data: reviewers }, { data: signoffs }] = await Promise.all([
     supabase.from('findings').select('status').eq('round_id', round.id),
-    supabase.from('app_reviewers').select('id', { count: 'exact', head: true }).eq('app_id', appId),
-    supabase.from('round_signoffs').select('member_id', { count: 'exact', head: true }).eq('round_id', round.id),
+    supabase.from('app_reviewers').select('member_id').eq('app_id', appId),
+    supabase.from('round_signoffs').select('member_id').eq('round_id', round.id),
   ]);
+
+  // 지금 배정된 검증자의 표시만 센다.
+  // 검증에서 빠진 사람의 낡은 round_signoffs 를 같이 세면 정족수가 부풀려져서
+  // 아직 아무도 안 봤는데 '검증 완료' 가 되어버린다. (화면 쪽 계산과 같은 규칙)
+  const reviewerIds = new Set((reviewers ?? []).map((r) => r.member_id));
+  const signedCount = (signoffs ?? []).filter((s) => reviewerIds.has(s.member_id)).length;
 
   const status = computeStatus(
     (findings ?? []) as Pick<Finding, 'status'>[],
-    reviewerCount ?? 0,
-    signedCount ?? 0,
+    reviewerIds.size,
+    signedCount,
   );
   await supabase.from('apps').update({ status }).eq('id', appId);
   return status;

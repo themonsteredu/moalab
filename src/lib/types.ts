@@ -127,6 +127,26 @@ export function isOpenFinding(s: FindingStatus): boolean {
   return FINDING_META[s].open;
 }
 
+/**
+ * '검증 완료' 를 눌렀을 때 같이 확인완료로 닫히는 지적.
+ *
+ * fixed(수정완료)는 "제작자가 고쳤다고 답한" 상태다. CLAUDE.md 에 적어둔 대로
+ * **검증자가 확인해야** 진짜로 닫히는데, 그 확인이 바로 '검증 완료' 를 누르는 행동이다.
+ * 예전엔 지적을 하나하나 '확인했어요' 로 닫은 다음에야 검증 완료를 누를 수 있어서,
+ * 수정완료가 몇 건 쌓이면 버튼이 아예 안 눌렸다("먼저 확인완료로 닫아주세요").
+ */
+export function isConfirmableFinding(s: FindingStatus): boolean {
+  return s === 'fixed';
+}
+
+/**
+ * '검증 완료' 를 막는 지적 — 아직 손을 봐야 하는 것.
+ * 지적됨(open)·다시확인(recheck)만 막는다. 둘 다 "무엇을 더 해야 한다" 가 남은 상태다.
+ */
+export function blocksSignoff(s: FindingStatus): boolean {
+  return isOpenFinding(s) && !isConfirmableFinding(s);
+}
+
 export interface CommentRow {
   id: string;
   app_id: string;

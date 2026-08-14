@@ -53,6 +53,16 @@ create table if not exists moalab.apps (
 create index if not exists apps_status_idx   on moalab.apps(status);
 create index if not exists apps_due_date_idx on moalab.apps(due_date);
 
+-- status 는 computeStatus 가 계산한 세 값만 들어간다 (사람이 고르는 값이 아니다).
+-- 예전 코드가 지적 상태('recheck')를 그대로 써 넣은 행이 있었는데, 그 값은
+-- STATUS_META 에 없어서 인쇄 화면(/print/[id])이 죽는다. 다시는 못 들어가게 막는다.
+update moalab.apps set status = 'fixing' where status not in ('pending','fixing','done');
+do $$ begin
+  alter table moalab.apps
+    add constraint apps_status_check check (status in ('pending','fixing','done'));
+exception when duplicate_object then null;
+end $$;
+
 -- ---------------------------------------------------------------------
 -- 2-1. 주제 — 프로그램 목록을 묶는 기준
 --

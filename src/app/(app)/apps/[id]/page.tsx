@@ -284,7 +284,8 @@ export default function AppDetailPage() {
         ref={navRef}
         className="sticky top-[53px] z-20 border-b border-neutral-200 bg-surface/95 backdrop-blur"
       >
-        <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 py-2">
+        {/* 목차도 본문과 같은 폭으로 잘라서 왼쪽 선을 맞춘다 */}
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 py-2 lg:max-w-4xl">
           {SECTIONS.map((s) => (
             <button
               key={s.id}
@@ -309,7 +310,10 @@ export default function AppDetailPage() {
         </div>
       </div>
 
-      <div className="px-4 pb-10 pt-4">
+      {/* 프로그램 페이지는 위에서 아래로 읽는 한 장의 문서다. 단일 컬럼이라
+          폭을 안 막으면 PC 에서 '수정완료 로 답변 올리기' 같은 버튼이 화면 끝까지 늘어난다.
+          가운데 정렬은 안 한다 — 헤더·사이드바와 왼쪽 선을 맞춰야 하기 때문. */}
+      <div className="px-4 pb-10 pt-4 lg:max-w-4xl">
         {error && (
           <div className="mb-3">
             <ErrorBanner message={error} onRetry={() => void load()} />
