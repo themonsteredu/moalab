@@ -589,8 +589,20 @@ export default function AppDetailPage() {
       <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="인쇄 / PDF 저장">
         <div className="space-y-3">
           <p className="text-[13px] leading-relaxed text-neutral-500">
-            인쇄물에 넣을 것을 골라주세요. 표지(제목·상태·제작자·마감)는 항상 들어갑니다.
+            인쇄물에 넣을 것을 골라주세요. 표지(제목·상태·제작자·마감)가 맨 앞에 붙습니다.
+            <br />
+            <b>강의계획서만</b> 고르면 표지 없이 그 한 장만 나갑니다 — 학교에 낼 때 쓰세요.
           </p>
+
+          {/* 학교에 내는 건 계획서 한 장이다. 매번 다섯 개를 꺼서 만드는 건 번거롭다 */}
+          <button
+            type="button"
+            onClick={() => setPrintParts(['plan'])}
+            className="tap w-full gap-1.5 rounded-xl border border-brand bg-brand-50 text-[13.5px] font-bold text-brand-700"
+          >
+            <Icon name="doc" size={15} />
+            강의계획서 한 장만
+          </button>
 
           <div className="space-y-1.5">
             {PRINT_PARTS.map((p) => {

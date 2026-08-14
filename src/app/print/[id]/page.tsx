@@ -55,6 +55,13 @@ export default function PrintPage() {
 
   const parts = useMemo<Set<PrintPart>>(() => parsePrintParts(search.get('parts')), [search]);
 
+  /**
+   * 강의계획서만 골랐으면 **그 한 장만** 나간다.
+   * 표지(프로그램명·상태·검증 라운드·제작자…)는 여러 묶음을 한 문서로 묶을 때 쓰는 머리다.
+   * 학교에 계획서 한 장만 낼 때 우리 내부 검증 현황이 같이 찍히면 안 된다.
+   */
+  const onlyPlan = parts.size === 1 && parts.has('plan');
+
   const [app, setApp] = useState<AppRow | null>(null);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
@@ -205,42 +212,45 @@ export default function PrintPage() {
         </p>
       </div>
 
-      {/* ------------------------------------------------------ 표지 */}
-      <header className="print-block mb-6 border-b-2 border-black pb-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[12px] font-bold tracking-wide text-neutral-500">
-              {nameOfTopic(app.topic_id) || '모아랩 프로그램'}
-            </p>
-            <h1 className="mt-1 text-[26px] font-black leading-tight">{app.title_ko}</h1>
-            <p className="mt-1 text-[12.5px] text-neutral-500">{app.slug}</p>
+      {/* ------------------------------------------------------ 표지
+          강의계획서만 뽑을 때는 붙이지 않는다 (위 onlyPlan 설명 참고) */}
+      {!onlyPlan && (
+        <header className="print-block mb-6 border-b-2 border-black pb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[12px] font-bold tracking-wide text-neutral-500">
+                {nameOfTopic(app.topic_id) || '모아랩 프로그램'}
+              </p>
+              <h1 className="mt-1 text-[26px] font-black leading-tight">{app.title_ko}</h1>
+              <p className="mt-1 text-[12.5px] text-neutral-500">{app.slug}</p>
+            </div>
+            <span className="flex shrink-0 items-center justify-center rounded-[14px] bg-black p-2.5">
+              <BrandMark size={40} />
+            </span>
           </div>
-          <span className="flex shrink-0 items-center justify-center rounded-[14px] bg-black p-2.5">
-            <BrandMark size={40} />
-          </span>
-        </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-          <Row label="상태" value={STATUS_META[app.status].label} />
-          <Row label="검증 라운드" value={`${app.current_round}차`} />
-          <Row label="제작자" value={app.creator_id ? nameOf(app.creator_id) : '-'} />
-          <Row
-            label="검증 참여"
-            value={reviewerIds.length > 0 ? reviewerIds.map((r) => nameOf(r)).join(', ') : '-'}
-          />
-          <Row label="마감일" value={app.due_date ? korDateFull(app.due_date) : '-'} />
-          <Row label="대상 학년" value={app.target_grade || '-'} />
-        </dl>
+          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
+            <Row label="상태" value={STATUS_META[app.status].label} />
+            <Row label="검증 라운드" value={`${app.current_round}차`} />
+            <Row label="제작자" value={app.creator_id ? nameOf(app.creator_id) : '-'} />
+            <Row
+              label="검증 참여"
+              value={reviewerIds.length > 0 ? reviewerIds.map((r) => nameOf(r)).join(', ') : '-'}
+            />
+            <Row label="마감일" value={app.due_date ? korDateFull(app.due_date) : '-'} />
+            <Row label="대상 학년" value={app.target_grade || '-'} />
+          </dl>
 
-        {app.purpose && (
-          <p className="mt-3 whitespace-pre-wrap text-[12.5px] leading-relaxed text-neutral-700">
-            {app.purpose}
+          {app.purpose && (
+            <p className="mt-3 whitespace-pre-wrap text-[12.5px] leading-relaxed text-neutral-700">
+              {app.purpose}
+            </p>
+          )}
+          <p className="mt-3 text-[11px] text-neutral-400">
+            출력일 {korDateFull(new Date().toISOString().slice(0, 10))}
           </p>
-        )}
-        <p className="mt-3 text-[11px] text-neutral-400">
-          출력일 {korDateFull(new Date().toISOString().slice(0, 10))}
-        </p>
-      </header>
+        </header>
+      )}
 
       {/* ------------------------------------------------------ 검증 */}
       {parts.has('verify') && (
@@ -293,16 +303,22 @@ export default function PrintPage() {
       )}
 
       {/* -------------------------------------------- 강의계획서 (양식 그대로)
-          한글 양식과 같은 표를 그대로 그린다. 늘 새 쪽에서 시작해서
-          앞에 검증 기록이 붙어도 이 장만 떼어 쓸 수 있게 한다. */}
+          한글 양식과 같은 표를 그대로 그린다.
+          앞에 표지·검증 기록이 붙을 때만 새 쪽에서 시작한다 — 이 장만 뽑을 때
+          쪽 넘김을 넣으면 맨 앞에 빈 쪽이 한 장 딸려 나온다. */}
       {parts.has('plan') && lessonPlan && (
-        <section className="print-page-break mb-6">
+        <section className={onlyPlan ? '' : 'print-page-break mb-6'}>
           <PlanSheet
             plan={lessonPlan}
             items={planItems}
             title={app.title_ko}
           />
         </section>
+      )}
+      {parts.has('plan') && !lessonPlan && (
+        <p className="py-10 text-center text-[13px] text-neutral-500">
+          아직 강의계획서를 안 만들었어요. 프로그램 화면의 <b>강의계획서</b> 에서 먼저 채워주세요.
+        </p>
       )}
 
       {/* ------------------------------------------------ 계획안 첨부 */}
