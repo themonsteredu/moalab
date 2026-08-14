@@ -371,6 +371,50 @@ create table if not exists moalab.app_samples (
 create index if not exists app_samples_app_idx on moalab.app_samples(app_id, sort_order);
 
 -- ---------------------------------------------------------------------
+-- 11-1. 강의계획서 — 원장이 준 한글 양식 그대로 화면에서 채우고 그대로 인쇄한다
+--
+--   양식 한 장 = 프로그램 하나라서 app_id 가 그대로 기본키다.
+--   도입·마무리는 프로그램이 달라도 늘 같은 문구여서 기본값으로 채워둔다
+--   (그대로 두면 그대로 인쇄되고, 고치면 고친 대로 나간다).
+--   plan_files(첨부·판) 는 그대로 남는다 — 한글 원본을 올리는 곳은 계속 필요하다.
+-- ---------------------------------------------------------------------
+create table if not exists moalab.lesson_plans (
+  app_id     uuid primary key references moalab.apps(id) on delete cascade,
+  category   text not null default '진로직업체험',   -- 제목 오른쪽 배지
+  goal       text,                                   -- 목표
+  intro      text default '1. 참석자 확인
+2. 체험처 및 진행 강사 소개
+3. 진행 프로그램 소개
+4. 프로그램이 진행되는 장소에서의 안전 및 유의사항 전달',
+  dev_title  text not null default '[AI 웹앱활동]',
+  work_title text not null default '[활동작품]',
+  closing    text default '궁금한 점에 대해 질의응답 및 간단한 소감 발표',
+  tools      text,                                   -- 운영사항 > 교구
+  etc        text,                                   -- 운영사항 > 기타사항
+  -- 문서 맨 아래 로고. 기관마다 다르고 언제든 바뀌니 박아넣지 않고 올리는 칸으로 둔다
+  logo_url   text,
+  updated_by uuid references moalab.members(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+-- 전개 칸에 들어가는 항목 — 글 + 사진 한 장이 한 줄이다.
+--   step   [AI 웹앱활동]  1·2·3 … 제목 + 화면 캡처
+--   order  [활동작품]     *만드는 순서
+--   result [활동작품]     * 결과 이미지
+create table if not exists moalab.lesson_plan_items (
+  id         uuid primary key default gen_random_uuid(),
+  app_id     uuid not null references moalab.apps(id) on delete cascade,
+  slot       text not null check (slot in ('step','order','result')),
+  label      text,
+  url        text,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists lesson_plan_items_idx
+  on moalab.lesson_plan_items(app_id, slot, sort_order);
+
+-- ---------------------------------------------------------------------
 -- 12. 활동 로그
 -- ---------------------------------------------------------------------
 create table if not exists moalab.activity_logs (
@@ -519,7 +563,7 @@ begin
     'findings','finding_files','finding_replies','round_signoffs',
     'cost_sheets','cost_items','cost_item_photos',
     'albums','photos','schedules','schedule_members','activity_logs',
-    'plan_files','app_samples',
+    'plan_files','app_samples','lesson_plans','lesson_plan_items',
     'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',
     'training_courses','training_records'
   ] loop

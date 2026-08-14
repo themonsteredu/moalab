@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Findings, FindingHistory, bundleFindings } from '@/components/Findings';
 import { CommentThread } from '@/components/CommentThread';
 import { LessonPlan } from '@/components/LessonPlan';
+import { PlanForm } from '@/components/PlanForm';
 import { CostInline } from '@/components/CostInline';
 import { SampleImages } from '@/components/SampleImages';
 import { AppForm } from '@/components/AppForm';
@@ -35,7 +36,8 @@ import type {
 /** 프로그램 페이지의 목차. 이 순서가 곧 일하는 순서다. */
 const SECTIONS = [
   { id: 'verify', icon: 'checkCircle', label: '검증' },
-  { id: 'plan', icon: 'doc', label: '수업계획안' },
+  { id: 'plan', icon: 'doc', label: '강의계획서' },
+  { id: 'planfile', icon: 'clip', label: '첨부' },
   { id: 'cost', icon: 'won', label: '원가' },
   { id: 'sample', icon: 'image', label: '샘플' },
   { id: 'photos', icon: 'camera', label: '수업 사진' },
@@ -452,8 +454,14 @@ export default function AppDetailPage() {
           )}
         </Section>
 
-        {/* ------------------------------------------------ 수업계획안 */}
-        <Section id="plan" icon="doc" title="수업계획안">
+        {/* ------------------------------------------------ 수업계획안
+            위: 양식 그대로 채우는 강의계획서 (그대로 인쇄된다)
+            아래: 한글 원본 첨부 + 판(버전) — 예전부터 쓰던 것을 그대로 둔다 */}
+        <Section id="plan" icon="doc" title="강의계획서">
+          <PlanForm appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
+        </Section>
+
+        <Section id="planfile" icon="clip" title="계획안 첨부파일">
           <LessonPlan appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
         </Section>
 

@@ -12,6 +12,7 @@ import { korDateFull, won, won1 } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { parsePrintParts, type PrintPart } from '@/lib/print';
 import { BrandMark } from '@/components/Brand';
+import { PlanSheet } from '@/components/PlanSheet';
 import { ErrorBanner } from '@/components/ui';
 import {
   FINDING_META,
@@ -26,6 +27,9 @@ import {
   type Photo,
   type PlanFile,
   type AppSample,
+  type LessonPlan,
+  type LessonPlanItem,
+  type PlanSlot,
 } from '@/lib/types';
 
 /**
@@ -57,6 +61,8 @@ export default function PrintPage() {
   const [findingFiles, setFindingFiles] = useState<FindingFile[]>([]);
   const [findingReplies, setFindingReplies] = useState<FindingReply[]>([]);
   const [planFiles, setPlanFiles] = useState<PlanFile[]>([]);
+  const [lessonPlan, setLessonPlan] = useState<LessonPlan | null>(null);
+  const [planItems, setPlanItems] = useState<LessonPlanItem[]>([]);
   const [sheet, setSheet] = useState<CostSheet | null>(null);
   const [costItems, setCostItems] = useState<CostItem[]>([]);
   const [samples, setSamples] = useState<AppSample[]>([]);
@@ -76,12 +82,12 @@ export default function PrintPage() {
       }
       setApp(a as AppRow);
 
-      const [revRes, fdRes, planRes, sheetRes, sampleRes, albumRes] = await Promise.all([
+      const [revRes, fdRes, planRes, sheetRes, sampleRes, albumRes, lpRes, lpiRes] = await Promise.all([
         supabase.from('app_reviewers').select('member_id').eq('app_id', id),
         parts.has('verify')
           ? supabase.from('findings').select('*').eq('app_id', id).order('created_at')
           : Promise.resolve({ data: [] }),
-        parts.has('plan')
+        parts.has('planfile')
           ? supabase.from('plan_files').select('*').eq('app_id', id).order('created_at')
           : Promise.resolve({ data: [] }),
         parts.has('cost')
@@ -93,10 +99,18 @@ export default function PrintPage() {
         parts.has('photo')
           ? supabase.from('albums').select('*').eq('app_id', id).order('class_date', { ascending: false })
           : Promise.resolve({ data: [] }),
+        parts.has('plan')
+          ? supabase.from('lesson_plans').select('*').eq('app_id', id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        parts.has('plan')
+          ? supabase.from('lesson_plan_items').select('*').eq('app_id', id).order('sort_order')
+          : Promise.resolve({ data: [] }),
       ]);
 
       setReviewerIds((revRes.data ?? []).map((r) => r.member_id));
       setPlanFiles((planRes.data ?? []) as PlanFile[]);
+      setLessonPlan((lpRes.data as LessonPlan) ?? null);
+      setPlanItems((lpiRes.data ?? []) as LessonPlanItem[]);
       setSamples((sampleRes.data ?? []) as AppSample[]);
 
       const fds = (fdRes.data ?? []) as Finding[];
@@ -278,9 +292,22 @@ export default function PrintPage() {
         </Section>
       )}
 
-      {/* ------------------------------------------------ 수업계획안 */}
-      {parts.has('plan') && (
-        <Section title="수업계획안" sub={`문서 ${latestPlans.length}개`}>
+      {/* -------------------------------------------- 강의계획서 (양식 그대로)
+          한글 양식과 같은 표를 그대로 그린다. 늘 새 쪽에서 시작해서
+          앞에 검증 기록이 붙어도 이 장만 떼어 쓸 수 있게 한다. */}
+      {parts.has('plan') && lessonPlan && (
+        <section className="print-page-break mb-6">
+          <PlanSheet
+            plan={lessonPlan}
+            items={planItems}
+            title={app.title_ko}
+          />
+        </section>
+      )}
+
+      {/* ------------------------------------------------ 계획안 첨부 */}
+      {parts.has('planfile') && (
+        <Section title="계획안 첨부파일" sub={`문서 ${latestPlans.length}개`}>
           {latestPlans.length === 0 ? (
             <Empty>첨부된 계획안이 없습니다.</Empty>
           ) : (

@@ -196,6 +196,49 @@ export interface CostItemPhoto {
   photo_url: string;
 }
 
+/* -------------------------------------------------------- 강의계획서
+   원장이 준 한글 양식(강의계획서.hwp) 그대로 화면에서 채우고 그대로 인쇄한다.
+   양식 한 장 = 프로그램 하나라서 app_id 가 그대로 기본키다. */
+
+/** 전개 칸의 항목 갈래 — 글 + 사진 한 장이 한 줄이다 */
+export type PlanSlot = 'step' | 'order' | 'result';
+
+export const PLAN_SLOTS: { value: PlanSlot; label: string; hint: string }[] = [
+  { value: 'step', label: 'AI 웹앱활동', hint: '1. VR 문화유산 탐방 미션 안내' },
+  { value: 'order', label: '만드는 순서', hint: '색지를 반으로 접어요' },
+  { value: 'result', label: '결과 이미지', hint: '완성한 작품' },
+];
+
+export interface LessonPlan {
+  app_id: string;
+  /** 제목 오른쪽 배지 */
+  category: string;
+  goal: string | null;
+  intro: string | null;
+  dev_title: string;
+  work_title: string;
+  closing: string | null;
+  /** 운영사항 > 교구 */
+  tools: string | null;
+  /** 운영사항 > 기타사항 */
+  etc: string | null;
+  /** 문서 맨 아래 로고 — 기관마다 다르고 언제든 바뀐다 */
+  logo_url: string | null;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface LessonPlanItem {
+  id: string;
+  app_id: string;
+  slot: PlanSlot;
+  label: string | null;
+  url: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface PlanFile {
   id: string;
   app_id: string;
