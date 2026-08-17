@@ -18,6 +18,8 @@ import type { IconName } from '@/components/Icon';
 export interface Completeness {
   verify: boolean;
   plan: boolean;
+  /** 강의계획서 — 따로 저장하는 문서가 아니라 재료(목표 + 샘플)가 차면 완성으로 본다 */
+  lecture: boolean;
   cost: boolean;
   sample: boolean;
   photo: boolean;
@@ -44,7 +46,7 @@ export interface AppOverview {
   sampleCount: number;
   photoCount: number;
   done: Completeness;
-  /** 5개 중 몇 개가 채워졌나 */
+  /** 6개 중 몇 개가 채워졌나 */
   filled: number;
 }
 
@@ -174,6 +176,9 @@ export function useAppsOverview(includeArchived = false) {
           const done: Completeness = {
             verify: st === 'done',
             plan: Boolean(app.plan_body?.trim()) || (planCount.get(app.id) ?? 0) > 0,
+            // 강의계획서는 인쇄할 때 만들어지는 문서라 "썼다" 는 기록이 따로 없다.
+            // 서식을 채우는 재료 — 목표(목적)와 [AI 웹앱활동](샘플) — 가 있으면 완성이다
+            lecture: Boolean(app.purpose?.trim()) && (sampleCount.get(app.id) ?? 0) > 0,
             cost: (sheetCount.get(app.id) ?? 0) > 0,
             sample: (sampleCount.get(app.id) ?? 0) > 0,
             photo: (photoCount.get(app.id) ?? 0) > 0,
@@ -212,10 +217,11 @@ export function useAppsOverview(includeArchived = false) {
   return { items, topics, loading, error, reload };
 }
 
-/** 카드에 찍히는 5개 구성요소 라벨 */
+/** 카드에 찍히는 6개 구성요소 라벨 */
 export const PIECES: { key: keyof Completeness; icon: IconName; label: string }[] = [
   { key: 'verify', icon: 'checkCircle', label: '검증' },
   { key: 'plan', icon: 'doc', label: '계획안' },
+  { key: 'lecture', icon: 'cap', label: '강의계획서' },
   { key: 'cost', icon: 'won', label: '원가' },
   { key: 'sample', icon: 'image', label: '샘플' },
   { key: 'photo', icon: 'camera', label: '사진' },

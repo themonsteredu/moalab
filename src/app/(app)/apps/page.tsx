@@ -173,7 +173,7 @@ export default function AppsPage() {
       )
       .sort((a, b) => a.app.title_ko.localeCompare(b.app.title_ko, 'ko'));
   }, [items, q]);
-  /** 5개 항목 중 안 채워진 게 있는 프로그램 수 */
+  /** 6개 항목 중 안 채워진 게 있는 프로그램 수 */
   const missingCount = (k: keyof Completeness) => items.filter((i) => !i.done[k]).length;
 
   return (
