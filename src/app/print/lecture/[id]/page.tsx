@@ -179,8 +179,9 @@ export default function LecturePrintPage() {
                       </figcaption>
                     )}
                     {/* 이미지를 absolute 로 깔아야 사진 비율이 칸 높이를 못 정한다.
-                        안 그러면 세로 사진 한 장에 문서가 두 장으로 넘어간다 */}
-                    <div className="relative min-h-[30mm] w-full flex-1 border border-neutral-200">
+                        안 그러면 세로 사진 한 장에 문서가 두 장으로 넘어간다.
+                        늘어나되 70mm 에서 멈춘다 — 남는 높이를 다 먹이면 세로로 길쭉해져 어색하다 */}
+                    <div className="relative min-h-[30mm] max-h-[70mm] w-full flex-1 border border-neutral-200">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={s.url}
@@ -204,7 +205,7 @@ export default function LecturePrintPage() {
                 }`}
               >
                 {photos.map((p) => (
-                  <div key={p.id} className="print-block relative min-h-[30mm] w-full border border-neutral-200">
+                  <div key={p.id} className="print-block relative min-h-[30mm] max-h-[70mm] w-full border border-neutral-200">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={p.url}
