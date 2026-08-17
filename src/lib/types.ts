@@ -199,6 +199,37 @@ export interface PlanFile {
   created_at: string;
 }
 
+/** 강의계획서 — 학교 제출용 한 장 서식의 글 칸. 프로그램당 한 행 (app_id 가 PK) */
+export interface LecturePlanRow {
+  app_id: string;
+  /** 제목 오른쪽 배지 (예: 진로직업체험) */
+  category: string | null;
+  goal: string | null;
+  intro: string | null;
+  /** 전개 첫 블록 제목 (기본 [AI 웹앱활동]) */
+  dev_title: string | null;
+  /** 전개 둘째 블록 제목 (기본 [활동작품]) */
+  work_title: string | null;
+  closing: string | null;
+  tools: string | null;
+  etc: string | null;
+  logo_url: string | null;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+/** 강의계획서의 이미지 칸 — slot: 'step'(AI 웹앱활동) / 'work'(활동작품) */
+export interface LecturePlanItem {
+  id: string;
+  app_id: string;
+  slot: 'step' | 'work';
+  label: string | null;
+  url: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface AppSample {
   id: string;
   app_id: string;

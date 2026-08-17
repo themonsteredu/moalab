@@ -16,6 +16,12 @@ export const LECTURE_INTRO = [
 
 export const LECTURE_CLOSING = '궁금한 점에 대해 질의응답 및 간단한 소감 발표';
 
+export const LECTURE_DEV_TITLE = '[AI 웹앱활동]';
+export const LECTURE_WORK_TITLE = '[활동작품]';
+
+/** 도입 기본 문구를 번호 붙은 한 덩어리 글로 (작성 칸의 기본값 · 인쇄 대체값) */
+export const lectureIntroText = () => LECTURE_INTRO.map((l, i) => `${i + 1}. ${l}`).join('\n');
+
 export const LECTURE_TOOLS = '최소 2인 1조의 태블릿 1대 또는 휴대폰/노트북';
 
 /** 활동작품 사진은 서식 한 장에 어울리게 최근 것 몇 장만 싣는다 */

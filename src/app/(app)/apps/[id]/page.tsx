@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Findings, FindingHistory, bundleFindings } from '@/components/Findings';
 import { CommentThread } from '@/components/CommentThread';
 import { LessonPlan } from '@/components/LessonPlan';
+import { LecturePlanForm } from '@/components/LecturePlanForm';
 import { CostInline } from '@/components/CostInline';
 import { SampleImages } from '@/components/SampleImages';
 import { AppForm } from '@/components/AppForm';
@@ -36,6 +37,7 @@ import type {
 const SECTIONS = [
   { id: 'verify', icon: 'checkCircle', label: '검증' },
   { id: 'plan', icon: 'doc', label: '수업계획안' },
+  { id: 'lecture', icon: 'cap', label: '강의계획서' },
   { id: 'cost', icon: 'won', label: '원가' },
   { id: 'sample', icon: 'image', label: '샘플' },
   { id: 'photos', icon: 'camera', label: '수업 사진' },
@@ -453,6 +455,11 @@ export default function AppDetailPage() {
           <LessonPlan appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
         </Section>
 
+        {/* 학교 제출용 한 장 서식 — 여기 채운 내용이 /print/lecture 로 나간다 */}
+        <Section id="lecture" icon="cap" title="강의계획서">
+          <LecturePlanForm appId={id} appSlug={app.slug} />
+        </Section>
+
         {/* -------------------------------------------------------- 원가 */}
         <Section id="cost" icon="won" title="원가">
           <CostInline appId={id} appTitle={app.title_ko} appSlug={app.slug} />
@@ -630,8 +637,8 @@ export default function AppDetailPage() {
             강의계획서 열기
           </a>
           <p className="text-[12px] leading-relaxed text-neutral-400">
-            강의계획서는 학교에 보내는 <b>한 장짜리 서식</b>이에요. 목표(프로그램의 목적)와
-            샘플 이미지 · 수업 사진으로 채워져요.
+            강의계획서는 학교에 보내는 <b>한 장짜리 서식</b>이에요. 아래{' '}
+            <b>강의계획서</b> 섹션에서 채운 내용으로 만들어져요.
           </p>
 
           <p className="text-[12px] leading-relaxed text-neutral-400">

@@ -361,6 +361,38 @@ create table if not exists moalab.app_samples (
 create index if not exists app_samples_app_idx on moalab.app_samples(app_id, sort_order);
 
 -- ---------------------------------------------------------------------
+-- 11-2. 강의계획서 — 학교 제출용 한 장 서식 (프로그램당 1행, /print/lecture)
+--       글 칸은 lesson_plans, 이미지 칸(slot: step/work)은 lesson_plan_items.
+--       이미지는 moalab-plans 버킷의 plan-{appId}/ 아래에 올라간다.
+-- ---------------------------------------------------------------------
+create table if not exists moalab.lesson_plans (
+  app_id     uuid primary key references moalab.apps(id) on delete cascade,
+  category   text,          -- 제목 오른쪽 배지 (예: 진로직업체험)
+  goal       text,
+  intro      text,
+  dev_title  text,          -- 전개 첫 블록 제목 (기본 [AI 웹앱활동])
+  work_title text,          -- 전개 둘째 블록 제목 (기본 [활동작품])
+  closing    text,
+  tools      text,
+  etc        text,
+  logo_url   text,
+  updated_by uuid references moalab.members(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists moalab.lesson_plan_items (
+  id         uuid primary key default gen_random_uuid(),
+  app_id     uuid not null references moalab.apps(id) on delete cascade,
+  slot       text not null default 'step',   -- 'step'(AI 웹앱활동) / 'work'(활동작품)
+  label      text,
+  url        text,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists lesson_plan_items_app_idx on moalab.lesson_plan_items(app_id, slot, sort_order);
+
+-- ---------------------------------------------------------------------
 -- 12. 활동 로그
 -- ---------------------------------------------------------------------
 create table if not exists moalab.activity_logs (
@@ -554,7 +586,7 @@ begin
     'findings','finding_files','finding_replies','round_signoffs',
     'cost_sheets','cost_items','cost_item_photos',
     'albums','photos','schedules','schedule_members','activity_logs',
-    'plan_files','app_samples',
+    'plan_files','app_samples','lesson_plans','lesson_plan_items',
     'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',
     'training_courses','training_records',
     'expenses','expense_files'

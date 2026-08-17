@@ -67,13 +67,14 @@ export function useAppsOverview(includeArchived = false) {
       let appQ = supabase.from('apps').select('*').order('due_date', { nullsFirst: false });
       if (!includeArchived) appQ = appQ.eq('archived', false);
 
-      const [appsRes, revRes, roundsRes, commentsRes, planRes, sheetRes, sampleRes, albumRes, topicRes] =
+      const [appsRes, revRes, roundsRes, commentsRes, planRes, lectureRes, sheetRes, sampleRes, albumRes, topicRes] =
         await Promise.all([
           appQ,
           supabase.from('app_reviewers').select('app_id,member_id'),
           supabase.from('rounds').select('*').order('round_no', { ascending: false }),
           supabase.from('comments').select('app_id').eq('resolved', false),
           supabase.from('plan_files').select('app_id'),
+          supabase.from('lesson_plans').select('app_id,goal'),
           supabase.from('cost_sheets').select('app_id').not('app_id', 'is', null),
           supabase.from('app_samples').select('app_id,url,sort_order').order('sort_order'),
           supabase.from('albums').select('id,app_id').not('app_id', 'is', null),
@@ -132,6 +133,12 @@ export function useAppsOverview(includeArchived = false) {
         return m;
       };
       const planCount = count(planRes.data as { app_id: string }[] | null);
+      /** 강의계획서에 목표를 쓴 앱 — 그게 "썼다" 의 기준이다 */
+      const lectureWritten = new Set(
+        ((lectureRes.data ?? []) as { app_id: string; goal: string | null }[])
+          .filter((r) => r.goal?.trim())
+          .map((r) => r.app_id),
+      );
       const sheetCount = count(sheetRes.data as { app_id: string }[] | null);
       const openByApp = count(commentsRes.data as { app_id: string }[] | null);
 
@@ -176,9 +183,8 @@ export function useAppsOverview(includeArchived = false) {
           const done: Completeness = {
             verify: st === 'done',
             plan: Boolean(app.plan_body?.trim()) || (planCount.get(app.id) ?? 0) > 0,
-            // 강의계획서는 인쇄할 때 만들어지는 문서라 "썼다" 는 기록이 따로 없다.
-            // 서식을 채우는 재료 — 목표(목적)와 [AI 웹앱활동](샘플) — 가 있으면 완성이다
-            lecture: Boolean(app.purpose?.trim()) && (sampleCount.get(app.id) ?? 0) > 0,
+            // 강의계획서 섹션에서 목표를 써서 저장했으면 완성이다
+            lecture: lectureWritten.has(app.id),
             cost: (sheetCount.get(app.id) ?? 0) > 0,
             sample: (sampleCount.get(app.id) ?? 0) > 0,
             photo: (photoCount.get(app.id) ?? 0) > 0,
