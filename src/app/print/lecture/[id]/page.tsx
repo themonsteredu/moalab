@@ -252,7 +252,7 @@ export default function LecturePrintPage() {
       </div>
 
       <footer className="mt-3 border-t border-neutral-300 pt-2 text-[10.5px] text-neutral-500">
-        모아킷 · 모아랩 업무 워크스페이스 — {app.title_ko}
+        모아킷_교육을 위한 모든 것
       </footer>
     </main>
   );
