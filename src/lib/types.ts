@@ -133,6 +133,26 @@ export function isOpenFinding(s: FindingStatus): boolean {
   return FINDING_META[s].open;
 }
 
+/**
+ * '검증 완료' 를 눌렀을 때 같이 확인완료로 닫히는 지적.
+ *
+ * fixed(수정완료)는 "제작자가 고쳤다고 답한" 상태다. CLAUDE.md 에 적어둔 대로
+ * **검증자가 확인해야** 진짜로 닫히는데, 그 확인이 바로 '검증 완료' 를 누르는 행동이다.
+ * 예전엔 지적을 하나하나 '확인했어요' 로 닫은 다음에야 검증 완료를 누를 수 있어서,
+ * 수정완료가 몇 건 쌓이면 버튼이 아예 안 눌렸다("먼저 확인완료로 닫아주세요").
+ */
+export function isConfirmableFinding(s: FindingStatus): boolean {
+  return s === 'fixed';
+}
+
+/**
+ * '검증 완료' 를 막는 지적 — 아직 손을 봐야 하는 것.
+ * 지적됨(open)·다시확인(recheck)만 막는다. 둘 다 "무엇을 더 해야 한다" 가 남은 상태다.
+ */
+export function blocksSignoff(s: FindingStatus): boolean {
+  return isOpenFinding(s) && !isConfirmableFinding(s);
+}
+
 export interface CommentRow {
   id: string;
   app_id: string;
@@ -182,6 +202,49 @@ export interface CostItemPhoto {
   photo_url: string;
 }
 
+/* -------------------------------------------------------- 강의계획서
+   원장이 준 한글 양식(강의계획서.hwp) 그대로 화면에서 채우고 그대로 인쇄한다.
+   양식 한 장 = 프로그램 하나라서 app_id 가 그대로 기본키다. */
+
+/** 전개 칸의 항목 갈래 — 글 + 사진 한 장이 한 줄이다 */
+export type PlanSlot = 'step' | 'order' | 'result';
+
+export const PLAN_SLOTS: { value: PlanSlot; label: string; hint: string }[] = [
+  { value: 'step', label: 'AI 웹앱활동', hint: '1. VR 문화유산 탐방 미션 안내' },
+  { value: 'order', label: '만드는 순서', hint: '색지를 반으로 접어요' },
+  { value: 'result', label: '결과 이미지', hint: '완성한 작품' },
+];
+
+export interface LessonPlan {
+  app_id: string;
+  /** 제목 오른쪽 배지 */
+  category: string;
+  goal: string | null;
+  intro: string | null;
+  dev_title: string;
+  work_title: string;
+  closing: string | null;
+  /** 운영사항 > 교구 */
+  tools: string | null;
+  /** 운영사항 > 기타사항 */
+  etc: string | null;
+  /** 문서 맨 아래 로고 — 기관마다 다르고 언제든 바뀐다 */
+  logo_url: string | null;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface LessonPlanItem {
+  id: string;
+  app_id: string;
+  slot: PlanSlot;
+  label: string | null;
+  url: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface PlanFile {
   id: string;
   app_id: string;
@@ -196,37 +259,6 @@ export interface PlanFile {
   group_id: string;
   /** 1판, 2판, … 클수록 최신 */
   version: number;
-  created_at: string;
-}
-
-/** 강의계획서 — 학교 제출용 한 장 서식의 글 칸. 프로그램당 한 행 (app_id 가 PK) */
-export interface LecturePlanRow {
-  app_id: string;
-  /** 제목 오른쪽 배지 (예: 진로직업체험) */
-  category: string | null;
-  goal: string | null;
-  intro: string | null;
-  /** 전개 첫 블록 제목 (기본 [AI 웹앱활동]) */
-  dev_title: string | null;
-  /** 전개 둘째 블록 제목 (기본 [활동작품]) */
-  work_title: string | null;
-  closing: string | null;
-  tools: string | null;
-  etc: string | null;
-  logo_url: string | null;
-  updated_by: string | null;
-  updated_at: string;
-  created_at: string;
-}
-
-/** 강의계획서의 이미지 칸 — slot: 'step'(AI 웹앱활동) / 'work'(활동작품) */
-export interface LecturePlanItem {
-  id: string;
-  app_id: string;
-  slot: 'step' | 'work';
-  label: string | null;
-  url: string | null;
-  sort_order: number;
   created_at: string;
 }
 

@@ -14,7 +14,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Findings, FindingHistory, bundleFindings } from '@/components/Findings';
 import { CommentThread } from '@/components/CommentThread';
 import { LessonPlan } from '@/components/LessonPlan';
-import { LecturePlanForm } from '@/components/LecturePlanForm';
+import { PlanForm } from '@/components/PlanForm';
 import { CostInline } from '@/components/CostInline';
 import { SampleImages } from '@/components/SampleImages';
 import { AppForm } from '@/components/AppForm';
@@ -36,8 +36,8 @@ import type {
 /** 프로그램 페이지의 목차. 이 순서가 곧 일하는 순서다. */
 const SECTIONS = [
   { id: 'verify', icon: 'checkCircle', label: '검증' },
-  { id: 'plan', icon: 'doc', label: '수업계획안' },
-  { id: 'lecture', icon: 'cap', label: '강의계획서' },
+  { id: 'plan', icon: 'doc', label: '강의계획서' },
+  { id: 'planfile', icon: 'clip', label: '첨부' },
   { id: 'cost', icon: 'won', label: '원가' },
   { id: 'sample', icon: 'image', label: '샘플' },
   { id: 'photos', icon: 'camera', label: '수업 사진' },
@@ -286,7 +286,8 @@ export default function AppDetailPage() {
         ref={navRef}
         className="sticky top-[53px] z-20 border-b border-neutral-200 bg-surface/95 backdrop-blur"
       >
-        <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 py-2">
+        {/* 목차도 본문과 같은 폭으로 잘라서 왼쪽 선을 맞춘다 */}
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 py-2 lg:max-w-4xl">
           {SECTIONS.map((s) => (
             <button
               key={s.id}
@@ -311,7 +312,10 @@ export default function AppDetailPage() {
         </div>
       </div>
 
-      <div className="px-4 pb-10 pt-4">
+      {/* 프로그램 페이지는 위에서 아래로 읽는 한 장의 문서다. 단일 컬럼이라
+          폭을 안 막으면 PC 에서 '수정완료 로 답변 올리기' 같은 버튼이 화면 끝까지 늘어난다.
+          가운데 정렬은 안 한다 — 헤더·사이드바와 왼쪽 선을 맞춰야 하기 때문. */}
+      <div className="px-4 pb-10 pt-4 lg:max-w-4xl">
         {error && (
           <div className="mb-3">
             <ErrorBanner message={error} onRetry={() => void load()} />
@@ -380,7 +384,9 @@ export default function AppDetailPage() {
             )}
           </dl>
 
-          <div className="grid grid-cols-2 gap-2 border-t border-neutral-100 p-3">
+          {/* 폰은 2열(인쇄만 한 줄 통째), PC 는 3열 한 줄 —
+              화면이 넓다고 버튼까지 가로로 쭉 늘어나면 오히려 보기 힘들다 */}
+          <div className="grid grid-cols-2 gap-2 border-t border-neutral-100 p-3 lg:grid-cols-3">
             {app.url ? (
               <a href={app.url} target="_blank" rel="noreferrer" className="btn-primary gap-1.5">
                 앱 열어보기
@@ -395,7 +401,7 @@ export default function AppDetailPage() {
                 재검증 요청
               </button>
             )}
-            <button onClick={() => setPrintOpen(true)} className="btn-ghost col-span-2 gap-1.5">
+            <button onClick={() => setPrintOpen(true)} className="btn-ghost col-span-2 gap-1.5 lg:col-span-1">
               <Icon name="printer" size={14} />
               인쇄 / PDF 저장
             </button>
@@ -450,14 +456,15 @@ export default function AppDetailPage() {
           )}
         </Section>
 
-        {/* ------------------------------------------------ 수업계획안 */}
-        <Section id="plan" icon="doc" title="수업계획안">
-          <LessonPlan appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
+        {/* ------------------------------------------------ 수업계획안
+            위: 양식 그대로 채우는 강의계획서 (그대로 인쇄된다)
+            아래: 한글 원본 첨부 + 판(버전) — 예전부터 쓰던 것을 그대로 둔다 */}
+        <Section id="plan" icon="doc" title="강의계획서">
+          <PlanForm appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
         </Section>
 
-        {/* 학교 제출용 한 장 서식 — 여기 채운 내용이 /print/lecture 로 나간다 */}
-        <Section id="lecture" icon="cap" title="강의계획서">
-          <LecturePlanForm appId={id} appSlug={app.slug} />
+        <Section id="planfile" icon="clip" title="계획안 첨부파일">
+          <LessonPlan appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
         </Section>
 
         {/* -------------------------------------------------------- 원가 */}
@@ -584,8 +591,20 @@ export default function AppDetailPage() {
       <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="인쇄 / PDF 저장">
         <div className="space-y-3">
           <p className="text-[13px] leading-relaxed text-neutral-500">
-            인쇄물에 넣을 것을 골라주세요. 표지(제목·상태·제작자·마감)는 항상 들어갑니다.
+            인쇄물에 넣을 것을 골라주세요. 표지(제목·상태·제작자·마감)가 맨 앞에 붙습니다.
+            <br />
+            <b>강의계획서만</b> 고르면 표지 없이 그 한 장만 나갑니다 — 학교에 낼 때 쓰세요.
           </p>
+
+          {/* 학교에 내는 건 계획서 한 장이다. 매번 다섯 개를 꺼서 만드는 건 번거롭다 */}
+          <button
+            type="button"
+            onClick={() => setPrintParts(['plan'])}
+            className="tap w-full gap-1.5 rounded-xl border border-brand bg-brand-50 text-[13.5px] font-bold text-brand-700"
+          >
+            <Icon name="doc" size={15} />
+            강의계획서 한 장만
+          </button>
 
           <div className="space-y-1.5">
             {PRINT_PARTS.map((p) => {
@@ -625,21 +644,6 @@ export default function AppDetailPage() {
             <Icon name="printer" size={15} />
             인쇄 화면 열기
           </a>
-
-          <a
-            href={`/print/lecture/${id}`}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => setPrintOpen(false)}
-            className="btn-ghost w-full"
-          >
-            <Icon name="doc" size={15} />
-            강의계획서 열기
-          </a>
-          <p className="text-[12px] leading-relaxed text-neutral-400">
-            강의계획서는 학교에 보내는 <b>한 장짜리 서식</b>이에요. 아래{' '}
-            <b>강의계획서</b> 섹션에서 채운 내용으로 만들어져요.
-          </p>
 
           <p className="text-[12px] leading-relaxed text-neutral-400">
             아이폰은 열린 화면에서 <b>공유 → 프린트</b>, PC 는 인쇄 대화상자에서

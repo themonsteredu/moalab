@@ -13,6 +13,8 @@ import { ErrorBanner, Sheet } from '@/components/ui';
 import {
   FINDING_META,
   REPLY_STATES,
+  blocksSignoff,
+  isConfirmableFinding,
   isOpenFinding,
   type Finding,
   type FindingFile,
@@ -70,6 +72,10 @@ export function Findings({
   );
   const open = list.filter((f) => isOpenFinding(f.status));
   const closed = list.filter((f) => !isOpenFinding(f.status));
+  /** 검증 완료를 막는 것 — 아직 손봐야 하는 지적(지적됨·다시확인) */
+  const blocking = list.filter((f) => blocksSignoff(f.status));
+  /** 검증 완료를 누르면 확인완료로 같이 닫히는 것 — 수정완료 답변이 달린 지적 */
+  const confirmable = list.filter((f) => isConfirmableFinding(f.status));
 
   const iAmReviewer = Boolean(session && reviewerIds.includes(session.id));
   const iSigned = Boolean(session && bundle.signoffs.some((s) => s.round_id === round.id && s.member_id === session.id));
@@ -123,15 +129,36 @@ export function Findings({
           .eq('member_id', session.id);
         if (e) throw e;
       } else {
-        if (open.length > 0) {
-          setError('아직 안 닫힌 지적이 있어요. 먼저 확인완료로 닫아주세요.');
+        if (blocking.length > 0) {
+          setError(
+            `아직 손봐야 할 지적이 ${blocking.length}건 있어요. 답변을 달아 수정완료로 바꾼 뒤 눌러주세요.`,
+          );
           return;
+        }
+        // 수정완료된 지적은 검증 완료를 누르는 순간 확인완료로 같이 닫는다.
+        // '검증 완료' 가 곧 검증자의 확인이라서, 하나하나 또 닫게 하면 같은 일을 두 번 시키는 것이다.
+        // 먼저 닫고 나서 서명한다 — 중간에 실패해도 다시 누르면 그대로 이어진다.
+        if (confirmable.length > 0) {
+          const { error: ce } = await supabase
+            .from('findings')
+            .update({ status: 'closed', updated_at: new Date().toISOString() })
+            .in(
+              'id',
+              confirmable.map((f) => f.id),
+            );
+          if (ce) throw ce;
         }
         const { error: e } = await supabase
           .from('round_signoffs')
           .upsert({ round_id: round.id, member_id: session.id }, { onConflict: 'round_id,member_id' });
         if (e) throw e;
-        logActivity(session.id, `${appSlug} ${round.round_no}차 검증 완료`, `app:${appId}`);
+        logActivity(
+          session.id,
+          confirmable.length > 0
+            ? `${appSlug} ${round.round_no}차 검증 완료 — 수정완료 ${confirmable.length}건 확인`
+            : `${appSlug} ${round.round_no}차 검증 완료`,
+          `app:${appId}`,
+        );
       }
       await recomputeAppStatus(appId);
       onChanged();
@@ -266,7 +293,20 @@ export function Findings({
             }`}
           >
             <Icon name={iSigned ? 'refresh' : 'check'} size={15} />
-            {iSigned ? '검증 완료 취소' : '다 봤어요 — 검증 완료'}
+            <span>
+              {iSigned ? '검증 완료 취소' : '다 봤어요 — 검증 완료'}
+              {/* 누르면 무슨 일이 일어나는지 미리 알려준다. 눌러보고 에러로 알게 하면 안 된다 */}
+              {!iSigned && blocking.length > 0 && (
+                <span className="block text-[11px] font-normal leading-tight opacity-90">
+                  손봐야 할 지적 {blocking.length}건이 남았어요
+                </span>
+              )}
+              {!iSigned && blocking.length === 0 && confirmable.length > 0 && (
+                <span className="block text-[11px] font-normal leading-tight opacity-90">
+                  수정완료 {confirmable.length}건도 확인완료로 닫혀요
+                </span>
+              )}
+            </span>
           </button>
         )}
       </div>

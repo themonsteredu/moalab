@@ -12,6 +12,7 @@ import { korDateFull, won, won1 } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { parsePrintParts, type PrintPart } from '@/lib/print';
 import { BrandMark } from '@/components/Brand';
+import { PlanSheet } from '@/components/PlanSheet';
 import { ErrorBanner } from '@/components/ui';
 import {
   FINDING_META,
@@ -26,6 +27,9 @@ import {
   type Photo,
   type PlanFile,
   type AppSample,
+  type LessonPlan,
+  type LessonPlanItem,
+  type PlanSlot,
 } from '@/lib/types';
 
 /**
@@ -51,12 +55,21 @@ export default function PrintPage() {
 
   const parts = useMemo<Set<PrintPart>>(() => parsePrintParts(search.get('parts')), [search]);
 
+  /**
+   * 강의계획서만 골랐으면 **그 한 장만** 나간다.
+   * 표지(프로그램명·상태·검증 라운드·제작자…)는 여러 묶음을 한 문서로 묶을 때 쓰는 머리다.
+   * 학교에 계획서 한 장만 낼 때 우리 내부 검증 현황이 같이 찍히면 안 된다.
+   */
+  const onlyPlan = parts.size === 1 && parts.has('plan');
+
   const [app, setApp] = useState<AppRow | null>(null);
   const [reviewerIds, setReviewerIds] = useState<string[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [findingFiles, setFindingFiles] = useState<FindingFile[]>([]);
   const [findingReplies, setFindingReplies] = useState<FindingReply[]>([]);
   const [planFiles, setPlanFiles] = useState<PlanFile[]>([]);
+  const [lessonPlan, setLessonPlan] = useState<LessonPlan | null>(null);
+  const [planItems, setPlanItems] = useState<LessonPlanItem[]>([]);
   const [sheet, setSheet] = useState<CostSheet | null>(null);
   const [costItems, setCostItems] = useState<CostItem[]>([]);
   const [samples, setSamples] = useState<AppSample[]>([]);
@@ -76,12 +89,12 @@ export default function PrintPage() {
       }
       setApp(a as AppRow);
 
-      const [revRes, fdRes, planRes, sheetRes, sampleRes, albumRes] = await Promise.all([
+      const [revRes, fdRes, planRes, sheetRes, sampleRes, albumRes, lpRes, lpiRes] = await Promise.all([
         supabase.from('app_reviewers').select('member_id').eq('app_id', id),
         parts.has('verify')
           ? supabase.from('findings').select('*').eq('app_id', id).order('created_at')
           : Promise.resolve({ data: [] }),
-        parts.has('plan')
+        parts.has('planfile')
           ? supabase.from('plan_files').select('*').eq('app_id', id).order('created_at')
           : Promise.resolve({ data: [] }),
         parts.has('cost')
@@ -93,10 +106,18 @@ export default function PrintPage() {
         parts.has('photo')
           ? supabase.from('albums').select('*').eq('app_id', id).order('class_date', { ascending: false })
           : Promise.resolve({ data: [] }),
+        parts.has('plan')
+          ? supabase.from('lesson_plans').select('*').eq('app_id', id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        parts.has('plan')
+          ? supabase.from('lesson_plan_items').select('*').eq('app_id', id).order('sort_order')
+          : Promise.resolve({ data: [] }),
       ]);
 
       setReviewerIds((revRes.data ?? []).map((r) => r.member_id));
       setPlanFiles((planRes.data ?? []) as PlanFile[]);
+      setLessonPlan((lpRes.data as LessonPlan) ?? null);
+      setPlanItems((lpiRes.data ?? []) as LessonPlanItem[]);
       setSamples((sampleRes.data ?? []) as AppSample[]);
 
       const fds = (fdRes.data ?? []) as Finding[];
@@ -174,7 +195,13 @@ export default function PrintPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[820px] bg-white p-6 text-black print:p-0">
+    // 강의계획서 한 장만 뽑을 때는 A4 인쇄 영역(297−14×2=269mm)을 최소 높이로 잡고
+    // flex 로 세운다 — 내용이 적어도 표가 늘어나 아래까지 채워진다 (PlanSheet fill)
+    <main
+      className={`mx-auto max-w-[820px] bg-white p-6 text-black print:p-0 ${
+        onlyPlan ? 'flex min-h-[269mm] flex-col' : ''
+      }`}
+    >
       {/* 화면에서만 보이는 조작 줄 */}
       <div className="no-print mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200 bg-raised p-3">
         <button onClick={() => window.print()} className="btn-primary px-3.5 text-[14px]">
@@ -191,44 +218,48 @@ export default function PrintPage() {
         </p>
       </div>
 
-      {/* ------------------------------------------------------ 표지 */}
-      <header className="print-block mb-6 border-b-2 border-black pb-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[12px] font-bold tracking-wide text-neutral-500">
-              {nameOfTopic(app.topic_id) || '모아랩 프로그램'}
-            </p>
-            <h1 className="mt-1 text-[26px] font-black leading-tight">{app.title_ko}</h1>
-            <p className="mt-1 text-[12.5px] text-neutral-500">{app.slug}</p>
+      {/* ------------------------------------------------------ 표지
+          강의계획서만 뽑을 때는 붙이지 않는다 (위 onlyPlan 설명 참고) */}
+      {!onlyPlan && (
+        <header className="print-block mb-6 border-b-2 border-black pb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[12px] font-bold tracking-wide text-neutral-500">
+                {nameOfTopic(app.topic_id) || '모아랩 프로그램'}
+              </p>
+              <h1 className="mt-1 text-[26px] font-black leading-tight">{app.title_ko}</h1>
+              <p className="mt-1 text-[12.5px] text-neutral-500">{app.slug}</p>
+            </div>
+            <span className="flex shrink-0 items-center justify-center rounded-[14px] bg-black p-2.5">
+              <BrandMark size={40} />
+            </span>
           </div>
-          <span className="flex shrink-0 items-center justify-center rounded-[14px] bg-black p-2.5">
-            <BrandMark size={40} />
-          </span>
-        </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
-          {/* 여기만 DB 의 status 컬럼을 그대로 읽는다 (다른 화면은 지적으로 직접 계산).
-              모르는 값이 들어와도 문서가 안 깨지게 기본값을 둔다 */}
-          <Row label="상태" value={STATUS_META[app.status]?.label ?? '진행 중'} />
-          <Row label="검증 라운드" value={`${app.current_round}차`} />
-          <Row label="제작자" value={app.creator_id ? nameOf(app.creator_id) : '-'} />
-          <Row
-            label="검증 참여"
-            value={reviewerIds.length > 0 ? reviewerIds.map((r) => nameOf(r)).join(', ') : '-'}
-          />
-          <Row label="마감일" value={app.due_date ? korDateFull(app.due_date) : '-'} />
-          <Row label="대상 학년" value={app.target_grade || '-'} />
-        </dl>
+          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3">
+            {/* 여기만 DB 의 status 컬럼을 그대로 읽는다 (다른 화면은 지적으로 직접 계산).
+                모르는 값이 들어와도 문서가 안 깨지게 기본값을 둔다 */}
+            <Row label="상태" value={STATUS_META[app.status]?.label ?? '진행 중'} />
+            <Row label="검증 라운드" value={`${app.current_round}차`} />
+            <Row label="제작자" value={app.creator_id ? nameOf(app.creator_id) : '-'} />
+            <Row
+              label="검증 참여"
+              value={reviewerIds.length > 0 ? reviewerIds.map((r) => nameOf(r)).join(', ') : '-'}
+            />
+            <Row label="마감일" value={app.due_date ? korDateFull(app.due_date) : '-'} />
+            <Row label="대상 학년" value={app.target_grade || '-'} />
+          </dl>
 
-        {app.purpose && (
-          <p className="mt-3 whitespace-pre-wrap text-[12.5px] leading-relaxed text-neutral-700">
-            {app.purpose}
+
+          {app.purpose && (
+            <p className="mt-3 whitespace-pre-wrap text-[12.5px] leading-relaxed text-neutral-700">
+              {app.purpose}
+            </p>
+          )}
+          <p className="mt-3 text-[11px] text-neutral-400">
+            출력일 {korDateFull(new Date().toISOString().slice(0, 10))}
           </p>
-        )}
-        <p className="mt-3 text-[11px] text-neutral-400">
-          출력일 {korDateFull(new Date().toISOString().slice(0, 10))}
-        </p>
-      </header>
+        </header>
+      )}
 
       {/* ------------------------------------------------------ 검증 */}
       {parts.has('verify') && (
@@ -280,9 +311,29 @@ export default function PrintPage() {
         </Section>
       )}
 
-      {/* ------------------------------------------------ 수업계획안 */}
-      {parts.has('plan') && (
-        <Section title="수업계획안" sub={`문서 ${latestPlans.length}개`}>
+      {/* -------------------------------------------- 강의계획서 (양식 그대로)
+          한글 양식과 같은 표를 그대로 그린다.
+          앞에 표지·검증 기록이 붙을 때만 새 쪽에서 시작한다 — 이 장만 뽑을 때
+          쪽 넘김을 넣으면 맨 앞에 빈 쪽이 한 장 딸려 나온다. */}
+      {parts.has('plan') && lessonPlan && (
+        <section className={onlyPlan ? 'flex min-h-0 flex-1 flex-col' : 'print-page-break mb-6'}>
+          <PlanSheet
+            plan={lessonPlan}
+            items={planItems}
+            title={app.title_ko}
+            fill={onlyPlan}
+          />
+        </section>
+      )}
+      {parts.has('plan') && !lessonPlan && (
+        <p className="py-10 text-center text-[13px] text-neutral-500">
+          아직 강의계획서를 안 만들었어요. 프로그램 화면의 <b>강의계획서</b> 에서 먼저 채워주세요.
+        </p>
+      )}
+
+      {/* ------------------------------------------------ 계획안 첨부 */}
+      {parts.has('planfile') && (
+        <Section title="계획안 첨부파일" sub={`문서 ${latestPlans.length}개`}>
           {latestPlans.length === 0 ? (
             <Empty>첨부된 계획안이 없습니다.</Empty>
           ) : (
@@ -432,9 +483,12 @@ export default function PrintPage() {
         </Section>
       )}
 
-      <footer className="mt-8 border-t border-neutral-300 pt-2 text-[10.5px] text-neutral-500">
-        모아킷 · 모아랩 업무 워크스페이스 — {app.title_ko}
-      </footer>
+      {/* 학교에 내는 강의계획서 한 장에는 내부 문구를 안 붙인다 — 하단 줄은 PlanSheet 가 그린다 */}
+      {!onlyPlan && (
+        <footer className="mt-8 border-t border-neutral-300 pt-2 text-[10.5px] text-neutral-500">
+          모아킷 · 모아랩 업무 워크스페이스 — {app.title_ko}
+        </footer>
+      )}
     </main>
   );
 }
