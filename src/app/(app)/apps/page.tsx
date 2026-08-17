@@ -158,6 +158,21 @@ export default function AppsPage() {
   const doneCount = items.filter((i) => i.status === 'done').length;
   /** 검증 완료를 뺀 수 = '할 일' 칩에 붙는 숫자 */
   const todoCount = items.length - doneCount;
+
+  /**
+   * 검증 완료 보관함 — 기본 화면('할 일')에서 완료된 프로그램이 그냥 사라지면
+   * "어디 갔지?" 가 된다. 목록 맨 아래 접힌 보관함으로 **따로 모아** 둔다.
+   * 검색어가 있으면 보관함 안에서도 찾아지고, 그때는 저절로 펼친다.
+   */
+  const doneArchive = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return items
+      .filter((i) => i.status === 'done')
+      .filter(
+        (i) => !term || i.app.title_ko.toLowerCase().includes(term) || i.app.slug.toLowerCase().includes(term),
+      )
+      .sort((a, b) => a.app.title_ko.localeCompare(b.app.title_ko, 'ko'));
+  }, [items, q]);
   /** 5개 항목 중 안 채워진 게 있는 프로그램 수 */
   const missingCount = (k: keyof Completeness) => items.filter((i) => !i.done[k]).length;
 
@@ -273,7 +288,9 @@ export default function AppsPage() {
                   ? '위 “+ 새 앱” 버튼으로 첫 프로그램을 등록해보세요.'
                   : '프로그램이 등록되면 여기에 보여요.'
                 : filter === 'todo'
-                  ? '전부 검증 완료예요. 다 보려면 위 “전체” 를 누르세요.'
+                  ? doneCount > 0
+                    ? '전부 검증 완료예요. 아래 보관함에 모아뒀어요.'
+                    : '조건에 맞는 게 없어요. 검색어를 바꿔보세요.'
                   : '필터나 검색어를 바꿔보세요.'
             }
           />
@@ -373,9 +390,11 @@ export default function AppsPage() {
             ))}
           </div>
         ) : (
-          /* 보드 — 상태별 칸반. 모바일에서는 가로 스크롤 대신 세로로 쌓는다 */
+          /* 보드 — 상태별 칸반. 모바일에서는 가로 스크롤 대신 세로로 쌓는다.
+             기본('할 일')에서는 완료가 다 걸러져 있으니 빈 '검증 완료' 칸을 그리지 않는다
+             — 완료는 아래 보관함에 있다 */
           <div className="space-y-5">
-            {BOARD_COLS.map((col) => {
+            {BOARD_COLS.filter((col) => !(filter === 'todo' && col === 'done')).map((col) => {
               const list = filtered.filter((i) => i.status === col);
               return (
                 <div key={col}>
@@ -399,6 +418,29 @@ export default function AppsPage() {
               );
             })}
           </div>
+        )}
+
+        {/* ------------------------------------ 검증 완료 보관함 (기본 화면에서만) */}
+        {!loading && filter === 'todo' && doneArchive.length > 0 && (
+          <details open={q.trim().length > 0} className="card mt-4 overflow-hidden">
+            <summary className="flex min-h-[44px] cursor-pointer select-none list-none items-center gap-2 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
+              <Icon name="checkCircle" size={16} className="shrink-0 text-green-600" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14.5px] font-bold text-neutral-700">
+                  검증 완료 보관함 <span className="text-green-700">{doneArchive.length}</span>
+                </span>
+                <span className="mt-0.5 block text-[11.5px] text-neutral-400">
+                  검증이 끝난 프로그램은 여기에 따로 모여요
+                </span>
+              </span>
+              <Icon name="chevronDown" size={15} className="shrink-0 text-neutral-400" />
+            </summary>
+            <div className="space-y-2 border-t border-neutral-100 p-2.5">
+              {doneArchive.map((it) => (
+                <AppCard key={it.app.id} item={it} nameOf={nameOf} />
+              ))}
+            </div>
+          </details>
         )}
       </div>
 
