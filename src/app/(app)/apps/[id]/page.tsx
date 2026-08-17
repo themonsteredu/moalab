@@ -618,6 +618,22 @@ export default function AppDetailPage() {
             <Icon name="printer" size={15} />
             인쇄 화면 열기
           </a>
+
+          <a
+            href={`/print/lecture/${id}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setPrintOpen(false)}
+            className="btn-ghost w-full"
+          >
+            <Icon name="doc" size={15} />
+            강의계획서 열기
+          </a>
+          <p className="text-[12px] leading-relaxed text-neutral-400">
+            강의계획서는 학교에 보내는 <b>한 장짜리 서식</b>이에요. 목표(프로그램의 목적)와
+            샘플 이미지 · 수업 사진으로 채워져요.
+          </p>
+
           <p className="text-[12px] leading-relaxed text-neutral-400">
             아이폰은 열린 화면에서 <b>공유 → 프린트</b>, PC 는 인쇄 대화상자에서
             대상을 <b>PDF로 저장</b> 으로 바꾸면 파일로 저장돼요.

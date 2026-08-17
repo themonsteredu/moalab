@@ -464,6 +464,7 @@ src/lib/
   useAppsOverview.ts         앱 요약(상태·진행률·미해결 댓글) — 목록 화면 공용
   push.ts                    usePush(구독 켜기·끄기) + sendPush(발송 요청)
   print.ts                   인쇄에 넣을 묶음 정의(PRINT_PARTS) + parts 파싱
+  lecture.ts                 강의계획서 기본 문구 (도입·마무리·교구·배지)
   expense.ts                 지출 — 달 계산(shiftMonth·monthRange), 합계, 날짜별 묶기, 금액 입력
 
 src/app/(app)/
@@ -471,6 +472,7 @@ src/app/(app)/
                              메뉴 하나가 폴더 하나. 순서는 BottomNav.tsx 가 정한다.
 src/app/print/[id]/          프로그램 인쇄 / PDF 저장 (레이아웃 밖 — 사이드바·탭 없음)
 src/app/print/expense/       월별 지출결의서 인쇄 (같은 이유로 레이아웃 밖)
+src/app/print/lecture/[id]/  강의계획서 — 학교 제출용 한 장 서식 (진로직업체험)
 scripts/make-icons.mjs       로고에서 앱 아이콘 뽑기
 scripts/friendly-error.test.mjs  에러 문구 갈래 테스트 (node 로 바로 실행)
 scripts/status.test.mjs      앱 상태 계산(수정 필요·다시확인·검증 완료) 표 검증
@@ -638,6 +640,17 @@ src/components/
 - [x] **`/print/expense`** — 구분별·날짜별 소계 + 명세 표 + **번호가 일치하는 영수증 첨부**,
       서명란, 영수증 없는 건 빨간 칸으로 따로
 - [x] 달 계산(연 경계·윤년)·합계·금액 입력 테스트 33건, 영수증 실패 시 재시도 중복 저장 방지 확인
+
+### ✅ 12단계 — 강의계획서 (학교 제출용 한 장 서식)
+- [x] `/print/lecture/[id]` — 목표·도입·전개([AI 웹앱활동]·[활동작품])·마무리·운영사항.
+      내부용 종합 인쇄(`/print/[id]`)와 달리 **외부 제출용**이라 검증·원가는 안 싣는다
+- [x] 목표 = 앱의 '목적', [AI 웹앱활동] = 샘플 이미지(캡션이 번호 붙은 설명), [활동작품] = 수업 사진
+- [x] **내용이 적어 한 장이 안 차면 사진 칸이 늘어나 A4 아래까지 채운다**
+      (본문 flex + 전개 칸만 flex-1 + `auto-rows-fr`, 최소 높이 30mm)
+- [x] **활동작품이 없으면 그 블록 자체를 안 싣는다** — [AI 웹앱활동]도 마찬가지.
+      빈 제목만 남으면 덜 만든 문서처럼 보인다
+- [x] 도입·마무리·교구 기본 문구는 `src/lib/lecture.ts` (프로그램마다 거의 같은 진행 멘트)
+- [x] 여는 곳: 프로그램 화면 > 인쇄 / PDF 저장 시트 안 `강의계획서 열기`
 
 ### 다음에 하면 좋을 것
 
