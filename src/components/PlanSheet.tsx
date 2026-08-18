@@ -95,11 +95,12 @@ export function PlanSheet({
                         {i + 1}. {s.label}
                       </p>
                       {/* 사진 비율이 제각각이라 그냥 붙이면 열 높이가 안 맞는다.
-                          전부 같은 4:3 칸에 넣고(mt-auto 로 아래선도 맞춤) 살짝 늘려 채운다 */}
+                          전부 같은 4:3 칸에 넣되(mt-auto 로 아래선도 맞춤) **자르지는 않는다**
+                          (contain) — 폰 세로 사진은 위가 잘리는 대신 양옆에 여백이 생긴다 */}
                       {s.url && (
                         <span className="relative mt-auto block aspect-[4/3] w-full overflow-hidden">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={s.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                          <img src={s.url} alt="" className="absolute inset-0 h-full w-full object-contain" />
                         </span>
                       )}
                     </div>
@@ -186,11 +187,12 @@ function PlanWorkCol({ title, rows }: { title: string; rows: LessonPlanItem[] })
         {rows.map((r) => (
           <li key={r.id} className="print-block">
             {r.label && <p className="pb-0.5 text-[10.5px] leading-snug">{r.label}</p>}
-            {/* 웹앱활동과 같은 4:3 칸 — 옆 열과 줄 높이가 맞아야 표가 안 흐트러진다 */}
+            {/* 웹앱활동과 같은 4:3 칸 — 옆 열과 줄 높이가 맞아야 표가 안 흐트러진다.
+                여기도 자르지 않는다 (contain) */}
             {r.url && (
               <span className="relative block aspect-[4/3] w-full overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={r.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                <img src={r.url} alt="" className="absolute inset-0 h-full w-full object-contain" />
               </span>
             )}
           </li>

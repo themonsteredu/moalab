@@ -561,13 +561,13 @@ function ItemRows({
             />
             {it.url ? (
               <div className="mt-2 flex items-start gap-2">
-                {/* 인쇄물과 같은 4:3 배율로 보여준다 — 폰 세로 사진도 여기서
-                    보이는 그대로 인쇄되니, 잘리는 부분을 미리 확인할 수 있다 */}
+                {/* 인쇄물과 같은 4:3 칸으로 보여준다 — 크기는 일정하게, 사진은 안 자른다
+                    (폰 세로 사진은 양옆 여백). 여기서 보이는 그대로 인쇄된다 */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={it.url}
                   alt={it.label ?? '사진'}
-                  className="aspect-[4/3] w-full rounded-lg bg-raised object-cover"
+                  className="aspect-[4/3] w-full rounded-lg bg-raised object-contain"
                 />
                 <label
                   htmlFor={`plan-img-${it.id}`}
