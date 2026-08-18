@@ -373,6 +373,15 @@ A 가 올리고 → A 가 고쳐 올리고 → B 가 또 고쳐 올리는 게 �
 `/print/[id]` — 프로그램 화면의 **인쇄 / PDF 저장** 에서 넣을 것을 체크해서 연다.
 `?parts=verify,plan,cost,sample,photo` 로 무엇을 넣을지 정한다 (`src/lib/print.ts`).
 
+목록 단위 인쇄는 **프로그램계획 상단의 인쇄 버튼**에서 연다:
+- `/print/lectures` — **강의계획서 전체 인쇄.** 목표를 쓴 프로그램 전부를
+  한 프로그램 = A4 한 장(fill)으로 잇는다. 순서는 목록 트리와 같다(주제 → 이름).
+  안 쓴 프로그램은 안 싣는다 — 빈 양식이 섞이면 덜 만든 문서처럼 보인다.
+  몇 개가 빠졌는지는 화면(no-print)에서만 알려준다.
+- `/print/status` — **검증 현황 표.** 검증 완료 / 미완료 두 표로 나누고,
+  미완료 표에는 상태(수정 필요·다시확인·진행 중)를 실어 다음에 누가 움직여야
+  하는지 종이에서도 보이게 한다. 상태는 목록과 같은 `useAppsOverview` 재계산 값이다.
+
 - **PDF 라이브러리를 쓰지 않는다.** 브라우저 인쇄를 그대로 쓴다.
   · 아이폰: 사파리 공유 → 프린트 → 두 손가락으로 벌려 PDF 저장
   · PC: 인쇄 대화상자에서 대상을 'PDF로 저장'
@@ -515,6 +524,8 @@ src/app/(app)/
                              메뉴 하나가 폴더 하나. 순서는 BottomNav.tsx 가 정한다.
 src/app/print/[id]/          프로그램 인쇄 / PDF 저장 (레이아웃 밖 — 사이드바·탭 없음)
 src/app/print/expense/       월별 지출결의서 인쇄 (같은 이유로 레이아웃 밖)
+src/app/print/lectures/      강의계획서 전체 인쇄 — 쓴 프로그램 전부, 한 장씩 (주제 순서)
+src/app/print/status/        검증 현황 표 인쇄 — 검증 완료/미완료로 나눈 표
 scripts/make-icons.mjs       로고에서 앱 아이콘 뽑기
 scripts/friendly-error.test.mjs  에러 문구 갈래 테스트 (node 로 바로 실행)
 scripts/status.test.mjs      앱 상태 계산(수정 필요·다시확인·검증 완료) 표 검증

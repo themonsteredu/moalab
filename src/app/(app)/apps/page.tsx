@@ -7,7 +7,7 @@ import { AppBoardCard, AppCard, AppGalleryCard } from '@/components/AppCard';
 import { AppForm } from '@/components/AppForm';
 import { TopicManager } from '@/components/TopicManager';
 import { TopicMove } from '@/components/TopicMove';
-import { CardSkeleton, EmptyState, ErrorBanner, useToast } from '@/components/ui';
+import { CardSkeleton, EmptyState, ErrorBanner, Sheet, useToast } from '@/components/ui';
 import { useAppsOverview, PIECES, type Completeness } from '@/lib/useAppsOverview';
 import { useMembers } from '@/lib/useMembers';
 import { useSession } from '@/lib/session';
@@ -59,6 +59,8 @@ export default function AppsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [topicsOpen, setTopicsOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  /** 목록 전체 인쇄 — 강의계획서 전부 / 검증 현황 표 */
+  const [printOpen, setPrintOpen] = useState(false);
 
   // 보기 방식은 기억해둔다 (원장은 보드, 강사는 리스트를 주로 쓴다)
   useEffect(() => {
@@ -182,11 +184,20 @@ export default function AppsPage() {
         title="프로그램계획"
         subtitle={`전체 ${items.length}개 · 검증 완료 ${doneCount}개`}
         right={
-          isAdmin ? (
-            <button onClick={() => setFormOpen(true)} className="btn-primary h-10 px-3.5 text-[14px]">
-              + 새 앱
+          <span className="flex items-center gap-2">
+            <button
+              onClick={() => setPrintOpen(true)}
+              aria-label="목록 인쇄"
+              className="btn-ghost h-10 w-10 px-0"
+            >
+              <Icon name="printer" size={16} />
             </button>
-          ) : null
+            {isAdmin && (
+              <button onClick={() => setFormOpen(true)} className="btn-primary h-10 px-3.5 text-[14px]">
+                + 새 앱
+              </button>
+            )}
+          </span>
         }
       />
 
@@ -443,6 +454,48 @@ export default function AppsPage() {
           </details>
         )}
       </div>
+
+      {/* 목록 전체 인쇄 고르기 */}
+      <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="목록 인쇄">
+        <div className="space-y-3">
+          <a
+            href="/print/lectures"
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setPrintOpen(false)}
+            className="block rounded-xl border border-neutral-200 bg-surface p-3.5 active:bg-neutral-50"
+          >
+            <span className="flex items-center gap-2 text-[14.5px] font-bold text-neutral-900">
+              <Icon name="doc" size={16} className="text-brand" />
+              강의계획서 전체 인쇄
+            </span>
+            <span className="mt-1 block text-[12px] leading-relaxed text-neutral-500">
+              강의계획서를 쓴 프로그램 전부를 한 장씩 이어서 뽑아요. 안 쓴 프로그램은 빠져요.
+            </span>
+          </a>
+
+          <a
+            href="/print/status"
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setPrintOpen(false)}
+            className="block rounded-xl border border-neutral-200 bg-surface p-3.5 active:bg-neutral-50"
+          >
+            <span className="flex items-center gap-2 text-[14.5px] font-bold text-neutral-900">
+              <Icon name="checkCircle" size={16} className="text-green-600" />
+              검증 현황 표 인쇄
+            </span>
+            <span className="mt-1 block text-[12px] leading-relaxed text-neutral-500">
+              검증 완료 / 미완료로 나눈 표예요. 미완료엔 상태(수정 필요·다시확인·진행 중)도 실려요.
+            </span>
+          </a>
+
+          <p className="text-[12px] leading-relaxed text-neutral-400">
+            열린 화면에서 인쇄하거나 <b>PDF로 저장</b> 하면 돼요. 프로그램 하나만 뽑을 땐
+            그 프로그램 화면의 <b>인쇄 / PDF 저장</b> 을 쓰세요.
+          </p>
+        </div>
+      </Sheet>
 
       <TopicMove
         open={moveOpen}
