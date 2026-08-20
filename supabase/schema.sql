@@ -573,6 +573,70 @@ create table if not exists moalab.expense_files (
 );
 create index if not exists expense_files_expense_idx on moalab.expense_files(expense_id, sort_order);
 
+-- ---------------------------------------------------------------------
+-- 17. 업무 분장 — 원장이 쪼개서 · 담당자를 정하고 · 기한을 준다
+--
+--   "강사 역할을 하세요" 로는 아무도 움직이지 않는다. 무엇을 · 누가 · 언제까지가
+--   한 줄로 적혀 있어야 일이 굴러간다. 그 한 줄이 tasks 한 행이다.
+--
+--   ※ 강사양성(training_*)과 섞지 않는다.
+--     저쪽은 '전원 × 고정 커리큘럼' 매트릭스라 기한이 없고 목록이 영구적이다.
+--     이쪽은 '1건 × 담당자 1명 × 기한' 이고 끝나면 지나간다.
+--     합치면 이수율 판도, 기한 알림도 둘 다 못 쓴다 (원가 vs 지출과 같은 이유).
+--
+--   ※ 담당자는 한 명이다. 여럿에게 시킬 일은 템플릿에서 사람 수만큼 줄을 만든다.
+--     '다 같이' 는 아무도 안 하는 일이 된다 — 그게 이 기능을 만든 이유다.
+-- ---------------------------------------------------------------------
+create table if not exists moalab.tasks (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  detail      text,
+  -- 담당자가 빠져도 '그 일이 있었다' 는 남아야 한다 → set null
+  -- (app_reviewers 같은 배정 표는 cascade 지만, 이건 배정이 아니라 업무 기록 자체다)
+  assignee_id uuid references moalab.members(id) on delete set null,
+  due_date    date,
+  state       text not null default 'todo',        -- todo | doing | done
+  app_id      uuid references moalab.apps(id) on delete set null,   -- 딸린 프로그램(없어도 된다)
+  -- 한 번에 뿌린 묶음. 일회성이라 따로 표를 두지 않고 이름을 그대로 박는다
+  -- (주제 topics 는 계속 재사용돼서 표가 맞았지만, '8/25 A초 준비' 는 한 번 쓰고 만다)
+  batch_id    uuid,
+  batch_title text,
+  created_by  uuid references moalab.members(id) on delete set null,
+  sort_order  int not null default 0,
+  -- 기한 알림을 보낸 날. 같은 알림이 하루에 두 번 울리는 걸 이 한 칸으로 막는다
+  reminded_on date,
+  done_at     timestamptz,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create index if not exists tasks_assignee_idx on moalab.tasks(assignee_id, state);
+create index if not exists tasks_due_idx      on moalab.tasks(due_date);
+create index if not exists tasks_batch_idx    on moalab.tasks(batch_id);
+create index if not exists tasks_app_idx      on moalab.tasks(app_id);
+
+-- 체크리스트 — 나눠주는 일은 매번 비슷하다. 한 번 만들어두고 버튼으로 뿌린다.
+-- 뿌린 업무는 그 순간 사진처럼 굳는다 (템플릿을 고쳐도 이미 뿌린 건 안 바뀐다).
+create table if not exists moalab.task_templates (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists task_templates_order_idx on moalab.task_templates(sort_order);
+
+create table if not exists moalab.task_template_items (
+  id                  uuid primary key default gen_random_uuid(),
+  template_id         uuid not null references moalab.task_templates(id) on delete cascade,
+  title               text not null,
+  detail              text,
+  default_assignee_id uuid references moalab.members(id) on delete set null,
+  -- 기준일 대비 며칠. 음수 = 미리 (기준일이 수업날이면 준비는 -5, -2 처럼 앞에 온다)
+  day_offset          int not null default 0,
+  sort_order          int not null default 0
+);
+create index if not exists task_template_items_tpl_idx
+  on moalab.task_template_items(template_id, sort_order);
+
 -- =====================================================================
 --  권한 + RLS
 --   · members       : RLS on, 정책 없음 → anon 키로는 읽기/쓰기 전부 차단
@@ -611,6 +675,7 @@ begin
     'plan_files','app_samples','lesson_plans','lesson_plan_items',
     'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',
     'training_courses','training_records',
+    'tasks','task_templates','task_template_items',
     'expenses','expense_files'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);

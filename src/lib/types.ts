@@ -465,3 +465,56 @@ export const PHOTO_TAGS: { value: PhotoTag; label: string }[] = [
   { value: 'board', label: '판서' },
   { value: 'group', label: '단체' },
 ];
+
+/* ------------------------------------------------------------------ 업무
+   강사양성(training_*)과 축이 다르다.
+   저쪽은 '전원 × 고정 커리큘럼'(기한 없음, 목록이 영구적),
+   이쪽은 '1건 × 담당자 1명 × 기한'(끝나면 지나간다).
+   값은 todo/doing/done 으로 같지만 라벨이 달라서 상수를 따로 둔다 —
+   TrainingState 를 그대로 쓰면 한쪽 문구를 고칠 때 다른 쪽이 끌려온다. */
+
+export type TaskState = 'todo' | 'doing' | 'done';
+
+export interface Task {
+  id: string;
+  title: string;
+  detail: string | null;
+  assignee_id: string | null;
+  due_date: string | null;
+  state: TaskState;
+  app_id: string | null;
+  /** 한 번에 뿌린 묶음 (체크리스트로 만든 것) */
+  batch_id: string | null;
+  batch_title: string | null;
+  created_by: string | null;
+  sort_order: number;
+  /** 기한 알림을 보낸 날 — 같은 알림이 두 번 울리는 걸 막는다 */
+  reminded_on: string | null;
+  done_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface TaskTemplateItem {
+  id: string;
+  template_id: string;
+  title: string;
+  detail: string | null;
+  default_assignee_id: string | null;
+  /** 기준일 대비 며칠. 음수 = 미리 */
+  day_offset: number;
+  sort_order: number;
+}
+
+export const TASK_STATES: { value: TaskState; label: string; cls: string; on: string }[] = [
+  { value: 'todo', label: '할 일', cls: 'bg-neutral-100 text-neutral-500', on: 'bg-neutral-500 text-white' },
+  { value: 'doing', label: '하는 중', cls: 'bg-amber-100 text-amber-800', on: 'bg-amber-500 text-white' },
+  { value: 'done', label: '완료', cls: 'bg-green-100 text-green-800', on: 'bg-green-600 text-white' },
+];

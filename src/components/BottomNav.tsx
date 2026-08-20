@@ -23,6 +23,8 @@ export interface NavItem {
 export const WORK_NAV: NavItem[] = [
   { href: '/home', label: '홈', icon: 'grid' },
   { href: '/notice', label: '공지사항', icon: 'megaphone' },
+  // 업무는 공지 바로 다음이다 — 알린 다음에 누가 무엇을 언제까지 할지가 정해진다
+  { href: '/task', label: '업무', icon: 'list' },
   { href: '/apps', label: '프로그램계획', icon: 'doc' },
   { href: '/verify', label: '프로그램검증', icon: 'checkCircle' },
   { href: '/mock', label: '모의수업', icon: 'present' },
@@ -46,7 +48,9 @@ const PHONE_TABS: NavItem[] = [
   { href: '/verify', label: '검증', icon: 'checkCircle' },
 ];
 
-const MORE_HREFS = ['/mock', '/training', '/cost', '/expense', '/gallery', '/schedule', '/admin'];
+// 폰 하단 탭은 4개를 유지한다 — 5개로 늘리면 375px 에서 라벨이 뭉개진다.
+// 업무는 일단 더보기에 두고, 홈에서 자기 업무가 다 보이게 한다.
+const MORE_HREFS = ['/task', '/mock', '/training', '/cost', '/expense', '/gallery', '/schedule', '/admin'];
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/');
