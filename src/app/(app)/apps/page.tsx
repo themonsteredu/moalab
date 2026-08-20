@@ -192,11 +192,11 @@ export default function AppsPage() {
             >
               <Icon name="printer" size={16} />
             </button>
-            {isAdmin && (
-              <button onClick={() => setFormOpen(true)} className="btn-primary h-10 px-3.5 text-[14px]">
-                + 새 앱
-              </button>
-            )}
+            {/* 프로그램 등록은 강사도 한다 — 만든 사람이 바로 올려야 등록이 안 밀린다.
+                목록 전체를 건드리는 것(주제 관리·주제로 옮기기·보관)만 원장 몫이다 */}
+            <button onClick={() => setFormOpen(true)} className="btn-primary h-10 px-3.5 text-[14px]">
+              + 새 앱
+            </button>
           </span>
         }
       />
@@ -295,9 +295,7 @@ export default function AppsPage() {
             }
             desc={
               items.length === 0
-                ? isAdmin
-                  ? '위 “+ 새 앱” 버튼으로 첫 프로그램을 등록해보세요.'
-                  : '프로그램이 등록되면 여기에 보여요.'
+                ? '위 “+ 새 앱” 버튼으로 첫 프로그램을 등록해보세요.'
                 : filter === 'todo'
                   ? doneCount > 0
                     ? '전부 검증 완료예요. 아래 보관함에 모아뒀어요.'
