@@ -88,6 +88,9 @@ function makeIds() {
   return () => String(++n);
 }
 
+/** 맨 아래 로고는 활동 줄이 아니라서 이 이름으로 구분해 싣는다 */
+export const LOGO_ITEM_ID = '__logo__';
+
 /** 이 문서에 들어갈 그림 한 장 */
 export interface HwpxPic {
   /** 어느 활동 줄(lesson_plan_items.id)의 사진인지 */
@@ -429,11 +432,21 @@ function devCell(
   const block = (title: string | null, rows: LessonPlanItem[]) => {
     if (rows.length === 0) return;
     if (title) out.push(para(id, title, { charPr: CH_BOLD, width: cellW }));
-    // 한 줄에 3칸씩 끊는다. 사진이 1장뿐이면 반 폭으로 가운데 — 인쇄물과 같은 규칙
+
+    // 사진이 1장뿐이면 표를 만들지 않고 **반 폭으로 가운데** 놓는다 — 인쇄물·원본 양식과 같다.
+    // (빈 칸을 옆에 붙이는 식으로 하면 왼쪽으로 쏠린다)
+    if (rows.length === 1) {
+      const r = rows[0];
+      out.push(para(id, r.label ?? '', { charPr: CH_SMALL, paraPr: PA_CENTER, width: cellW }));
+      const p = picOf(r, Math.floor(cellW / 2));
+      if (p) out.push(picPara(id, p, cellW));
+      return;
+    }
+
+    // 한 줄에 3칸씩 끊는다. 넘치면 다음 줄
     for (let i = 0; i < rows.length; i += 3) {
       const chunk = rows.slice(i, i + 3);
-      const single = rows.length === 1;
-      const cols = single ? 2 : chunk.length;
+      const cols = chunk.length;
       const colW = Math.floor(cellW / cols);
       const picW = colW - mm(4);
       const cells: Cell[] = chunk.map((r, ci) => {
@@ -441,12 +454,8 @@ function devCell(
         const inner =
           para(id, r.label ?? '', { charPr: CH_SMALL, width: colW }) +
           (p ? picPara(id, p, colW) : '');
-        return { body: inner, col: single ? 0 : ci, row: 0, width: colW, height: mm(35) };
+        return { body: inner, col: ci, row: 0, width: colW, height: mm(35) };
       });
-      if (single) {
-        // 오른쪽 빈 칸을 하나 둬서 사진이 왼쪽 절반 안에서 가운데로 온다
-        cells.push({ body: para(id, '', { width: colW }), col: 1, row: 0, width: colW, height: mm(35) });
-      }
       out.push(
         para(id, '', {
           width: cellW,
@@ -592,25 +601,36 @@ function planSectionXml(
       width: TEXT_W,
       inner: `<hp:run charPrIDRef="${CH_BODY}">${tableXml(id, rows, totalH)}</hp:run>`,
     }) +
-    // 맨 아래 문구
-    para(id, plan.logo_url ? '' : '모아킷_교육을 위한 모든 것', {
-      charPr: CH_SMALL,
-      paraPr: PA_CENTER,
-      width: TEXT_W,
-    }) +
+    // 맨 아래 — 로고를 올렸으면 로고, 없으면 기본 문구 (인쇄물과 같다)
+    (() => {
+      const logo = picOf({ id: LOGO_ITEM_ID } as LessonPlanItem, mm(40));
+      if (logo) return picPara(id, logo, TEXT_W);
+      return para(id, '모아킷_교육을 위한 모든 것', {
+        charPr: CH_SMALL,
+        paraPr: PA_CENTER,
+        width: TEXT_W,
+      });
+    })() +
     `</hs:sec>`
   );
 }
 
 /* ------------------------------------------------- 패키지(ZIP) 로 묶기 */
 
-const MEDIA: Record<string, string> = {
+/**
+ * 한글이 읽을 수 있는 그림 형식만 여기 넣는다.
+ * **WebP 를 넣지 말 것** — 이 앱은 사진을 WebP 로 저장하지만(`image.ts`)
+ * 한글은 WebP 를 못 읽어서 그림 자리에 깨진 아이콘만 나온다.
+ * 그래서 넣기 전에 toHwpImage() 가 JPEG/PNG 로 바꾼다.
+ */
+export const HWP_IMAGE_MEDIA: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   gif: 'image/gif',
   bmp: 'image/bmp',
 };
+const MEDIA = HWP_IMAGE_MEDIA;
 
 /**
  * .hwpx 안에 들어갈 파일들을 만든다. **브라우저 API 를 안 쓰는 순수 함수**라
@@ -704,39 +724,67 @@ export function buildPlanHwpxFiles(
 /* -------------------------------------------------- 브라우저에서 내려받기 */
 
 /** 사진 한 장을 받아서 크기까지 잰다. 못 받으면 그 장만 건너뛴다 (문서는 나간다) */
-async function loadPic(item: LessonPlanItem, index: number): Promise<HwpxPic | null> {
-  if (!item.url) return null;
-  try {
-    const res = await fetch(item.url);
-    if (!res.ok) return null;
-    const buf = new Uint8Array(await res.arrayBuffer());
-    const type = res.headers.get('content-type') ?? '';
-    let ext = type.includes('png')
-      ? 'png'
-      : type.includes('gif')
-        ? 'gif'
-        : type.includes('bmp')
-          ? 'bmp'
-          : type.includes('jpeg') || type.includes('jpg')
-            ? 'jpg'
-            : (item.url.split('?')[0].split('.').pop() ?? 'png').toLowerCase();
-    if (!MEDIA[ext]) ext = 'png';
+/**
+ * 한글이 **읽을 수 있는 형식**으로 바꾼다.
+ *
+ * 이 앱은 올린 사진을 전부 **WebP** 로 저장하는데(`image.ts`) 한글은 WebP 를 못 읽는다.
+ * 그대로 넣으면 파일은 열리고 배치도 맞는데 **그림 자리마다 깨진 아이콘**만 나온다.
+ * 그래서 브라우저에서 캔버스로 다시 그려 JPEG(사진) / PNG(로고) 로 바꿔 넣는다.
+ *
+ * 인쇄용이라 원본 1600px 을 그대로 넣을 이유가 없다 — 넣는 칸이 60mm 안팎이라
+ * 1200px 이면 충분하고, 파일도 그만큼 가벼워진다.
+ */
+const HWP_MAX_EDGE = 1200;
 
-    // 원래 비율을 알아야 칸에 넣을 때 안 찌그러진다
-    const size = await new Promise<{ w: number; h: number }>((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve({ w: img.naturalWidth || 800, h: img.naturalHeight || 600 });
-      img.onerror = () => resolve({ w: 800, h: 600 });
-      img.src = item.url as string;
-    });
+async function toHwpImage(
+  url: string,
+  wantPng: boolean,
+): Promise<{ data: Uint8Array; ext: 'png' | 'jpg'; w: number; h: number } | null> {
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  // createImageBitmap 이 WebP 도 풀어준다
+  const bmp = await createImageBitmap(blob);
+  const scale = Math.min(1, HWP_MAX_EDGE / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    bmp.close?.();
+    return null;
+  }
+  // JPEG 는 투명을 검게 칠하므로 흰 바탕을 먼저 깐다
+  if (!wantPng) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.drawImage(bmp, 0, 0, w, h);
+  bmp.close?.();
+
+  const out = await new Promise<Blob | null>((r) =>
+    canvas.toBlob(r, wantPng ? 'image/png' : 'image/jpeg', 0.9),
+  );
+  if (!out || out.size === 0) return null;
+  return { data: new Uint8Array(await out.arrayBuffer()), ext: wantPng ? 'png' : 'jpg', w, h };
+}
+
+/** 사진 한 장을 받아 한글용으로 바꾼다. 못 받으면 그 장만 건너뛴다 (문서는 나간다) */
+async function loadPic(url: string, itemId: string, index: number, png = false): Promise<HwpxPic | null> {
+  try {
+    const img = await toHwpImage(url, png);
+    if (!img) return null;
     const w = mm(60);
     return {
-      itemId: item.id,
+      itemId,
       binId: `BIN${String(index + 1).padStart(4, '0')}`,
-      ext,
-      data: buf,
+      ext: img.ext,
+      data: img.data,
       w,
-      h: Math.round((w * size.h) / size.w),
+      h: Math.round((w * img.h) / img.w),
     };
   } catch {
     return null;
@@ -753,7 +801,14 @@ export async function downloadPlanHwpx(
   title: string,
 ): Promise<{ skipped: number }> {
   const withUrl = items.filter((i) => i.url);
-  const loaded = await Promise.all(withUrl.map((i, idx) => loadPic(i, idx)));
+  const jobs: Promise<HwpxPic | null>[] = withUrl.map((i, idx) =>
+    loadPic(i.url as string, i.id, idx),
+  );
+  // 로고는 투명한 배경을 살려야 해서 PNG 로 넣는다
+  if (plan.logo_url) {
+    jobs.push(loadPic(plan.logo_url, LOGO_ITEM_ID, withUrl.length, true));
+  }
+  const loaded = await Promise.all(jobs);
   const pics = loaded.filter((p): p is HwpxPic => p !== null);
 
   const files = buildPlanHwpxFiles(plan, items, title, pics);
@@ -786,5 +841,5 @@ export async function downloadPlanHwpx(
   // 파일 이름이 'download' 로 떨어진다 (zip.ts 와 같은 이유로 미룬다)
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 
-  return { skipped: withUrl.length - pics.length };
+  return { skipped: jobs.length - pics.length };
 }
