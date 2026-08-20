@@ -264,7 +264,10 @@ export default function AppDetailPage() {
   const meta = STATUS_META[status];
   const dday = ddayLabel(app.due_date);
   const iAmReviewer = reviewerIds.includes(session?.id ?? '');
-  const canReopen = isAdmin || app.creator_id === session?.id;
+  /* 원장 + 제작자. 배포 링크·마감일이 바뀐 걸 제일 먼저 아는 사람이 만든 사람이고,
+     재검증도 고친 사람이 요청한다. 강사가 올린 프로그램을 정작 본인이 못 고치면
+     오타 하나 고치는 데도 원장을 거쳐야 한다 */
+  const canEdit = isAdmin || app.creator_id === session?.id;
 
   return (
     <>
@@ -273,7 +276,7 @@ export default function AppDetailPage() {
         subtitle={app.slug}
         back="/apps"
         right={
-          isAdmin ? (
+          canEdit ? (
             <button onClick={() => setEditOpen(true)} className="btn-ghost h-9 px-3 text-[13px]">
               수정
             </button>
@@ -395,7 +398,7 @@ export default function AppDetailPage() {
             ) : (
               <span />
             )}
-            {canReopen && (
+            {canEdit && (
               <button onClick={() => setReopenOpen(true)} className="btn-ghost gap-1.5">
                 <Icon name="refresh" size={14} />
                 재검증 요청
