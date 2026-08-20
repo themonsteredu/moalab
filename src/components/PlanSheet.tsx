@@ -188,12 +188,10 @@ export function PlanSheet({
                 {plan.work_title && (orders.length > 0 || results.length > 0) && (
                   <p className="mt-3 font-bold">{plan.work_title}</p>
                 )}
-                {(orders.length > 0 || results.length > 0) && (
-                  <div className="mt-1.5 grid grid-cols-2 gap-3">
-                    <PlanWorkCol title="*만드는 순서" rows={orders} />
-                    <PlanWorkCol title="* 결과 이미지" rows={results} />
-                  </div>
-                )}
+                {/* 활동작품도 웹앱활동처럼 **가로**로 늘어선다 — 세로로 쌓으면
+                    사진 몇 장에 한 장이 꽉 차서 사진만 작아진다 */}
+                <PlanWorkRow title="*만드는 순서" rows={orders} />
+                <PlanWorkRow title="* 결과 이미지" rows={results} />
               </td>
             </tr>
 
@@ -257,28 +255,36 @@ function PlanRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function PlanWorkCol({ title, rows }: { title: string; rows: LessonPlanItem[] }) {
+/** 활동작품 한 묶음(만드는 순서 / 결과 이미지) — 웹앱활동처럼 가로 한 줄.
+    한 줄에 최대 3칸이고 넘치면 다음 줄로 넘어간다.
+    사진이 1장뿐이면 그 사진만 배율을 맞춰(반 폭) 가운데에 놓는다. */
+function PlanWorkRow({ title, rows }: { title: string; rows: LessonPlanItem[] }) {
+  if (rows.length === 0) return null;
+  const single = rows.length === 1;
   return (
-    <div>
+    <div className="mt-2">
       <p className="text-[10.5px] font-bold">{title}</p>
-      <ul className="mt-1 space-y-1.5">
+      <div
+        className="mt-1 grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${Math.min(rows.length, 3)}, minmax(0, 1fr))` }}
+      >
         {rows.map((r) => (
-          <li key={r.id}>
+          <div key={r.id} className={`flex flex-col ${single ? 'mx-auto w-1/2 text-center' : ''}`}>
             {r.label && <p className="pb-0.5 text-[10.5px] leading-snug">{r.label}</p>}
             {/* 사진 칸 높이는 --ph — 사진이 많으면 fitPhotos 가 전부 같이 줄인다.
-                자르지 않고(contain) 글 바로 아래에 붙인다(object-top) */}
+                자르지 않는다(contain). mt-auto 로 아래선을 맞춘다(옆 칸과 줄이 맞게) */}
             {r.url && (
               <span
-                className="relative block w-full overflow-hidden"
-                style={{ height: 'min(var(--ph), 92mm)' }}
+                className="relative mt-auto block w-full overflow-hidden"
+                style={{ height: single ? 'min(var(--ph), 95mm)' : 'min(var(--ph), 70mm)' }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={r.url} alt="" className="absolute inset-0 h-full w-full object-contain object-top" />
+                <img src={r.url} alt="" className="absolute inset-0 h-full w-full object-contain" />
               </span>
             )}
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
