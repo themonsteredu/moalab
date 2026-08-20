@@ -14,7 +14,8 @@ import type { AppRow, LessonPlan, LessonPlanItem, Topic } from '@/lib/types';
  * **한 프로그램 = A4 한 장**으로 이어서 뽑는다 (학교·기관에 묶음으로 제출할 때).
  *
  * - 순서는 목록 트리와 같다: 주제 순서 → 프로그램 이름순.
- * - 장마다 fill — 내용이 적어도 전개 줄이 늘어나 그 장의 아래까지 채운다.
+ * - 장 크기는 PlanSheet 가 A4 한 장으로 스스로 맞춘다 — 내용이 적으면 사진을
+ *   키워 아래까지 채우고, 사진이 많으면 줄여서 한 장을 안 넘긴다.
  * - 아직 안 쓴 프로그램은 문서에 안 싣고, 화면에서만 몇 개가 빠졌는지 알려준다.
  *   빈 양식이 섞여 나가면 덜 만든 문서처럼 보인다.
  */
@@ -120,12 +121,10 @@ export default function LecturesPrintPage() {
         </p>
       ) : (
         docs.map((d, i) => (
-          // 한 프로그램 = A4 한 장. fill 이라 내용이 적어도 그 장의 아래까지 채워진다
-          <section
-            key={d.app.id}
-            className={`flex min-h-[269mm] flex-col ${i > 0 ? 'print-page-break mt-10 print:mt-0' : ''}`}
-          >
-            <PlanSheet plan={d.plan} items={d.items} title={d.app.title_ko} fill />
+          // 한 프로그램 = A4 한 장. 장 크기는 PlanSheet 가 스스로 맞춘다
+          // (사진이 많으면 사진을 줄이고, 내용이 적으면 키워 그 장의 아래까지 채운다)
+          <section key={d.app.id} className={i > 0 ? 'print-page-break mt-10 print:mt-0' : ''}>
+            <PlanSheet plan={d.plan} items={d.items} title={d.app.title_ko} />
           </section>
         ))
       )}
