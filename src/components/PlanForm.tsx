@@ -8,6 +8,7 @@ import { logActivity } from '@/lib/log';
 import { ConfirmDialog, ErrorBanner } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { relTime } from '@/lib/format';
+import { downloadPlanHwpx } from '@/lib/hwpx';
 import type { LessonPlan, LessonPlanItem, PlanSlot } from '@/lib/types';
 
 /**
@@ -61,6 +62,8 @@ export function PlanForm({
   const [busyItem, setBusyItem] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<LessonPlanItem | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [hwpBusy, setHwpBusy] = useState(false);
+  const [hwpNote, setHwpNote] = useState('');
   const logoRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -282,6 +285,27 @@ export function PlanForm({
     );
   }
 
+  /** 한글 파일로 내려받기 — 사진을 다 받아 넣어야 해서 조금 걸린다 */
+  const downloadHwp = async () => {
+    if (!plan) return;
+    setHwpBusy(true);
+    setHwpNote('');
+    try {
+      const { skipped } = await downloadPlanHwpx(plan, items, appTitle);
+      setHwpNote(
+        skipped > 0
+          ? `받았어요. 사진 ${skipped}장은 못 넣었어요 — 다시 눌러보세요.`
+          : '받았어요. 한글에서 열어 [다른 이름으로 저장 → hwp] 하면 hwp 가 돼요.',
+      );
+      logActivity(session?.id, `${appSlug} 강의계획서 한글파일 받기`, `app:${appId}`);
+    } catch (e) {
+      setHwpNote('');
+      setError(friendlyError(e, '한글 파일을 만들지 못했어요.'));
+    } finally {
+      setHwpBusy(false);
+    }
+  };
+
   const bySlot = (s: PlanSlot) =>
     items.filter((i) => i.slot === s).sort((a, b) => a.sort_order - b.sort_order);
 
@@ -293,6 +317,23 @@ export function PlanForm({
       <p className="rounded-lg bg-raised px-3 py-2 text-[11.5px] leading-relaxed text-neutral-500">
         여기 채운 순서 그대로 A4 강의계획서로 인쇄돼요. 위쪽 <b>인쇄 / PDF 저장</b> 에서 확인하세요.
       </p>
+
+      {/* 한글 파일로 받기 — 학교·기관에 hwp 로 내야 할 때.
+          .hwp(독점 바이너리)는 브라우저에서 만들 수 없어서 국가표준인 .hwpx 로 준다.
+          한글에서 열어 '다른 이름으로 저장 → hwp' 하면 hwp 가 된다. */}
+      <div>
+        <button
+          onClick={() => void downloadHwp()}
+          disabled={hwpBusy}
+          className="btn-ghost h-11 w-full text-[13px]"
+        >
+          <Icon name="download" size={15} />
+          {hwpBusy ? '한글 파일 만드는 중…' : '한글 파일(.hwpx)로 받기'}
+        </button>
+        <p className="mt-1.5 text-center text-[11px] leading-relaxed text-neutral-400">
+          {hwpNote || '한글 2014 이상에서 열려요. hwp 로 내려면 한글에서 [다른 이름으로 저장] 하세요.'}
+        </p>
+      </div>
 
       <Field label="분류 (제목 오른쪽 배지)">
         <input
