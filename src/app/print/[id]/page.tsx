@@ -195,13 +195,7 @@ export default function PrintPage() {
   }
 
   return (
-    // 강의계획서 한 장만 뽑을 때는 A4 인쇄 영역(297−14×2=269mm)을 최소 높이로 잡고
-    // flex 로 세운다 — 내용이 적어도 표가 늘어나 아래까지 채워진다 (PlanSheet fill)
-    <main
-      className={`mx-auto max-w-[820px] bg-white p-6 text-black print:p-0 ${
-        onlyPlan ? 'flex min-h-[269mm] flex-col' : ''
-      }`}
-    >
+    <main className="mx-auto max-w-[820px] bg-white p-6 text-black print:p-0">
       {/* 화면에서만 보이는 조작 줄 */}
       <div className="no-print mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200 bg-raised p-3">
         <button onClick={() => window.print()} className="btn-primary px-3.5 text-[14px]">
@@ -312,17 +306,13 @@ export default function PrintPage() {
       )}
 
       {/* -------------------------------------------- 강의계획서 (양식 그대로)
-          한글 양식과 같은 표를 그대로 그린다.
-          앞에 표지·검증 기록이 붙을 때만 새 쪽에서 시작한다 — 이 장만 뽑을 때
+          한글 양식과 같은 표를 그대로 그린다. 장 크기는 PlanSheet 가 A4 단면
+          한 장으로 스스로 맞춘다 (사진이 많으면 사진을 줄이고, 적으면 키워 채운다).
+          앞에 표지·검증 기록이 붙을 때만 앞뒤로 쪽을 가른다 — 이 장만 뽑을 때
           쪽 넘김을 넣으면 맨 앞에 빈 쪽이 한 장 딸려 나온다. */}
       {parts.has('plan') && lessonPlan && (
-        <section className={onlyPlan ? 'flex min-h-0 flex-1 flex-col' : 'print-page-break mb-6'}>
-          <PlanSheet
-            plan={lessonPlan}
-            items={planItems}
-            title={app.title_ko}
-            fill={onlyPlan}
-          />
+        <section className={onlyPlan ? '' : 'print-page-break print-page-break-after mb-6'}>
+          <PlanSheet plan={lessonPlan} items={planItems} title={app.title_ko} />
         </section>
       )}
       {parts.has('plan') && !lessonPlan && (

@@ -161,6 +161,20 @@
     break-before: page;
     page-break-before: always;
   }
+  .print-page-break-after {
+    break-after: page;
+    page-break-after: always;
+  }
+  /* 강의계획서 A4 장(PlanSheet) — 화면에서는 폭에 맞게 통째로 줄여 보여주지만
+     (transform, JS 가 인라인으로 건다) 인쇄에서는 원래 크기(186×268mm) 그대로 나가야 한다 */
+  .print-a4-outer {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .print-a4-sheet {
+    transform: none !important;
+    margin-left: 0 !important;
+  }
   a {
     text-decoration: none;
     color: inherit;
