@@ -113,10 +113,35 @@ ok('여러 줄 글이 문단으로 나뉜다', sec.includes('도입 첫 줄') &&
 ok('꺾쇠·따옴표가 이스케이프된다', sec.includes('&lt;칸&gt;') && sec.includes('&amp;') && !sec.includes('<칸>'));
 ok('사진 4장이면 다음 줄로 넘어간다', (sec.match(/<hp:tbl /g) || []).length >= 4);
 
+// 사진이 1장뿐인 묶음(결과 이미지)은 표를 안 만들고 가운데로 — 표를 쓰면 왼쪽으로 쏠린다
+const oneEach = H.buildPlanHwpxFiles(
+  plan,
+  [{ id: 'result-0', app_id: 'x', slot: 'result', label: '완성', url: 'u', sort_order: 0, created_at: '' }],
+  '한장', [{ itemId: 'result-0', binId: 'BIN0001', ext: 'jpg', data: new Uint8Array([1]), w: 17008, h: 12756 }],
+)['Contents/section0.xml'];
+ok('1장짜리 묶음은 안쪽 표를 안 만든다', (oneEach.match(/<hp:tbl /g) || []).length === 1);
+ok('1장짜리 묶음은 가운데 정렬', oneEach.includes('paraPrIDRef="1"') && oneEach.includes('binaryItemIDRef="BIN0001"'));
+
+// ── 형식 — 한글은 WebP 를 못 읽는다.
+//    앱은 사진을 WebP 로 저장하므로 넣기 전에 JPEG/PNG 로 바꿔야 하고,
+//    이 표에 webp 가 들어가면 그 변환을 건너뛴 채 깨진 그림이 나간다
+ok('WebP 를 쓸 수 있는 형식으로 두지 않았다', !('webp' in H.HWP_IMAGE_MEDIA));
+ok('한글이 읽는 형식만 있다', Object.keys(H.HWP_IMAGE_MEDIA).every((e) => ['png','jpg','jpeg','gif','bmp'].includes(e)));
+ok('binDataList 의 Format 이 실제 파일 확장자와 같다', pics.every((p) => head.includes(`BinData="${p.binId}.${p.ext}" Format="${p.ext}"`)));
+
 // ── 사진이 없는 경우에도 문서가 나온다
 const bare = H.buildPlanHwpxFiles(plan, [], '빈 계획서', []);
 ok('사진 0장이어도 만들어진다', bare['Contents/section0.xml'].includes('빈 계획서'));
 ok('사진 0장이면 binDataList 가 비어 있다', bare['Contents/header.xml'].includes('<hh:binDataList itemCnt="0"'));
+ok('로고가 없으면 기본 문구가 들어간다', bare['Contents/section0.xml'].includes('모아킷_교육을 위한 모든 것'));
+
+// ── 로고 — 활동 줄이 아니라 특별한 이름으로 실린다
+const withLogo = H.buildPlanHwpxFiles(
+  { ...plan, logo_url: '/logo.png' }, [], '로고 계획서',
+  [{ itemId: H.LOGO_ITEM_ID, binId: 'BIN0001', ext: 'png', data: new Uint8Array([1]), w: 11339, h: 3402 }],
+);
+ok('로고가 그림으로 들어간다', withLogo['Contents/section0.xml'].includes('binaryItemIDRef="BIN0001"'));
+ok('로고가 있으면 기본 문구를 안 넣는다', !withLogo['Contents/section0.xml'].includes('모아킷_교육을 위한 모든 것'));
 
 rmSync(out, { recursive: true, force: true });
 console.log(`${pass}건 통과${fails.length ? `, ${fails.length}건 실패` : ''}`);
