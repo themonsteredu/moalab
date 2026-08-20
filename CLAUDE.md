@@ -291,6 +291,22 @@ grant all on moalab.members to service_role;   -- members 는 anon revoke 후에
   글이 병적으로 길면 사진을 최소로 줄여도 넘치는데, 그때는 넘친 부분이 잘린 채
   **화면 미리보기에 그대로 보인다** — 화면에서는 같은 장을 폭에 맞게 축소해 보여주므로
   (transform, 인쇄에서는 `.print-a4-sheet` 가 원래 크기로 되돌림) 화면 배치가 곧 인쇄 배치다.
+- **한글 파일(.hwpx)로 받을 수 있다** — 학교·기관에 hwp 로 내야 할 때.
+  · `.hwp`(클래식)는 한컴 독점 바이너리(CFB)라 브라우저에서 만들 방법이 없다.
+    `.hwpx` 는 **국가표준 KS X 6101(OWPML)** 이고 ZIP + XML 이라 만들 수 있다.
+    한글 2010 SE+ 부터 열리고 2014+ 부터 안정 편집된다. 받은 뒤 한글에서
+    `다른 이름으로 저장 → hwp` 하면 .hwp 가 된다.
+  · **새 라이브러리를 안 넣었다** — ZIP 은 이미 쓰는 jszip, XML 은 `src/lib/hwpx.ts` 가 직접 짓는다.
+  · 배치는 인쇄물과 같다 — 표 8줄, 사진은 가로 한 줄(최대 3칸), 1장이면 가운데.
+  · **한글이 파일을 통째로 거부하는 조건이 까다롭다.** 아래를 어기면 "열 수 없습니다" 가 뜬다:
+    `mimetype` 은 `application/hwp+zip` + zip 첫 항목 + 무압축(STORE) /
+    속성에 네임스페이스 접두어를 붙이지 않는다(`paraPrIDRef`, `hp:paraPrIDRef` 아님) /
+    첫 문단에 `hp:secPr`(용지 설정) / 표 칸마다 `cellAddr`·`cellSpan`·`cellSz`·`cellMargin` +
+    **병합돼 가려진 칸은 아예 안 그린다**.
+  · **`header.xml` 의 `binDataList` 를 빠뜨리면 파일은 열리는데 사진만 통째로 사라진다.**
+    잇는 열쇠는 id 가 아니라 **BinData 파일이름(확장자 뺀 것)** 이다 (`binaryItemIDRef="BIN0001"`).
+    실제로 이걸 빠뜨렸다가 되읽기 검사에서 잡았다 — 눈으로는 안 보이는 구멍이다.
+  · 회귀는 `scripts/hwpx.test.mjs` 가 막는다 (위 조건을 그대로 검사한다).
 - 한글 원본을 올리는 **첨부(판) 기능은 그대로 남겼다** — 아래 항목 참고.
 
 ### 계획안 첨부는 '판' 으로 쌓는다
@@ -531,6 +547,7 @@ src/lib/
   push.ts                    usePush(구독 켜기·끄기) + sendPush(발송 요청)
   print.ts                   인쇄에 넣을 묶음 정의(PRINT_PARTS) + parts 파싱
   expense.ts                 지출 — 달 계산(shiftMonth·monthRange), 합계, 날짜별 묶기, 금액 입력
+  hwpx.ts                    강의계획서 → 한글 파일(.hwpx). OWPML XML 을 직접 짓고 jszip 으로 묶는다
 
 src/app/(app)/
   home/ notice/ apps/ verify/ mock/ training/ cost/ gallery/ schedule/ admin/
@@ -543,6 +560,7 @@ scripts/make-icons.mjs       로고에서 앱 아이콘 뽑기
 scripts/friendly-error.test.mjs  에러 문구 갈래 테스트 (node 로 바로 실행)
 scripts/status.test.mjs      앱 상태 계산(수정 필요·다시확인·검증 완료) 표 검증
 scripts/expense.test.mjs     지출 달 계산·합계·금액 입력 검증
+scripts/hwpx.test.mjs        한글 파일(.hwpx) 생성 검증 — 한글이 거부하는 조건들을 미리 잡는다
 
 src/components/
   ui.tsx                     Sheet, ConfirmDialog, Skeleton, EmptyState, Toast 등
@@ -757,6 +775,17 @@ src/components/
 - [x] **활동작품(만드는 순서·결과 이미지)도 웹앱활동처럼 가로 한 줄로.**
       두 세로 열로 쌓았더니 사진 3장에 한 장이 꽉 차서 사진만 작아졌다.
       묶음마다 한 줄(최대 3칸, 넘치면 다음 줄), 사진이 1장뿐인 묶음은 반 폭으로 가운데
+
+### ✅ 15단계 — 강의계획서를 한글 파일(.hwpx)로 받기
+- [x] 학교·기관 제출용으로 **한글에서 바로 열리는 파일**을 만든다.
+      `.hwp` 는 독점 바이너리라 불가능해서 국가표준 `.hwpx`(OWPML)로 간다
+- [x] **새 의존성 0개** — jszip(이미 있음) + 직접 지은 XML (`src/lib/hwpx.ts`)
+- [x] 표 8줄(제목·과정·목표·도입·전개·마무리·운영사항 2줄), 칸 병합,
+      사진은 인쇄물과 같은 가로 배치(최대 3칸, 1장이면 가운데)
+- [x] `header.xml` 의 `binDataList` 누락으로 **사진만 사라지던 것**을 되읽기 검사로 잡아 수정
+- [x] 검증: 실제 브라우저에서 받은 파일을 뜯어 `mimetype`(첫 항목·STORE·application/hwp+zip),
+      패키지·문서 검사 **경고 0건**, 그림 7장·참조 7건, 표 8줄, 내용·이스케이프·여러 줄까지 확인
+- [x] `scripts/hwpx.test.mjs` 29건 — 한글이 거부하는 조건을 회귀로 막는다
 
 ### 다음에 하면 좋을 것
 
