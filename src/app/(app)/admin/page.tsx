@@ -11,6 +11,7 @@ import { STATUS_META } from '@/lib/status';
 import { ddayClass, ddayLabel, logTime } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
 import { PushToggle } from '@/components/PushToggle';
+import { AiKeyCard } from '@/components/AiKeyCard';
 import { AppForm } from '@/components/AppForm';
 import { CardSkeleton, ConfirmDialog, ErrorBanner, ProgressBar, Sheet, Skeleton, useToast } from '@/components/ui';
 import type { ActivityLog, MemberPublic, Role } from '@/lib/types';
@@ -44,8 +45,9 @@ function AdminInner() {
       <PageHeader title="관리" subtitle="원장 전용" />
 
       <div className="px-4 pb-8 pt-3">
-        <div className="mb-3">
+        <div className="mb-3 space-y-2">
           <PushToggle />
+          <AiKeyCard />
         </div>
         <div className="mb-4 flex gap-1.5 rounded-xl bg-neutral-200/60 p-1">
           {(

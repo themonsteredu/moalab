@@ -637,9 +637,27 @@ create table if not exists moalab.task_template_items (
 create index if not exists task_template_items_tpl_idx
   on moalab.task_template_items(template_id, sort_order);
 
+-- ---------------------------------------------------------------------
+-- 18. 서버 전용 비밀값 — API 키 같은 것
+--
+--   ※ 이 표는 **members 와 같은 취급**이다. 아래 '권한 + RLS' 에서
+--     anon/authenticated 를 걷어내고 service_role 만 남긴다.
+--     internal_all 정책 배열에 넣으면 안 된다 — 넣는 순간 브라우저 키로
+--     API 키가 통째로 읽힌다.
+--   ※ 화면에는 값을 절대 안 보낸다. hint(끝 4자리)만 보여준다.
+-- ---------------------------------------------------------------------
+create table if not exists moalab.app_secrets (
+  key        text primary key,          -- 'anthropic_api_key'
+  value      text not null,
+  hint       text,                      -- 끝 4자리. 어떤 키를 넣었는지 확인용
+  updated_by uuid references moalab.members(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
 -- =====================================================================
 --  권한 + RLS
 --   · members       : RLS on, 정책 없음 → anon 키로는 읽기/쓰기 전부 차단
+--   · app_secrets   : 같은 취급 (API 키). 절대 internal_all 배열에 넣지 말 것
 --                     (로그인·멤버관리는 service_role 을 쓰는 /api 라우트에서만)
 --   · members_public: pin 을 뺀 뷰. 뷰는 소유자 권한으로 도니 RLS 를 우회함
 --   · 나머지 테이블 : 전부 허용 (사내 5~7명 전용)
@@ -657,6 +675,12 @@ alter table moalab.members enable row level security;
 -- 단 service_role 은 남겨둔다. PIN 검증은 오직 이 역할로만 이뤄진다.
 revoke all on moalab.members from anon, authenticated;
 grant all on moalab.members to service_role;
+
+-- API 키도 PIN 과 똑같이 잠근다. 정책이 없으니 anon/authenticated 는 아예 못 붙는다.
+-- 등록·삭제는 /api/settings/ai, 사용은 /api/task/parse — 둘 다 service_role 이다.
+alter table moalab.app_secrets enable row level security;
+revoke all on moalab.app_secrets from anon, authenticated;
+grant all on moalab.app_secrets to service_role;
 
 create or replace view moalab.members_public as
   select id, name, role, active, sort_order, created_at

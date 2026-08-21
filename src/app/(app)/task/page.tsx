@@ -21,6 +21,7 @@ import {
 } from '@/lib/task';
 import { TaskTemplateManager } from '@/components/TaskTemplateManager';
 import { TaskSpread } from '@/components/TaskSpread';
+import { TaskDictate } from '@/components/TaskDictate';
 import { PageHeader } from '@/components/PageHeader';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
@@ -74,6 +75,7 @@ export default function TaskPage() {
   const [openBatch, setOpenBatch] = useState<TaskBatch | null>(null);
   const [pushDays, setPushDays] = useState('7');
   const [killBatch, setKillBatch] = useState<TaskBatch | null>(null);
+  const [dictateOpen, setDictateOpen] = useState(false);
 
   const meId = session?.id ?? '';
   const today = todayStr();
@@ -307,13 +309,23 @@ export default function TaskPage() {
         right={
           <span className="flex items-center gap-2">
             {isAdmin && (
-              <button
-                onClick={() => setSpreadOpen(true)}
-                aria-label="체크리스트로 뿌리기"
-                className="btn-ghost h-10 w-10 px-0"
-              >
-                <Icon name="list" size={16} />
-              </button>
+              <>
+                {/* 말로 넣기 — 원장만 쓴다 */}
+                <button
+                  onClick={() => setDictateOpen(true)}
+                  aria-label="말로 업무 넣기"
+                  className="btn-ghost h-10 w-10 px-0"
+                >
+                  <Icon name="megaphone" size={16} />
+                </button>
+                <button
+                  onClick={() => setSpreadOpen(true)}
+                  aria-label="체크리스트로 뿌리기"
+                  className="btn-ghost h-10 w-10 px-0"
+                >
+                  <Icon name="list" size={16} />
+                </button>
+              </>
             )}
             <button onClick={startNew} className="btn-primary px-3 text-[13.5px]">
               <Icon name="plus" size={15} />
@@ -658,6 +670,16 @@ export default function TaskPage() {
       />
 
       <TaskTemplateManager open={tplOpen} onClose={() => setTplOpen(false)} onChanged={() => void load()} />
+
+      <TaskDictate
+        open={dictateOpen}
+        onClose={() => setDictateOpen(false)}
+        onMade={(n, t) => {
+          toast.show(`${t} — ${n}건을 만들었어요.`);
+          setView('team');
+          void load();
+        }}
+      />
 
       <TaskSpread
         open={spreadOpen}

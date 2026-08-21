@@ -37,6 +37,7 @@
 | 로고 | 모아킷 (M 심볼 + moakit 워드마크), 브랜드 teal `#06BDBD` |
 | DB / Storage | Supabase |
 | 로그인 | 자체 PIN 4자리 (Supabase Auth 안 씀) |
+| AI | Claude API (`@anthropic-ai/sdk`) — **말로 업무 넣기 한 곳에만**. 키는 원장이 화면에서 등록 |
 | 배포 | Vercel |
 
 ---
@@ -131,6 +132,12 @@ npm run dev        # http://localhost:3000
 
 > 새 테이블을 추가할 때도 반드시 `moalab.` 을 붙이고, `schema.sql` 의
 > RLS 목록(`internal_all` 루프)에 테이블 이름을 넣어줘야 한다.
+>
+> **⚠️ 딱 두 표는 예외다 — `members`(PIN)와 `app_secrets`(API 키).**
+> 이 둘은 `internal_all` 배열에 **절대 넣지 않는다.** 넣는 순간 브라우저의 anon 키로
+> PIN 과 API 키가 통째로 읽힌다. 대신 RLS 만 켜고 정책은 만들지 않은 뒤
+> `revoke all ... from anon, authenticated` + `grant all ... to service_role` 로 잠근다.
+> 접근은 서버 라우트(`/api/login`, `/api/members`, `/api/settings/ai`, `/api/task/parse`)에서만.
 
 ### ⚠️ `service_role` 권한을 빼먹지 말 것
 
@@ -393,6 +400,28 @@ A 가 올리고 → A 가 고쳐 올리고 → B 가 또 고쳐 올리는 게 �
 Vercel 은 UTC 로 돌아서 그냥 짜면 한국 시간 아침 9시 전까지 어제 날짜가 나온다
 (기한 알림이 하루씩 밀리는 가장 흔한 버그).
 
+### 말로 업무 넣기 — 원장만
+
+원장이 말로 던진 지시를 업무 여러 건으로 쪼갠다. **원장 한 사람만 쓴다.**
+
+- **음성인식은 앱이 하지 않는다.** 큰 텍스트 칸을 두고 **폰 키보드의 마이크**를 그대로 쓴다.
+  · 아이폰·안드로이드 둘 다 확실하고, 잘못 들었을 때 그 자리에서 고칠 수 있다
+  · 앱 안에 마이크 버튼(Web Speech)을 넣으면 **아이폰 홈 화면 앱에서 막히는** 경우가 있다
+- 쪼개는 건 **Claude API** (`/api/task/parse`). 오늘 날짜(`kstDateStr`)와 멤버 목록을
+  **서버에서** 박아 넣는다 — 브라우저가 보낸 걸 그대로 쓰면 남의 이름으로 업무를 만들 수 있다.
+- **AI 가 준 것을 그대로 믿지 않는다** (`src/lib/taskParse.ts` → `normalizeParsed`).
+  · 지금 멤버 id 가 아니면 **담당자 미정**으로 돌린다 (줄은 버리지 않는다 — 화면에서 고르면 된다)
+  · `2026-02-30` 같은 **없는 날짜**는 기한 없음으로 돌린다 (평년 2/29 도 걸러진다)
+  · 제목이 없는 줄은 버리고, 최대 20건에서 자른다 (응답이 폭주해도 수백 건이 안 생긴다)
+- **저장 전 미리보기 필수.** 제목·담당자·기한을 줄마다 고치고 뺄 수 있다.
+  알림은 뿌리기와 같은 규칙 — **사람당 한 통**.
+- 묶음 이름을 두면 나중에 **통째로 지우거나 미룰 수 있다.** AI 가 만든 것이라 더 그렇다.
+
+**⚠️ API 키는 `moalab.app_secrets` 에 있고 PIN 과 똑같이 잠겨 있다.**
+브라우저는 그 표에 아예 못 붙고, 서버도 **끝 4자리만** 돌려준다.
+등록·삭제는 `관리` 화면의 `AI 키` 카드 → `/api/settings/ai` (원장 확인 후 처리).
+이 표를 `internal_all` 배열에 넣으면 **키가 통째로 새어 나간다** — 위 스키마 항목 참고.
+
 ### 검증 라운드
 
 앱을 수정하면 이전 검증은 무효다.
@@ -596,6 +625,7 @@ playwright 는 아이콘을 다시 만들 때만 필요해서 `package.json` 에
 | **업무 만들기** | O | **O** (담당자 기본값은 자기 자신) |
 | 업무 고치기·상태 바꾸기 | O | **담당자 본인 또는 만든 사람** |
 | 체크리스트 관리 · 뿌리기 · 묶음 삭제/미루기 | O | X |
+| **말로 업무 넣기** · AI 키 등록/삭제 | O | X |
 | 검증 지적·답변·검증 완료 | O | O |
 | 공지 쓰기 · 멤버 관리 · 관리 화면 | O | X |
 
@@ -642,6 +672,7 @@ src/lib/
   expense.ts                 지출 — 달 계산(shiftMonth·monthRange), 합계, 날짜별 묶기, 금액 입력
   task.ts                    업무 — 급한 순 정렬, 기한 묶기, 묶음 진행률, 사람별 부하,
                              날짜(shiftDate) + kstDateStr(서버의 '오늘' 은 한국 날짜가 아니다)
+  taskParse.ts               말 → 업무 정리. AI 응답 검사(멤버 id·실제 날짜)+ 지시문 + 응답 스키마
   hwpx.ts                    강의계획서 → 한글 파일(.hwpx). OWPML XML 을 직접 짓고 jszip 으로 묶는다
 
 src/app/(app)/
@@ -657,6 +688,7 @@ scripts/status.test.mjs      앱 상태 계산(수정 필요·다시확인·검�
 scripts/expense.test.mjs     지출 달 계산·합계·금액 입력 검증
 scripts/hwpx.test.mjs        한글 파일(.hwpx) 생성 검증 — 한글이 거부하는 조건들을 미리 잡는다
 scripts/task.test.mjs        업무 — 한국 날짜 경계(UTC 15:00), 월말·윤년, 급한 순 정렬, 묶음 진행률
+scripts/task-parse.test.mjs  말 → 업무 — AI 응답을 안 믿는 검사(없는 사람·없는 날짜·폭주·빈 제목)
 
 src/components/
   ui.tsx                     Sheet, ConfirmDialog, Skeleton, EmptyState, Toast 등
@@ -679,6 +711,8 @@ src/components/
   PushToggle.tsx             푸시 알림 켜기·끄기 (아이폰 홈화면 추가 안내 포함)
   TaskTemplateManager.tsx    체크리스트 만들기 — 항목 + 기본 담당자 + 기준일 ±N일 (원장만)
   TaskSpread.tsx             체크리스트를 기준일에 얹어 통째로 뿌리기 (미리보기 필수)
+  TaskDictate.tsx            말로 업무 넣기 — 큰 칸 + 폰 키보드 마이크, 쪼갠 뒤 미리보기 (원장만)
+  AiKeyCard.tsx              AI 키 등록·삭제 (관리 화면). 키는 화면으로 안 내려온다 — 끝 4자리만
   TopicManager.tsx           주제 추가·이름변경·순서·삭제 (프로그램계획 > 주제 관리)
   TopicMove.tsx              프로그램 체크해서 주제로 한꺼번에 옮기기
   CommentThread.tsx          댓글 + 사진 첨부 + 해결됨 토글
@@ -944,6 +978,26 @@ src/components/
 - [x] `scripts/task.test.mjs` 63건으로 확장 — 기준일 ±N일(월초·윤년·연 경계),
       미리보기에서 바꾼 담당자가 기본값을 이기는지, **빈 값은 '일부러 비운 것'** 으로 남는지,
       알림이 사람 수만큼만 나가는지, 묶음 미루기가 완료·기한없음을 건너뛰는지
+
+### ✅ 19단계 — 말로 던지면 업무로 (원장 전용)
+
+> 원장이 폰에 대고 *"이서은은 다음 주 화요일까지 A초 제안서 쓰고, 주은서는 재료 주문해줘"*
+> 라고 말하면 업무 두 건으로 쪼개진다. 이 기능은 **원장 한 사람만** 쓴다.
+
+- [x] `moalab.app_secrets` — API 키 표. **PIN(`members`)과 똑같이 잠갔다.**
+      RLS 켜고 정책 없음 + `revoke ... from anon, authenticated` + service_role 만.
+      `internal_all` 배열에 넣으면 키가 통째로 새어 나간다 (문서에 경고를 박아뒀다)
+- [x] `AiKeyCard` (관리 화면) — 등록·바꾸기·삭제. **키는 화면으로 다시 안 내려온다**,
+      끝 4자리만 보여준다. 이미 등록돼 있으면 한 줄로 접힌다 (`PushToggle` 과 같은 판단)
+- [x] `/api/settings/ai` · `/api/task/parse` — 둘 다 `x-actor-id` 로 원장인지 확인.
+      오늘 날짜와 멤버 목록은 **서버에서** 넣는다
+- [x] `TaskDictate` — 큰 칸 + 폰 키보드 마이크. 쪼갠 결과는 **저장하지 않고 미리보기**로만,
+      제목·담당자·기한을 줄마다 고치고 뺄 수 있다. 알림은 사람당 한 통
+- [x] **AI 응답을 안 믿는 검사층** (`taskParse.ts`) — 없는 사람은 담당자 미정으로,
+      없는 날짜(2/30·평년 2/29)는 기한 없음으로, 빈 제목은 버리고, 20건에서 자른다
+- [x] `scripts/task-parse.test.mjs` 46건 — 위 검사를 전부 회귀로 막는다
+- [x] **새 의존성 1개** (`@anthropic-ai/sdk`). 지금까지 0개였는데 여기서 처음 늘었다 —
+      API 클라이언트는 직접 짤 대상이 아니다
 
 ### 남은 단계 (계획 확정, 순서대로)
 
