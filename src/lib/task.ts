@@ -179,6 +179,56 @@ export function unassigned(tasks: Task[]): Task[] {
   return tasks.filter((t) => isOpenTask(t) && !t.assignee_id);
 }
 
+/* ------------------------------------------------------------- 사람별 보기
+   급한 순 한 줄 목록은 **누가 뭘 맡았는지**를 보여주지 않는다. 원장이 실제로
+   하는 일은 "이건 이서은, 저건 주은서" 로 나누는 것이라, 나눈 결과가 사람 단위로
+   보여야 한다. 그래서 같은 데이터를 사람으로 묶는 갈래를 하나 더 둔다. */
+
+export interface PersonGroup {
+  /** null = 담당자 미정 */
+  memberId: string | null;
+  tasks: Task[];
+  open: number;
+  overdue: number;
+  done: number;
+}
+
+/**
+ * 사람별로 묶는다.
+ *
+ * - **담당자 미정이 늘 맨 위**다 — 그게 원장이 채워야 할 것이다.
+ * - 나머지는 `memberIds` 순서(원장이 정한 sort_order)를 그대로 따른다.
+ * - **업무가 0건인 사람은 아예 그리지 않는다.** 빈 칸이 쌓이면 스크롤만 길어진다
+ *   (목록 곳곳에서 지키는 '빈 섹션은 안 그린다' 와 같은 규칙).
+ * - 묶음 안은 늘 급한 순이다.
+ */
+export function groupByPerson(tasks: Task[], memberIds: string[], today: string): PersonGroup[] {
+  const build = (memberId: string | null, list: Task[]): PersonGroup => ({
+    memberId,
+    tasks: sortTasks(list, today),
+    open: list.filter(isOpenTask).length,
+    overdue: list.filter((t) => isOverdue(t, today)).length,
+    done: list.filter((t) => t.state === 'done').length,
+  });
+
+  const groups: PersonGroup[] = [];
+  const noOwner = tasks.filter((t) => !t.assignee_id);
+  if (noOwner.length > 0) groups.push(build(null, noOwner));
+
+  for (const id of memberIds) {
+    const mine = tasks.filter((t) => t.assignee_id === id);
+    if (mine.length > 0) groups.push(build(id, mine));
+  }
+
+  // 지워진 멤버에게 걸린 업무가 남아 있을 수 있다 (사람을 지워도 업무는 남는다).
+  // 어디에도 안 실리면 화면에서 사라져 영영 못 찾으니 맨 뒤에 모아둔다.
+  const known = new Set(memberIds);
+  const orphan = tasks.filter((t) => t.assignee_id && !known.has(t.assignee_id));
+  if (orphan.length > 0) groups.push(build('', orphan));
+
+  return groups;
+}
+
 /* ---------------------------------------------------------------- 뿌리기
    나눠주는 일은 매번 비슷하다. 템플릿을 한 번 만들어두고 기준일만 정해서 통째로 뿌린다.
    기한은 기준일 ± N일로 계산된다 (수업일이 기준이면 준비는 -5, -2 처럼 앞에 온다).

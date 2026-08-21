@@ -155,7 +155,7 @@ export function TopicMove({
             <div key={g.name}>
               <button
                 onClick={() => toggleGroup(g.list)}
-                className="mb-1 flex w-full items-center gap-1.5 text-left"
+                className="-my-3 mb-0 flex min-h-[44px] w-full items-center gap-1.5 py-3 text-left"
               >
                 <span
                   className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${

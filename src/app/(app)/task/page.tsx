@@ -10,6 +10,7 @@ import { sendPush } from '@/lib/push';
 import { ddayClass, ddayLabel, korDate } from '@/lib/format';
 import {
   groupByBatch,
+  groupByPerson,
   isOverdue,
   loadByMember,
   postponed,
@@ -22,6 +23,7 @@ import {
 import { TaskTemplateManager } from '@/components/TaskTemplateManager';
 import { TaskSpread } from '@/components/TaskSpread';
 import { TaskDictate } from '@/components/TaskDictate';
+import { TaskAssign } from '@/components/TaskAssign';
 import { PageHeader } from '@/components/PageHeader';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
@@ -29,6 +31,15 @@ import { CardSkeleton, ConfirmDialog, EmptyState, ErrorBanner, Sheet, useToast }
 import { TASK_STATES, type Task, type TaskState } from '@/lib/types';
 
 type View = 'me' | 'team';
+
+/**
+ * 같은 목록을 어떻게 묶어서 볼지.
+ *
+ * `due`  급한 순 — *언제까지* 가 궁금할 때 (기한 지남 → 오늘 → 이번 주 → 나중에)
+ * `who`  사람별 — *누가 뭘 맡았나* 가 궁금할 때. 원장이 실제로 하는 일은 나누는
+ *        것이라, 나눈 결과가 사람 단위로 보여야 한다. 담당자 미정이 늘 맨 위다.
+ */
+type GroupBy = 'due' | 'who';
 
 interface AppLite {
   id: string;
@@ -57,6 +68,8 @@ export default function TaskPage() {
   const [apps, setApps] = useState<AppLite[]>([]);
   const [error, setError] = useState('');
   const [view, setView] = useState<View>('me');
+  /* 고른 보기를 기기에 기억한다 — 원장은 거의 늘 '사람별' 로 본다 */
+  const [groupBy, setGroupBy] = useState<GroupBy>('due');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -76,6 +89,7 @@ export default function TaskPage() {
   const [pushDays, setPushDays] = useState('7');
   const [killBatch, setKillBatch] = useState<TaskBatch | null>(null);
   const [dictateOpen, setDictateOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
 
   const meId = session?.id ?? '';
   const today = todayStr();
@@ -99,6 +113,23 @@ export default function TaskPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('moalab.task.group');
+    if (saved === 'who' || saved === 'due') setGroupBy(saved);
+  }, []);
+
+  /* 원장은 나눠주는 쪽이라 자기 '내 업무' 가 비어 있는 날이 많다. 그런데 거기서
+     시작하면 담당자 미정 5건이 있어도 **빈 화면**을 보게 된다 (홈에서 원장은
+     전체 현황부터 보는 것과 같은 판단). 강사는 토글 자체가 없어 늘 '내 업무' 다. */
+  useEffect(() => {
+    if (isAdmin) setView('team');
+  }, [isAdmin]);
+
+  const pickGroup = (g: GroupBy) => {
+    setGroupBy(g);
+    localStorage.setItem('moalab.task.group', g);
+  };
 
   // tasks ?? [] 를 그대로 쓰면 매 렌더마다 새 배열이라 아래 useMemo 가 전부 헛돈다
   const all = useMemo(() => tasks ?? [], [tasks]);
@@ -294,6 +325,13 @@ export default function TaskPage() {
   const listed = view === 'me' ? mine : all;
   const buckets = taskBuckets(listed, today);
   const hasAny = listed.length > 0;
+  /* '내 업무' 는 전부 내 것이라 사람별로 나눌 게 없다 — 그럴 땐 급한 순만 쓴다 */
+  const grouping: GroupBy = view === 'me' ? 'due' : groupBy;
+  const people = groupByPerson(
+    listed.filter((t) => t.state !== 'done'),
+    members.map((m) => m.id),
+    today,
+  );
 
   return (
     <div>
@@ -343,6 +381,19 @@ export default function TaskPage() {
         {/* 원장이 나눠주는 세 가지 길. 아이콘만 두면 뭔지 몰라서 라벨을 붙였다 */}
         {isAdmin && (
           <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
+            {/* 나눠주기가 맨 앞이다 — 만드는 것보다 나누는 걸 더 자주 한다 */}
+            <button
+              onClick={() => setAssignOpen(true)}
+              className={`tap shrink-0 gap-1.5 rounded-full border px-3.5 text-[13px] font-bold ${
+                noOwner.length > 0
+                  ? 'border-brand bg-brand-50 text-brand'
+                  : 'border-neutral-300 bg-surface text-neutral-600'
+              }`}
+            >
+              <Icon name="user" size={13} />
+              나눠주기
+              {noOwner.length > 0 && <span className="chip bg-brand text-white">{noOwner.length}</span>}
+            </button>
             <button
               onClick={() => setDictateOpen(true)}
               className="tap shrink-0 gap-1.5 rounded-full border border-neutral-300 bg-surface px-3.5 text-[13px] font-bold text-neutral-600"
@@ -367,8 +418,10 @@ export default function TaskPage() {
           </div>
         )}
 
-        {/* 원장 전용 — 누가 얼마나 들고 있나. 펼치지 않아도 밀린 사람이 보인다 */}
-        {isAdmin && view === 'team' && tasks !== null && all.length > 0 && (
+        {/* 원장 전용 — 누가 얼마나 들고 있나.
+            '사람별' 로 보고 있을 땐 **안 그린다.** 바로 아래에 같은 것이 사람 단위로
+            펼쳐져 있어서, 같은 숫자를 두 번 읽게 하고 300px 을 그냥 먹는다 */}
+        {isAdmin && view === 'team' && grouping === 'due' && tasks !== null && all.length > 0 && (
           <section className="card mb-3 p-3">
             <p className="mb-2 text-[12px] font-bold text-neutral-400">사람별 남은 업무</p>
             <ul className="space-y-1.5">
@@ -392,9 +445,14 @@ export default function TaskPage() {
               })}
             </ul>
             {noOwner.length > 0 && (
-              <p className="mt-2.5 border-t border-neutral-200 pt-2 text-[12.5px] text-brand">
+              /* 짚어만 주고 끝내면 원장이 다시 찾아 헤맨다 — 여기서 바로 나눌 수 있게 */
+              <button
+                onClick={() => setAssignOpen(true)}
+                className="-mb-1 mt-2 flex min-h-[44px] w-full items-center gap-1.5 border-t border-neutral-200 pt-2 text-left text-[12.5px] font-semibold text-brand"
+              >
                 담당자를 아직 안 정한 업무가 {noOwner.length}건 있어요.
-              </p>
+                <span className="ml-auto shrink-0 text-[12px] text-neutral-400">나눠주기 →</span>
+              </button>
             )}
           </section>
         )}
@@ -436,32 +494,115 @@ export default function TaskPage() {
           />
         ) : (
           <div className="space-y-4">
-            {BUCKETS.map(({ key, label, tone }) => {
-              const list = buckets[key];
-              // 빈 묶음은 아예 그리지 않는다 — "없어요" 카드가 쌓이면 스크롤만 길어진다
-              if (list.length === 0) return null;
-              return (
-                <section key={key}>
-                  <p className={`mb-1.5 text-[12px] font-bold ${tone}`}>
-                    {label} {list.length}
-                  </p>
-                  <ul className="space-y-2">
-                    {list.map((t) => (
-                      <TaskCard
-                        key={t.id}
-                        task={t}
-                        who={nameOf(t.assignee_id)}
-                        showWho={view === 'team' || t.assignee_id !== meId}
-                        appName={appTitle(t.app_id)}
-                        canEdit={canEdit(t)}
-                        onState={(s) => void setState(t, s)}
-                        onEdit={() => startEdit(t)}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              );
-            })}
+            {/* 급한 순 ↔ 사람별. '내 업무' 는 전부 내 것이라 고를 게 없어서 안 그린다 */}
+            {view === 'team' && (
+              <div className="-mt-0.5 flex items-center gap-1.5">
+                {(
+                  [
+                    ['due', '급한 순'],
+                    ['who', '사람별'],
+                  ] as [GroupBy, string][]
+                ).map(([g, label]) => (
+                  <button
+                    key={g}
+                    onClick={() => pickGroup(g)}
+                    aria-pressed={groupBy === g}
+                    className={`-my-2 flex min-h-[44px] items-center rounded-full px-3 text-[12.5px] font-bold transition ${
+                      groupBy === g ? 'bg-neutral-100 text-neutral-700' : 'text-neutral-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {grouping === 'who'
+              ? /* 사람별 — PC 는 두 칸으로 깐다. 다섯 사람을 세로로 쌓으면
+                   화면 두세 개가 되는데, 옆으로 놓으면 한 화면에서 판이 보인다 */
+                people.length > 0 && (
+                  <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+                    {people.map((g) => {
+                      const m = g.memberId ? members.find((x) => x.id === g.memberId) : null;
+                      const who = g.memberId === null ? '담당자 미정' : (m?.name ?? '(없는 멤버)');
+                      return (
+                        <section key={g.memberId ?? 'none'}>
+                          <div className="mb-1.5 flex items-center gap-1.5">
+                            {m ? (
+                              <Avatar name={m.name} size={20} />
+                            ) : (
+                              <Icon
+                                name="user"
+                                size={14}
+                                className={g.memberId === null ? 'text-brand' : 'text-neutral-300'}
+                              />
+                            )}
+                            <span
+                              className={`text-[13px] font-bold ${
+                                g.memberId === null ? 'text-brand' : 'text-neutral-700'
+                              }`}
+                            >
+                              {who}
+                            </span>
+                            <span className="text-[12px] text-neutral-400">{g.open}건</span>
+                            {g.overdue > 0 && (
+                              <span className="chip bg-red-100 text-red-700">지남 {g.overdue}</span>
+                            )}
+                            {/* 미정 묶음에서 바로 나눌 수 있게 — 여기가 제일 손이 가는 자리다 */}
+                            {isAdmin && g.memberId === null && (
+                              <button
+                                onClick={() => setAssignOpen(true)}
+                                className="-my-3 ml-auto flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
+                              >
+                                나눠주기 →
+                              </button>
+                            )}
+                          </div>
+                          <ul className="space-y-2">
+                            {g.tasks.map((t) => (
+                              <TaskCard
+                                key={t.id}
+                                task={t}
+                                who={who}
+                                showWho={false}
+                                appName={appTitle(t.app_id)}
+                                canEdit={canEdit(t)}
+                                onState={(s) => void setState(t, s)}
+                                onEdit={() => startEdit(t)}
+                              />
+                            ))}
+                          </ul>
+                        </section>
+                      );
+                    })}
+                  </div>
+                )
+              : BUCKETS.map(({ key, label, tone }) => {
+                  const list = buckets[key];
+                  // 빈 묶음은 아예 그리지 않는다 — "없어요" 카드가 쌓이면 스크롤만 길어진다
+                  if (list.length === 0) return null;
+                  return (
+                    <section key={key}>
+                      <p className={`mb-1.5 text-[12px] font-bold ${tone}`}>
+                        {label} {list.length}
+                      </p>
+                      <ul className="space-y-2">
+                        {list.map((t) => (
+                          <TaskCard
+                            key={t.id}
+                            task={t}
+                            who={nameOf(t.assignee_id)}
+                            showWho={view === 'team' || t.assignee_id !== meId}
+                            appName={appTitle(t.app_id)}
+                            canEdit={canEdit(t)}
+                            onState={(s) => void setState(t, s)}
+                            onEdit={() => startEdit(t)}
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  );
+                })}
 
             {/* 끝난 것은 접어둔다 — 다 끝난 일이 목록을 채우면 할 일이 안 보인다 */}
             {buckets.done.length > 0 && (
@@ -698,6 +839,18 @@ export default function TaskPage() {
         }}
       />
 
+      <TaskAssign
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        tasks={all}
+        onAssigned={(n, who) => {
+          toast.show(`${n}건을 ${who} 에게 넘겼어요.`);
+          setView('team');
+          pickGroup('who');
+          void load();
+        }}
+      />
+
       {toast.node}
     </div>
   );
@@ -725,74 +878,96 @@ function TaskCard({
   const dday = ddayLabel(task.due_date);
   const done = task.state === 'done';
 
+  /* 끝난 업무에 3버튼을 그대로 두면 두 칸이 아무 의미가 없다 — 되돌리기 하나면 된다 */
+  const states = done ? (
+    canEdit && (
+      <button
+        onClick={() => onState('todo')}
+        className="tap w-full rounded-lg border border-neutral-200 bg-surface text-[12.5px] font-bold text-neutral-400"
+      >
+        되돌리기
+      </button>
+    )
+  ) : (
+    <div className="flex gap-1.5" role="group" aria-label={`${task.title} 상태`}>
+      {TASK_STATES.map((s) => {
+        const on = task.state === s.value;
+        return (
+          <button
+            key={s.value}
+            onClick={() => onState(s.value)}
+            disabled={!canEdit}
+            aria-pressed={on}
+            aria-label={`${task.title} ${s.label}`}
+            /* 44px — 세 개가 나란히 있어서 잘못 누르기 쉽고, 잘못 누르면 바로 저장된다 */
+            className={`h-11 flex-1 rounded-lg border text-[12.5px] font-bold transition disabled:opacity-40 ${
+              on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-400'
+            }`}
+          >
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  /* PC 에서는 상태 버튼을 제목 **오른쪽**에 붙인다.
+     아래로 깔면 버튼 하나가 400px 까지 늘어나고 카드가 137px 이 되는데,
+     그런 카드가 다섯 장 쌓이면 회색 벽이 된다. 폰(375px)은 그대로 아래에 —
+     옆에 붙이면 제목이 뭉개진다. 갈림길은 `lg:` 하나뿐이다. */
   return (
-    <li className="card p-3">
-      <div className="flex items-start gap-2">
-        <p className={`min-w-0 flex-1 text-[14.5px] font-semibold ${done ? 'text-neutral-400 line-through' : 'text-neutral-800'}`}>
-          {task.title}
-        </p>
-        {dday && !done && <span className={`chip shrink-0 ${ddayClass(task.due_date)}`}>{dday}</span>}
-        {/* 고치기·삭제를 카드마다 한 줄씩 깔면 자리만 먹는다. 자주 쓰는 것도 아니다 */}
-        {canEdit && (
-          <button
-            onClick={onEdit}
-            aria-label={`${task.title} 고치기`}
-            className="-my-2 -mr-1 flex h-11 w-8 shrink-0 items-center justify-center text-neutral-300"
+    <li className="card p-3 lg:flex lg:items-center lg:gap-3">
+      <div className="min-w-0 lg:flex-1">
+        <div className="flex items-start gap-2">
+          <p
+            className={`min-w-0 flex-1 text-[14.5px] font-semibold ${done ? 'text-neutral-400 line-through' : 'text-neutral-800'}`}
           >
-            <Icon name="dots" size={16} />
-          </button>
-        )}
-      </div>
-
-      {task.detail && <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-500">{task.detail}</p>}
-
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-neutral-400">
-        {showWho && (
-          <span className={task.assignee_id ? '' : 'text-brand'}>
-            <Icon name="user" size={11} className="mr-0.5" />
-            {who}
-          </span>
-        )}
-        {task.due_date && <span>{korDate(task.due_date)}</span>}
-        {appName && (
-          <Link href={`/apps/${task.app_id}`} className="font-semibold text-brand">
-            {appName}
-          </Link>
-        )}
-        {task.batch_title && <span>{task.batch_title}</span>}
-      </div>
-
-      {/* 끝난 업무에 3버튼을 그대로 두면 두 칸이 아무 의미가 없다 — 되돌리기 하나면 된다 */}
-      {done ? (
-        canEdit && (
-          <button
-            onClick={() => onState('todo')}
-            className="tap mt-2 w-full rounded-lg border border-neutral-200 bg-surface text-[12.5px] font-bold text-neutral-400"
-          >
-            되돌리기
-          </button>
-        )
-      ) : (
-        <div className="mt-2 flex gap-1.5" role="group" aria-label={`${task.title} 상태`}>
-          {TASK_STATES.map((s) => {
-            const on = task.state === s.value;
-            return (
-              <button
-                key={s.value}
-                onClick={() => onState(s.value)}
-                disabled={!canEdit}
-                aria-pressed={on}
-                aria-label={`${task.title} ${s.label}`}
-                /* 44px — 세 개가 나란히 있어서 잘못 누르기 쉽고, 잘못 누르면 바로 저장된다 */
-                className={`h-11 flex-1 rounded-lg border text-[12.5px] font-bold transition disabled:opacity-40 ${
-                  on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-400'
-                }`}
-              >
-                {s.label}
-              </button>
-            );
-          })}
+            {task.title}
+          </p>
+          {dday && !done && <span className={`chip shrink-0 ${ddayClass(task.due_date)}`}>{dday}</span>}
+          {/* 고치기·삭제를 카드마다 한 줄씩 깔면 자리만 먹는다. 자주 쓰는 것도 아니다 */}
+          {canEdit && (
+            <button
+              onClick={onEdit}
+              aria-label={`${task.title} 고치기`}
+              className="-my-2 -mr-1 flex h-11 w-8 shrink-0 items-center justify-center text-neutral-300 lg:hidden"
+            >
+              <Icon name="dots" size={16} />
+            </button>
+          )}
         </div>
+
+        {task.detail && (
+          <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-500">{task.detail}</p>
+        )}
+
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-neutral-400">
+          {showWho && (
+            <span className={task.assignee_id ? '' : 'text-brand'}>
+              <Icon name="user" size={11} className="mr-0.5" />
+              {who}
+            </span>
+          )}
+          {task.due_date && <span>{korDate(task.due_date)}</span>}
+          {appName && (
+            <Link href={`/apps/${task.app_id}`} className="font-semibold text-brand">
+              {appName}
+            </Link>
+          )}
+          {task.batch_title && <span>{task.batch_title}</span>}
+        </div>
+      </div>
+
+      <div className="mt-2 lg:mt-0 lg:w-[264px] lg:shrink-0">{states}</div>
+
+      {canEdit && (
+        <button
+          onClick={onEdit}
+          aria-label={`${task.title} 고치기`}
+          className="hidden shrink-0 text-neutral-300 lg:flex lg:h-11 lg:w-7 lg:items-center lg:justify-center"
+        >
+          <Icon name="dots" size={16} />
+        </button>
       )}
     </li>
   );
