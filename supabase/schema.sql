@@ -650,9 +650,13 @@ create table if not exists moalab.app_secrets (
   key        text primary key,          -- 'anthropic_api_key'
   value      text not null,
   hint       text,                      -- 끝 4자리. 어떤 키를 넣었는지 확인용
+  -- 쓸 모델. 이건 비밀이 아니지만 키와 한 몸이라 같은 줄에 둔다
+  model      text,
   updated_by uuid references moalab.members(id) on delete set null,
   updated_at timestamptz not null default now()
 );
+-- 예전에 만든 표에는 없다
+alter table moalab.app_secrets add column if not exists model text;
 
 -- =====================================================================
 --  권한 + RLS
