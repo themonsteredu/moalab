@@ -322,6 +322,44 @@ console.log('\n--- remindTitle / remindBody — 잠금화면 문구 ---');
   eq('한 건이면 외 N건 을 안 붙인다', T.remindBody(g2), '내일 1건 — 재료 주문');
 }
 
+/* -------------------------------------------------------- 사람별 보기
+   원장이 실제로 하는 일은 나누는 것이라, 나눈 결과가 사람 단위로 보여야 한다.
+   여기서 막고 싶은 것:
+     · 담당자 미정이 맨 위에 안 오는 것 (그게 채워야 할 것이다)
+     · 업무 0건인 사람 칸이 그려져서 빈 칸이 쌓이는 것
+     · 사람을 지웠을 때 그 사람 업무가 화면에서 통째로 사라지는 것 */
+{
+  const MEMBERS = ['m1', 'm2', 'm3'];
+  const list = [
+    task({ id: 'a', assignee_id: 'm2', due_date: '2026-08-30' }),
+    task({ id: 'b', assignee_id: null, due_date: '2026-08-25' }),
+    task({ id: 'c', assignee_id: 'm2', due_date: '2026-08-01' }), // 기한 지남
+    task({ id: 'd', assignee_id: 'm1' }),
+    task({ id: 'e', assignee_id: null }),
+  ];
+  const g = T.groupByPerson(list, MEMBERS, TODAY);
+
+  eq('담당자 미정이 맨 위', g[0].memberId, null);
+  eq('그다음은 멤버 순서(sort_order)', g.slice(1).map((x) => x.memberId), ['m1', 'm2']);
+  eq('업무 0건인 사람(m3)은 안 그린다', g.some((x) => x.memberId === 'm3'), false);
+  eq('묶음 안은 급한 순', ids(g[2].tasks), ['c', 'a']);
+  eq('기한 지난 건수를 센다', g[2].overdue, 1);
+  eq('미정 묶음 건수', g[0].open, 2);
+}
+{
+  // 사람을 지워도 업무는 남는다(on delete set null 이 아닌 옛 데이터·이관 데이터).
+  // 어디에도 안 실리면 화면에서 사라져 영영 못 찾는다
+  const g = T.groupByPerson([task({ id: 'z', assignee_id: 'gone' })], ['m1'], TODAY);
+  eq('없는 멤버의 업무도 실린다', ids(g[g.length - 1].tasks), ['z']);
+  eq('빈 목록이면 묶음도 없다', T.groupByPerson([], ['m1'], TODAY).length, 0);
+}
+{
+  // 완료를 섞으면 사람 칸이 끝난 일로 꽉 찬다 — 화면에서 걸러 넘기는 걸 여기서도 확인
+  const live = [task({ id: 'p', assignee_id: 'm1' }), task({ id: 'q', assignee_id: 'm1', state: 'done' })]
+    .filter((t) => t.state !== 'done');
+  eq('완료를 뺀 목록만 넘기면 남은 것만 센다', T.groupByPerson(live, ['m1'], TODAY)[0].open, 1);
+}
+
 rmSync(out, { recursive: true, force: true });
 console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`);
 process.exit(fail === 0 ? 0 : 1);
