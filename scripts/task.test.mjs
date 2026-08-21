@@ -57,7 +57,7 @@ const task = (o = {}) => ({
   batch_title: o.batch_title ?? null,
   created_by: null,
   sort_order: o.sort_order ?? 0,
-  reminded_on: null,
+  reminded_on: o.reminded_on ?? null,
   done_at: null,
   created_at: o.created_at ?? '2026-08-01T00:00:00Z',
   updated_at: '2026-08-01T00:00:00Z',
@@ -266,6 +266,60 @@ console.log('\n--- postponed — 묶음 통째로 미루기 ---');
   eq('기한 있는 · 안 끝난 것만', moved.map((x) => x.id), ['p1', 'p2']);
   eq('달을 넘어가도 정확히', moved.map((x) => x.due_date), ['2026-08-23', '2026-09-03']);
   eq('당길 수도 있다 (음수)', T.postponed([task({ id: 'q', due_date: '2026-09-01' })], -2)[0].due_date, '2026-08-30');
+}
+
+console.log('\n--- remindTargets — 기한 알림 대상 ---');
+{
+  const TOM = '2026-08-21';
+  const list = [
+    task({ id: 'a', assignee_id: 'm1', due_date: TODAY }),
+    task({ id: 'b', assignee_id: 'm1', due_date: TOM }),
+    task({ id: 'c', assignee_id: 'm2', due_date: TODAY }),
+    task({ id: 'd', assignee_id: 'm1', due_date: TODAY, state: 'done' }),     // 끝났다
+    task({ id: 'e', assignee_id: null, due_date: TODAY }),                    // 보낼 곳이 없다
+    task({ id: 'f', assignee_id: 'm1', due_date: '2026-08-25' }),             // 아직 멀었다
+    task({ id: 'g', assignee_id: 'm1', due_date: '2026-08-19' }),             // 이미 지났다
+    task({ id: 'h', assignee_id: 'm1', due_date: null }),                     // 기한이 없다
+  ];
+  const g = T.remindTargets(list, TODAY, TOM);
+  eq('사람 수만큼만', g.length, 2);
+  eq('사람별 오늘/내일', g.map((x) => `${x.memberId}:${x.today.length}/${x.tomorrow.length}`), ['m1:1/1', 'm2:1/0']);
+  eq('끝난 업무는 안 울린다', g[0].today.map((t) => t.id), ['a']);
+  eq('기한 지난 것은 이 알림에 안 넣는다', g[0].today.concat(g[0].tomorrow).map((t) => t.id), ['a', 'b']);
+}
+{
+  const TOM = '2026-08-21';
+  const list = [
+    task({ id: 'x', assignee_id: 'm1', due_date: TODAY, reminded_on: TODAY }),  // 오늘 이미 보냄
+    task({ id: 'y', assignee_id: 'm1', due_date: TOM, reminded_on: '2026-08-19' }), // 어제 보낸 건 다시 보낸다
+  ];
+  const g = T.remindTargets(list, TODAY, TOM);
+  eq('같은 날 두 번 울리지 않는다', g[0].tomorrow.map((t) => t.id), ['y']);
+  eq('오늘 보낸 건 빠진다', g[0].today.length, 0);
+}
+{
+  eq('보낼 게 없으면 빈 배열', T.remindTargets([], TODAY, '2026-08-21'), []);
+}
+
+console.log('\n--- remindTitle / remindBody — 잠금화면 문구 ---');
+{
+  const TOM = '2026-08-21';
+  const g1 = T.remindTargets(
+    [
+      task({ assignee_id: 'm1', due_date: TODAY, title: 'A초 제안서' }),
+      task({ assignee_id: 'm1', due_date: TODAY, title: '재료 주문' }),
+      task({ assignee_id: 'm1', due_date: TOM, title: '사진 정리' }),
+    ],
+    TODAY, TOM,
+  )[0];
+  eq('제목은 오늘을 앞세운다', T.remindTitle(g1), '오늘 마감 2건');
+  eq('본문', T.remindBody(g1), '오늘 2건 · 내일 1건 — A초 제안서 외 2건');
+}
+{
+  const TOM = '2026-08-21';
+  const g2 = T.remindTargets([task({ assignee_id: 'm1', due_date: TOM, title: '재료 주문' })], TODAY, TOM)[0];
+  eq('오늘 것이 없으면 내일로', T.remindTitle(g2), '내일 마감 1건');
+  eq('한 건이면 외 N건 을 안 붙인다', T.remindBody(g2), '내일 1건 — 재료 주문');
 }
 
 rmSync(out, { recursive: true, force: true });

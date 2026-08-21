@@ -265,3 +265,55 @@ export function postponed(tasks: Task[], days: number): { id: string; due_date: 
     .filter((t) => t.due_date && isOpenTask(t))
     .map((t) => ({ id: t.id, due_date: shiftDate(t.due_date as string, days) }));
 }
+
+/* ------------------------------------------------------------- 기한 알림
+   매일 아침 한 번, 오늘·내일 마감을 **담당자별로 묶어 그 사람에게만** 보낸다.
+
+   Vercel 무료 플랜은 cron 이 하루 1회라 "전날 저녁 + 당일 아침" 두 번을 못 쓴다.
+   그래서 아침 한 통에 '오늘 마감 N건 · 내일 마감 M건' 을 같이 담는다 —
+   통수도 줄어서 이쪽이 오히려 낫다.
+
+   ※ 여기 쓰는 '오늘' 은 반드시 kstDateStr() 로 만든 한국 날짜여야 한다. */
+
+export interface RemindGroup {
+  memberId: string;
+  today: Task[];
+  tomorrow: Task[];
+}
+
+/**
+ * 알림을 보낼 대상을 사람별로 묶는다.
+ *
+ * 빼는 것:
+ *   · 끝난 업무 (지나간 일로 울릴 이유가 없다)
+ *   · 담당자 없는 업무 (보낼 곳이 없다)
+ *   · 오늘 이미 보낸 업무 (`reminded_on`) — cron 이 두 번 돌아도 한 통이다
+ */
+export function remindTargets(tasks: Task[], today: string, tomorrow: string): RemindGroup[] {
+  const map = new Map<string, RemindGroup>();
+  for (const t of tasks) {
+    if (t.state === 'done' || !t.assignee_id || !t.due_date) continue;
+    if (t.reminded_on === today) continue;
+    const when = t.due_date === today ? 'today' : t.due_date === tomorrow ? 'tomorrow' : null;
+    if (!when) continue;
+    const g = map.get(t.assignee_id) ?? { memberId: t.assignee_id, today: [], tomorrow: [] };
+    g[when].push(t);
+    map.set(t.assignee_id, g);
+  }
+  return [...map.values()].sort((a, b) => (a.memberId < b.memberId ? -1 : 1));
+}
+
+/** 잠금화면에서 한눈에 보이는 제목 — 오늘 것이 있으면 오늘을 앞세운다 */
+export function remindTitle(g: RemindGroup): string {
+  return g.today.length > 0 ? `오늘 마감 ${g.today.length}건` : `내일 마감 ${g.tomorrow.length}건`;
+}
+
+/** 본문 — 몇 건인지와 첫 업무 이름 */
+export function remindBody(g: RemindGroup): string {
+  const parts: string[] = [];
+  if (g.today.length > 0) parts.push(`오늘 ${g.today.length}건`);
+  if (g.tomorrow.length > 0) parts.push(`내일 ${g.tomorrow.length}건`);
+  const all = [...g.today, ...g.tomorrow];
+  const rest = all.length - 1;
+  return `${parts.join(' · ')} — ${all[0]?.title ?? ''}${rest > 0 ? ` 외 ${rest}건` : ''}`;
+}

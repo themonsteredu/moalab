@@ -250,22 +250,31 @@ export default function NoticePage() {
       return;
     }
 
-    // 3) 새 공지였으면 전원에게 알린다 (쓴 사람 빼고)
+    /* 3) 새 공지였으면 전원에게 알린다 (쓴 사람 빼고).
+          공지는 이미 저장됐으니 결과를 기다려도 잃을 게 없다 — 대신 **정말 갔는지**를
+          그대로 적어준다. 예전엔 발송과 무관하게 '알림도 보냈어요' 가 항상 떠서,
+          키가 없거나 아무도 알림을 안 켰을 때도 갔다고 믿게 했다 */
     const isNew = !editing;
+    let pushNote = '';
     if (isNew) {
-      sendPush({
+      const res = await sendPush({
         title: `새 공지 — ${title.trim()}`,
         body: body.trim(),
         url: '/notice',
         tag: `notice-${target.id}`,
         fromId: session?.id ?? null,
       });
+      pushNote = res?.skipped
+        ? ' 알림은 아직 못 보내요 — 서버 설정을 확인해주세요.'
+        : res && res.sent > 0
+          ? ` ${res.sent}명에게 알림도 갔어요.`
+          : ' 알림 받는 사람이 아직 없어요 (홈에서 알림 켜기).';
     }
 
     setBusy(false);
     setProgress('');
     setFormOpen(false);
-    toast.show(isNew ? '공지를 올렸어요. 알림도 보냈어요.' : '저장했어요.');
+    toast.show(isNew ? `공지를 올렸어요.${pushNote}` : '저장했어요.');
     await load();
   };
 

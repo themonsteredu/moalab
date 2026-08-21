@@ -18,8 +18,9 @@ self.addEventListener('push', (event) => {
   const title = data.title || '모아랩 업무';
   const options = {
     body: data.body || '',
-    icon: '/icon.svg',
-    badge: '/icon.svg',
+    // /icon.svg 는 존재하지 않는 파일이었다 — 안드로이드 알림에 크롬 기본 아이콘이 떴다
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     // 같은 tag 는 덮어쓴다 — 공지 하나에 알림이 여러 개 쌓이지 않게
     tag: data.tag || 'moalab',
     renotify: true,
@@ -34,10 +35,20 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      // 이미 열려 있는 창이 있으면 그 창을 쓴다 (탭이 계속 늘어나지 않게)
+      /* 이미 열려 있는 창이 있으면 그 창을 쓴다 (탭이 계속 늘어나지 않게).
+         단 navigate() 는 이 서비스워커가 제어하지 않는 창에서는 실패한다 —
+         그 경우 조용히 죽지 말고 새 창을 열어야 한다. 예전엔 실패하면
+         포커스만 되고 정작 알림이 가리키는 화면으로 안 갔다. */
       for (const client of list) {
         if ('focus' in client) {
-          client.navigate(target);
+          try {
+            const p = client.navigate(target);
+            if (p && typeof p.catch === 'function') {
+              return p.then(() => client.focus()).catch(() => self.clients.openWindow(target));
+            }
+          } catch {
+            return self.clients.openWindow(target);
+          }
           return client.focus();
         }
       }
