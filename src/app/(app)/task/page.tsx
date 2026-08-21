@@ -12,11 +12,15 @@ import {
   groupByBatch,
   isOverdue,
   loadByMember,
+  postponed,
   taskBuckets,
   todayStr,
   unassigned,
+  type TaskBatch,
   type TaskBuckets,
 } from '@/lib/task';
+import { TaskTemplateManager } from '@/components/TaskTemplateManager';
+import { TaskSpread } from '@/components/TaskSpread';
 import { PageHeader } from '@/components/PageHeader';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
@@ -63,6 +67,13 @@ export default function TaskPage() {
   const [formErr, setFormErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Task | null>(null);
+
+  // 체크리스트 (원장만)
+  const [tplOpen, setTplOpen] = useState(false);
+  const [spreadOpen, setSpreadOpen] = useState(false);
+  const [openBatch, setOpenBatch] = useState<TaskBatch | null>(null);
+  const [pushDays, setPushDays] = useState('7');
+  const [killBatch, setKillBatch] = useState<TaskBatch | null>(null);
 
   const meId = session?.id ?? '';
   const today = todayStr();
@@ -217,6 +228,51 @@ export default function TaskPage() {
     });
   };
 
+  /* ------------------------------------------------------------ 묶음 조작
+     한 번에 뿌린 것은 한 번에 물릴 수 있어야 한다. 잘못 뿌렸을 때
+     여덟 번 지우게 하면 그게 더 큰 사고가 된다. */
+
+  /** 묶음 전체를 N일 미룬다. 기한이 없거나 끝난 줄은 건드리지 않는다 */
+  const postponeBatch = async (b: TaskBatch, days: number) => {
+    const moves = postponed(b.tasks, days);
+    if (moves.length === 0) {
+      toast.show('미룰 기한이 없어요.');
+      return;
+    }
+    const now = new Date().toISOString();
+    for (const m of moves) {
+      const { error: e } = await supabase
+        .from('tasks')
+        .update({ due_date: m.due_date, updated_at: now })
+        .eq('id', m.id);
+      if (e) {
+        setError(friendlyError(e, '기한을 미루지 못했어요.'));
+        await load();
+        return;
+      }
+    }
+    logActivity(session?.id, `묶음 ${days}일 미룸 — ${b.title}`, 'tasks');
+    setOpenBatch(null);
+    toast.show(`${moves.length}건을 ${days}일 미뤘어요.`);
+    await load();
+  };
+
+  const removeBatch = async () => {
+    if (!killBatch) return;
+    const { error: e } = await supabase.from('tasks').delete().eq('batch_id', killBatch.id);
+    if (e) {
+      setError(friendlyError(e, '묶음을 지우지 못했어요.'));
+      setKillBatch(null);
+      return;
+    }
+    logActivity(session?.id, `묶음 삭제 — ${killBatch.title} (${killBatch.total}건)`, 'tasks');
+    const n = killBatch.total;
+    setKillBatch(null);
+    setOpenBatch(null);
+    toast.show(`${n}건을 지웠어요.`);
+    await load();
+  };
+
   const remove = async () => {
     if (!deleting) return;
     const { error: e } = await supabase.from('tasks').delete().eq('id', deleting.id);
@@ -249,10 +305,21 @@ export default function TaskPage() {
               : `전체 ${all.filter((t) => t.state !== 'done').length}건${noOwner.length > 0 ? ` · 담당자 미정 ${noOwner.length}` : ''}`
         }
         right={
-          <button onClick={startNew} className="btn-primary px-3 text-[13.5px]">
-            <Icon name="plus" size={15} />
-            업무 추가
-          </button>
+          <span className="flex items-center gap-2">
+            {isAdmin && (
+              <button
+                onClick={() => setSpreadOpen(true)}
+                aria-label="체크리스트로 뿌리기"
+                className="btn-ghost h-10 w-10 px-0"
+              >
+                <Icon name="list" size={16} />
+              </button>
+            )}
+            <button onClick={startNew} className="btn-primary px-3 text-[13.5px]">
+              <Icon name="plus" size={15} />
+              업무 추가
+            </button>
+          </span>
         }
       />
 
@@ -316,20 +383,40 @@ export default function TaskPage() {
         {view === 'team' && batches.length > 0 && (
           <section className="card mb-3 p-3">
             <p className="mb-2 text-[12px] font-bold text-neutral-400">묶음</p>
-            <ul className="space-y-1.5">
+            <ul className="space-y-1">
               {batches.map((b) => (
-                <li key={b.id} className="flex items-center gap-2 text-[13px]">
-                  <span className="min-w-0 flex-1 truncate font-semibold text-neutral-700">{b.title}</span>
-                  {b.nextDue && <span className={`chip shrink-0 ${ddayClass(b.nextDue)}`}>{ddayLabel(b.nextDue)}</span>}
-                  <span
-                    className={`chip shrink-0 ${b.done === b.total ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-500'}`}
+                <li key={b.id}>
+                  <button
+                    onClick={() => setOpenBatch(b)}
+                    className="tap flex w-full items-center gap-2 text-left text-[13px]"
                   >
-                    {b.done}/{b.total}
-                  </span>
+                    <span className="min-w-0 flex-1 truncate font-semibold text-neutral-700">{b.title}</span>
+                    {b.nextDue && (
+                      <span className={`chip shrink-0 ${ddayClass(b.nextDue)}`}>{ddayLabel(b.nextDue)}</span>
+                    )}
+                    <span
+                      className={`chip shrink-0 ${b.done === b.total ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-500'}`}
+                    >
+                      {b.done}/{b.total}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
           </section>
+        )}
+
+        {/* 체크리스트 관리 — 원장만. 목록 아래에 조용히 둔다 */}
+        {isAdmin && view === 'team' && tasks !== null && (
+          <div className="mb-3 flex justify-end">
+            <button
+              onClick={() => setTplOpen(true)}
+              className="-my-2 flex items-center gap-1 py-2 text-[12px] font-bold text-neutral-400"
+            >
+              <Icon name="wrench" size={13} />
+              체크리스트 관리
+            </button>
+          </div>
         )}
 
         {tasks === null ? (
@@ -495,12 +582,91 @@ export default function TaskPage() {
         </div>
       </Sheet>
 
+      {/* -------------------------------------------------------- 묶음 다루기 */}
+      <Sheet open={openBatch !== null} onClose={() => setOpenBatch(null)} title={openBatch?.title ?? '묶음'}>
+        {openBatch && (
+          <div className="space-y-4">
+            <p className="text-[13px] text-neutral-500">
+              {openBatch.total}건 중 <b className="text-neutral-800">{openBatch.done}건</b> 끝났어요.
+              {openBatch.nextDue && <> 다음 기한은 {korDate(openBatch.nextDue)}.</>}
+            </p>
+
+            <ul className="space-y-1">
+              {openBatch.tasks.map((t) => (
+                <li key={t.id} className="flex items-center gap-2 text-[13px]">
+                  <span className="w-14 shrink-0 truncate text-[11.5px] text-neutral-400">
+                    {nameOf(t.assignee_id)}
+                  </span>
+                  <span
+                    className={`min-w-0 flex-1 truncate ${t.state === 'done' ? 'text-neutral-400 line-through' : 'text-neutral-700'}`}
+                  >
+                    {t.title}
+                  </span>
+                  {t.due_date && t.state !== 'done' && (
+                    <span className={`chip shrink-0 ${ddayClass(t.due_date)}`}>{ddayLabel(t.due_date)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            {/* 통째로 미루기 — 학교 일정이 밀리면 묶음 전체가 같이 밀린다 */}
+            <div className="rounded-xl bg-neutral-100 px-3.5 py-3">
+              <p className="label">기한을 통째로 미루기</p>
+              <div className="flex gap-2">
+                <input
+                  value={pushDays}
+                  onChange={(e) => setPushDays(e.target.value)}
+                  type="number"
+                  inputMode="numeric"
+                  aria-label="며칠 미룰지"
+                  className="field w-24 shrink-0"
+                />
+                <button
+                  onClick={() => void postponeBatch(openBatch, Number(pushDays))}
+                  disabled={!Number.isInteger(Number(pushDays)) || Number(pushDays) === 0}
+                  className="btn-ghost h-11 flex-1 text-[13.5px]"
+                >
+                  {Number(pushDays) < 0 ? `${-Number(pushDays)}일 당기기` : `${pushDays}일 미루기`}
+                </button>
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-neutral-400">
+                끝난 업무와 기한 없는 업무는 그대로 둡니다.
+              </p>
+            </div>
+
+            <button onClick={() => setKillBatch(openBatch)} className="btn-ghost w-full text-red-700">
+              이 묶음 {openBatch.total}건 통째로 지우기
+            </button>
+          </div>
+        )}
+      </Sheet>
+
+      <ConfirmDialog
+        open={killBatch !== null}
+        title="묶음을 통째로 지울까요?"
+        message={`${killBatch?.title} · ${killBatch?.total}건이 한꺼번에 지워져요. 되돌릴 수 없어요.`}
+        onConfirm={() => void removeBatch()}
+        onCancel={() => setKillBatch(null)}
+      />
+
       <ConfirmDialog
         open={deleting !== null}
         title="이 업무를 지울까요?"
         message={deleting?.title}
         onConfirm={() => void remove()}
         onCancel={() => setDeleting(null)}
+      />
+
+      <TaskTemplateManager open={tplOpen} onClose={() => setTplOpen(false)} onChanged={() => void load()} />
+
+      <TaskSpread
+        open={spreadOpen}
+        onClose={() => setSpreadOpen(false)}
+        onSpread={(n, t) => {
+          toast.show(`${t} — ${n}건을 만들었어요.`);
+          setView('team');
+          void load();
+        }}
       />
 
       {toast.node}

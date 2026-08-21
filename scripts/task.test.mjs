@@ -65,6 +65,18 @@ const task = (o = {}) => ({
 
 const ids = (list) => list.map((t) => t.id);
 
+/** 템플릿 항목 한 줄 */
+let tseq = 0;
+const item = (o = {}) => ({
+  id: o.id ?? `i${++tseq}`,
+  template_id: 'TPL',
+  title: o.title ?? '항목',
+  detail: o.detail ?? null,
+  default_assignee_id: o.default_assignee_id ?? null,
+  day_offset: o.day_offset ?? 0,
+  sort_order: o.sort_order ?? 0,
+});
+
 console.log('--- kstDateStr — 서버의 오늘은 한국 날짜가 아니다 ---');
 eq('UTC 14:59 → 아직 어제(한국 기준 8/20 23:59)', T.kstDateStr(new Date('2026-08-20T14:59:00Z')), '2026-08-20');
 eq('UTC 15:00 → 한국은 자정을 넘겼다', T.kstDateStr(new Date('2026-08-20T15:00:00Z')), '2026-08-21');
@@ -188,6 +200,73 @@ console.log('\n--- loadByMember / unassigned — 원장이 보는 것 ---');
 console.log('\n--- 이름표 ---');
 eq('상태', [T.taskStateLabel('todo'), T.taskStateLabel('doing'), T.taskStateLabel('done')], ['할 일', '하는 중', '완료']);
 eq('모르는 값은 할 일로', T.taskStateLabel('nope'), '할 일');
+
+console.log('\n--- applyTemplate — 기준일에 얹어 뿌리기 ---');
+{
+  const items = [
+    item({ id: 'i-c', title: '수업 진행', day_offset: 0, sort_order: 3 }),
+    item({ id: 'i-a', title: '재료 주문', day_offset: -5, sort_order: 1, default_assignee_id: 'm2' }),
+    item({ id: 'i-b', title: '계획안 확정', day_offset: -2, sort_order: 2, default_assignee_id: 'm1' }),
+  ];
+  const made = T.applyTemplate(items, '2026-08-25', {}, { id: 'B9', title: '8/25 A초 준비' });
+
+  eq('sort_order 순서로 나온다', made.map((t) => t.title), ['재료 주문', '계획안 확정', '수업 진행']);
+  eq('기한 = 기준일 ± N일', made.map((t) => t.due_date), ['2026-08-20', '2026-08-23', '2026-08-25']);
+  eq('기본 담당자가 붙는다', made.map((t) => t.assignee_id), ['m2', 'm1', null]);
+  eq('묶음이 전부에 박힌다', made.every((t) => t.batch_id === 'B9' && t.batch_title === '8/25 A초 준비'), true);
+  eq('sort_order 는 0부터 다시 매긴다', made.map((t) => t.sort_order), [0, 1, 2]);
+}
+{
+  const items = [item({ id: 'x', default_assignee_id: 'm1' }), item({ id: 'y', default_assignee_id: 'm1' })];
+  const made = T.applyTemplate(items, '2026-08-25', { x: 'm3', y: '' }, { id: 'B', title: 'T' });
+  eq('미리보기에서 바꾼 담당자가 이긴다', made[0].assignee_id, 'm3');
+  eq('빈 값은 일부러 비운 것 — 기본값으로 안 되돌린다', made[1].assignee_id, null);
+}
+{
+  const items = [item({ day_offset: -5 })];
+  eq('기준일이 월초면 지난달로 넘어간다', T.applyTemplate(items, '2026-03-02', {}, { id: 'B', title: 'T' })[0].due_date, '2026-02-25');
+  eq('윤년 2월도 정확히', T.applyTemplate(items, '2024-03-02', {}, { id: 'B', title: 'T' })[0].due_date, '2024-02-26');
+  eq('기준일이 없으면 기한 없이 만든다', T.applyTemplate(items, '', {}, { id: 'B', title: 'T' })[0].due_date, null);
+}
+{
+  eq('항목이 0개면 아무것도 안 만든다', T.applyTemplate([], '2026-08-25', {}, { id: 'B', title: 'T' }).length, 0);
+}
+
+console.log('\n--- spreadNotices — 사람당 한 통 ---');
+{
+  const made = T.applyTemplate(
+    [
+      item({ id: 'a', day_offset: -5, default_assignee_id: 'm2' }),
+      item({ id: 'b', day_offset: -3, default_assignee_id: 'm1', sort_order: 1 }),
+      item({ id: 'c', day_offset: -1, default_assignee_id: 'm1', sort_order: 2 }),
+      item({ id: 'd', day_offset: 0, sort_order: 3 }),
+    ],
+    '2026-08-25', {}, { id: 'B', title: 'T' },
+  );
+  const n = T.spreadNotices(made);
+  eq('4건을 뿌려도 알림은 사람 수만큼만', n.length, 2);
+  eq('사람별 건수', n.map((x) => `${x.memberId}:${x.count}`), ['m1:2', 'm2:1']);
+  eq('가장 빠른 기한을 알려준다', n.find((x) => x.memberId === 'm1').firstDue, '2026-08-22');
+  eq('담당자 없는 줄은 보낼 곳이 없다', n.some((x) => x.memberId === null), false);
+}
+{
+  const made = T.applyTemplate([item({ id: 'z', default_assignee_id: 'm1' })], '', {}, { id: 'B', title: 'T' });
+  eq('기한이 없으면 firstDue 도 없다', T.spreadNotices(made)[0].firstDue, null);
+}
+
+console.log('\n--- postponed — 묶음 통째로 미루기 ---');
+{
+  const list = [
+    task({ id: 'p1', due_date: '2026-08-20' }),
+    task({ id: 'p2', due_date: '2026-08-31' }),
+    task({ id: 'p3', due_date: null }),
+    task({ id: 'p4', due_date: '2026-08-20', state: 'done' }),
+  ];
+  const moved = T.postponed(list, 3);
+  eq('기한 있는 · 안 끝난 것만', moved.map((x) => x.id), ['p1', 'p2']);
+  eq('달을 넘어가도 정확히', moved.map((x) => x.due_date), ['2026-08-23', '2026-09-03']);
+  eq('당길 수도 있다 (음수)', T.postponed([task({ id: 'q', due_date: '2026-09-01' })], -2)[0].due_date, '2026-08-30');
+}
 
 rmSync(out, { recursive: true, force: true });
 console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`);

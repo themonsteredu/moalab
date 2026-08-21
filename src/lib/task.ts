@@ -1,4 +1,4 @@
-import { TASK_STATES, type Task, type TaskState } from './types';
+import { TASK_STATES, type Task, type TaskState, type TaskTemplateItem } from './types';
 
 /* ------------------------------------------------------------------ 이름표 */
 
@@ -177,4 +177,91 @@ export function loadByMember(tasks: Task[], memberIds: string[], today: string):
 /** 담당자가 아직 안 정해진 업무 — 원장이 제일 먼저 채워야 할 것 */
 export function unassigned(tasks: Task[]): Task[] {
   return tasks.filter((t) => isOpenTask(t) && !t.assignee_id);
+}
+
+/* ---------------------------------------------------------------- 뿌리기
+   나눠주는 일은 매번 비슷하다. 템플릿을 한 번 만들어두고 기준일만 정해서 통째로 뿌린다.
+   기한은 기준일 ± N일로 계산된다 (수업일이 기준이면 준비는 -5, -2 처럼 앞에 온다).
+
+   뿌린 업무는 그 순간 **사진처럼 굳는다** — 나중에 템플릿을 고쳐도 안 바뀐다.
+   그래서 tasks 에 template_id 를 두지 않는다. 지난달에 끝낸 일이 슬그머니
+   달라지면 기록이 아니게 된다. */
+
+export interface NewTask {
+  title: string;
+  detail: string | null;
+  assignee_id: string | null;
+  due_date: string | null;
+  app_id: string | null;
+  batch_id: string;
+  batch_title: string;
+  sort_order: number;
+}
+
+/**
+ * 템플릿 항목을 기준일에 얹어 업무 목록을 만든다. **저장하지 않는다** —
+ * 화면이 이걸 미리보기로 보여주고, 사람이 확인한 뒤에 한 번에 넣는다.
+ *
+ * `overrides` 는 항목 id → 담당자. 미리보기에서 담당자를 바꾼 것만 담긴다.
+ * 값이 빈 문자열이면 '담당자 미정' 으로 일부러 비운 것이다 (기본값으로 되돌리지 않는다).
+ */
+export function applyTemplate(
+  items: TaskTemplateItem[],
+  anchor: string,
+  overrides: Record<string, string>,
+  batch: { id: string; title: string; appId?: string | null },
+): NewTask[] {
+  return [...items]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((it, i) => ({
+      title: it.title,
+      detail: it.detail,
+      assignee_id:
+        it.id in overrides ? overrides[it.id] || null : (it.default_assignee_id ?? null),
+      due_date: anchor ? shiftDate(anchor, it.day_offset) : null,
+      app_id: batch.appId ?? null,
+      batch_id: batch.id,
+      batch_title: batch.title,
+      sort_order: i,
+    }));
+}
+
+/**
+ * 뿌린 뒤 누구에게 몇 통을 보낼지.
+ *
+ * **사람당 한 통이다.** 8건을 뿌렸는데 8통이 가면 그날로 알림을 꺼버린다.
+ * 담당자가 없는 줄은 보낼 곳이 없으니 빠진다.
+ */
+export interface SpreadNotice {
+  memberId: string;
+  count: number;
+  /** 그 사람 몫 중 가장 빠른 기한 */
+  firstDue: string | null;
+}
+
+export function spreadNotices(tasks: NewTask[]): SpreadNotice[] {
+  const map = new Map<string, string[]>();
+  for (const t of tasks) {
+    if (!t.assignee_id) continue;
+    const list = map.get(t.assignee_id) ?? [];
+    if (t.due_date) list.push(t.due_date);
+    map.set(t.assignee_id, list);
+  }
+  return [...map]
+    .map(([memberId, dues]) => ({
+      memberId,
+      count: tasks.filter((t) => t.assignee_id === memberId).length,
+      firstDue: dues.length > 0 ? [...dues].sort()[0] : null,
+    }))
+    .sort((a, b) => (a.memberId < b.memberId ? -1 : 1));
+}
+
+/**
+ * 묶음 전체를 N일 미룬다. 기한이 없는 줄은 미룰 것도 없어서 건드리지 않는다.
+ * 끝난 업무도 그대로 둔다 — 지나간 기록의 날짜를 바꿀 이유가 없다.
+ */
+export function postponed(tasks: Task[], days: number): { id: string; due_date: string }[] {
+  return tasks
+    .filter((t) => t.due_date && isOpenTask(t))
+    .map((t) => ({ id: t.id, due_date: shiftDate(t.due_date as string, days) }));
 }
