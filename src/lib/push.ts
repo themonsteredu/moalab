@@ -138,14 +138,27 @@ export function usePush(memberId: string | null) {
   return { state, busy, error, needsInstall, enable, disable };
 }
 
+export interface PushResult {
+  sent: number;
+  /** VAPID 키가 없거나 서버 설정이 안 됐을 때의 사유 */
+  skipped?: string;
+}
+
 /**
  * 알림 보내기. 실패해도 본 작업(공지 저장 등)을 막지 않는다 —
  * 알림이 안 갔다고 공지가 안 올라가면 더 나쁘다.
+ *
+ * **결과를 돌려주지만 안 받아도 된다.** 그냥 부르면 예전처럼 던지고 잊는 것이고,
+ * 몇 명에게 갔는지 화면에 적어야 할 때만 await 한다 — 공지 저장이 그렇다.
+ * (예전엔 결과를 알 방법이 아예 없어서 "알림도 보냈어요" 가 항상 떴다.
+ *  키가 없어도, 구독자가 0명이어도.)
  */
-export function sendPush(payload: PushPayload): void {
-  void fetch('/api/push/send', {
+export function sendPush(payload: PushPayload): Promise<PushResult | null> {
+  return fetch('/api/push/send', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
-  }).catch(() => {});
+  })
+    .then((r) => (r.ok ? (r.json() as Promise<PushResult>) : null))
+    .catch(() => null);
 }
