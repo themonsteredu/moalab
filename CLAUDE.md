@@ -846,6 +846,9 @@ scripts/measure.mjs          375px 에서 실제로 재기 — 세로 길이·�
 scripts/measure-mock.mjs     가짜 데이터를 물려 375px 에서 재기 — 프로그램 페이지(/apps/[id])와
                              역할분장(/roles). Supabase 응답을 가로채므로 진짜 DB 없이 잰다
                              (dev 서버를 띄워두고 실행. playwright 는 이때만 필요해 package.json 에 없음)
+scripts/measure-all.mjs      열두 화면을 **실제 데이터 규모 그대로** 그려놓고 재기.
+                             REST 응답을 가로채 프로그램 33·주제 16·원가표 10·지적 14 로 물린다.
+                             `첫 내용까지` 를 같이 재는 게 핵심 — 조작 줄이 먹는 높이가 간소화의 과녁이다
 
 src/components/
   ui.tsx                     Sheet, ConfirmDialog, Skeleton, EmptyState, Toast 등
