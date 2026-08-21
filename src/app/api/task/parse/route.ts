@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { kstDateStr } from '@/lib/task';
 import { normalizeParsed, parsePrompt, PARSE_SCHEMA } from '@/lib/taskParse';
+import { resolveModel } from '@/lib/ai';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
   }
 
   // 키 꺼내기 — 이 표는 service_role 만 붙을 수 있다
-  const { data: secret } = await admin.from('app_secrets').select('value').eq('key', KEY).maybeSingle();
+  const { data: secret } = await admin.from('app_secrets').select('value,model').eq('key', KEY).maybeSingle();
   if (!secret?.value) {
     return NextResponse.json(
       { error: 'AI 키가 아직 등록되지 않았어요. 관리 > AI 키에서 등록해주세요.' },
@@ -57,7 +58,8 @@ export async function POST(req: Request) {
   try {
     const client = new Anthropic({ apiKey: secret.value });
     const res = await client.messages.create({
-      model: 'claude-opus-5',
+      // 원장이 관리 화면에서 고른 모델. 모르는 값이면 기본값으로 되돌아간다
+      model: resolveModel(secret.model),
       max_tokens: 8000,
       system: parsePrompt(kstDateStr(new Date()), roster),
       messages: [{ role: 'user', content: text }],

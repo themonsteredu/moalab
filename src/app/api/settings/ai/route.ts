@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { AI_MODEL_DEFAULT, resolveModel } from '@/lib/ai';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await g.admin
     .from('app_secrets')
-    .select('hint,updated_at')
+    .select('hint,model,updated_at')
     .eq('key', KEY)
     .maybeSingle();
 
@@ -44,6 +45,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     configured: Boolean(data),
     hint: data?.hint ?? null,
+    model: resolveModel(data?.model),
     updated_at: data?.updated_at ?? null,
   });
 }
@@ -53,7 +55,23 @@ export async function POST(req: Request) {
   const g = await requireAdmin(req);
   if (!g.admin) return NextResponse.json({ error: g.error }, { status: g.status });
 
-  const body = (await req.json().catch(() => ({}))) as { key?: string };
+  const body = (await req.json().catch(() => ({}))) as { key?: string; model?: string };
+
+  /* 모델만 바꾸는 요청 — 키는 그대로 두고 모델 칸만 고친다.
+     키를 다시 붙여넣게 하면 화면에 안 보이는 값을 또 찾아와야 한다 */
+  if (body.model && !body.key) {
+    const model = resolveModel(body.model);
+    const { error } = await g.admin
+      .from('app_secrets')
+      .update({ model, updated_at: new Date().toISOString() })
+      .eq('key', KEY);
+    if (error) {
+      return NextResponse.json({ error: '모델을 바꾸지 못했어요. 다시 눌러주세요.' }, { status: 400 });
+    }
+    await g.admin.from('activity_logs').insert({ member_id: g.actorId, action: `AI 모델 변경 — ${model}` });
+    return NextResponse.json({ configured: true, model });
+  }
+
   const key = (body.key ?? '').trim();
 
   if (!key) return NextResponse.json({ error: 'API 키를 붙여넣어 주세요.' }, { status: 400 });
@@ -72,6 +90,7 @@ export async function POST(req: Request) {
       key: KEY,
       value: key,
       hint: key.slice(-4),
+      model: resolveModel(body.model),
       updated_by: g.actorId,
       updated_at: new Date().toISOString(),
     },
@@ -87,7 +106,7 @@ export async function POST(req: Request) {
 
   // 로그에는 키를 남기지 않는다 (활동 로그는 원장 화면에서 그대로 보인다)
   await g.admin.from('activity_logs').insert({ member_id: g.actorId, action: 'AI 키 등록' });
-  return NextResponse.json({ configured: true, hint: key.slice(-4) });
+  return NextResponse.json({ configured: true, hint: key.slice(-4), model: resolveModel(body.model) });
 }
 
 /** 지우기 */
@@ -100,5 +119,5 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: '키를 지우지 못했어요. 다시 눌러주세요.' }, { status: 400 });
   }
   await g.admin.from('activity_logs').insert({ member_id: g.actorId, action: 'AI 키 삭제' });
-  return NextResponse.json({ configured: false });
+  return NextResponse.json({ configured: false, model: AI_MODEL_DEFAULT });
 }

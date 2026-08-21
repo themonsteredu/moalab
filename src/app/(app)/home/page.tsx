@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { PIECES, useAppsOverview } from '@/lib/useAppsOverview';
@@ -42,6 +42,8 @@ export default function HomePage() {
   const [noticeReads, setNoticeReads] = useState<NoticeRead[]>([]);
   /** 내가 맡은 안 끝난 업무 — '내 할 일' 에 합류한다 */
   const [myOpen, setMyOpen] = useState<Task[]>([]);
+  /** 완료 표시가 실패했을 때만 쓰는 자리 (화면 전체 에러와 섞지 않는다) */
+  const [actionErr, setActionErr] = useState('');
 
   const meId = session?.id ?? '';
 
@@ -243,6 +245,38 @@ export default function HomePage() {
   }, [notices, noticeReads, meId]);
 
   /* ------------------------------------------------------- 내 할 일 */
+  /** 내 업무 중 안 끝난 것 · 기한 지난 것 · 오늘 것 — 히어로 칩에 쓴다 */
+  const myStat = useMemo(() => {
+    const open = myOpen.filter((t) => t.state !== 'done');
+    return {
+      open: open.length,
+      late: open.filter((t) => t.due_date && t.due_date < todayStr).length,
+      today: open.filter((t) => t.due_date === todayStr).length,
+    };
+  }, [myOpen, todayStr]);
+
+  /** 홈에서 바로 완료 표시 — 가장 흔한 동작이라 업무 화면까지 안 가게 한다.
+      한 번 더 누르면 되돌아간다 (되돌리기 버튼을 따로 두지 않아도 되게) */
+  const toggleTask = async (id: string) => {
+    const cur = myOpen.find((t) => t.id === id);
+    if (!cur) return;
+    const next = cur.state === 'done' ? 'todo' : 'done';
+    const at = new Date().toISOString();
+    const before = myOpen;
+    setActionErr('');
+    setMyOpen((v) =>
+      v.map((t) => (t.id === id ? { ...t, state: next, done_at: next === 'done' ? at : null } : t)),
+    );
+    const { error: e } = await supabase
+      .from('tasks')
+      .update({ state: next, done_at: next === 'done' ? at : null, updated_at: at })
+      .eq('id', id);
+    if (e) {
+      setMyOpen(before);
+      setActionErr(friendlyError(e, '상태를 바꾸지 못했어요.'));
+    }
+  };
+
   const myTasks = useMemo(() => {
     /* href 를 줄마다 들고 다닌다 — 예전엔 카드가 `/apps/${id}` 로 하드코딩돼 있어서
        프로그램이 아닌 할 일(업무)을 여기 못 얹었다 */
@@ -253,6 +287,7 @@ export default function HomePage() {
       due: string | null;
       kind: 'review' | 'fix' | 'task';
       href: string;
+      done?: boolean;
     }[] = [];
 
     // 나눠받은 업무가 먼저다 — 누가 시킨 일이라 기한이 진짜다
@@ -260,10 +295,12 @@ export default function HomePage() {
       out.push({
         id: t.id,
         title: t.title,
-        sub: [t.state === 'doing' ? '하는 중' : '할 일', t.batch_title].filter(Boolean).join(' · '),
+        // '할 일' 은 모든 줄에 똑같이 붙어서 정보가 아니다. 다른 게 있을 때만 적는다
+        sub: [t.state === 'doing' ? '하는 중' : '', t.batch_title].filter(Boolean).join(' · '),
         due: t.due_date,
         kind: 'task',
         href: '/task',
+        done: t.state === 'done',
       });
     }
 
@@ -297,6 +334,9 @@ export default function HomePage() {
     }
     return out.sort((a, b) => (!a.due ? 1 : !b.due ? -1 : a.due < b.due ? -1 : 1));
   }, [items, meId, myOpen]);
+
+  /** 히어로 칩과 섹션 배지가 같은 걸 세게 한다 — 나란히 놓고 숫자가 다르면 버그로 보인다 */
+  const openTaskCount = myTasks.filter((t) => !t.done).length;
 
   const dueSoon = useMemo(
     () =>
@@ -334,10 +374,22 @@ export default function HomePage() {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-1.5 lg:mt-0 lg:flex-1 lg:flex-nowrap lg:justify-end">
-          <HeroChip label="내 할 일" value={`${myTasks.length}`} />
-          <HeroChip label="팀 미착수" value={`${untouched}`} tone={untouched > 0 ? 'warn' : 'ok'} />
-          <HeroChip label="7일 내 마감" value={`${dueSoon}`} tone={dueSoon > 0 ? 'warn' : 'ok'} />
-          <HeroChip label="검증 완료" value={`${overallPct}%`} />
+          {/* 칩은 역할에 따라 다르다. 강사에게 '팀 미착수' 를 보여주면 볼 이유도 없고
+              할 수 있는 것도 없다 — 서로 감시하는 느낌만 준다.
+              그리고 4개는 375px 에서 두 줄로 접히므로 셋씩만 둔다
+              (검증 완료 % 는 '전체 현황' 머리글 배지에 이미 있다) */}
+          <HeroChip label="내 할 일" value={`${openTaskCount}`} />
+          {isAdmin ? (
+            <>
+              <HeroChip label="팀 미착수" value={`${untouched}`} tone={untouched > 0 ? 'warn' : 'ok'} />
+              <HeroChip label="7일 내 마감" value={`${dueSoon}`} tone={dueSoon > 0 ? 'warn' : 'ok'} />
+            </>
+          ) : (
+            <>
+              <HeroChip label="기한 지남" value={`${myStat.late}`} tone={myStat.late > 0 ? 'warn' : 'ok'} />
+              <HeroChip label="오늘" value={`${myStat.today}`} tone={myStat.today > 0 ? 'warn' : 'ok'} />
+            </>
+          )}
         </div>
 
         <button
@@ -357,6 +409,12 @@ export default function HomePage() {
       {error && (
         <div className="mb-4">
           <ErrorBanner message={error} onRetry={() => void reload()} />
+        </div>
+      )}
+
+      {actionErr && (
+        <div className="mb-4">
+          <ErrorBanner message={actionErr} />
         </div>
       )}
 
@@ -560,8 +618,8 @@ export default function HomePage() {
             defaultOpen
             className={isAdmin ? 'order-5' : 'order-1'}
             badge={
-              myTasks.length > 0 ? (
-                <span className="chip bg-brand-50 text-brand-700">{myTasks.length}</span>
+              myStat.open > 0 || myTasks.length > 0 ? (
+                <span className="chip bg-brand-50 text-brand-700">{openTaskCount}</span>
               ) : undefined
             }
             right={
@@ -580,48 +638,80 @@ export default function HomePage() {
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {myTasks.slice(0, 6).map((t) => (
-                  <Link
+                  <div
                     key={`${t.kind}-${t.id}`}
-                    href={t.href}
-                    className="card flex items-center gap-2.5 p-3 transition hover:border-brand-300"
+                    className="card flex items-center gap-1 p-3 transition hover:border-brand-300"
                   >
-                    <Icon
-                      name={t.kind === 'fix' ? 'wrench' : t.kind === 'task' ? 'list' : 'search'}
-                      size={16}
-                      className={t.kind === 'fix' ? 'text-red-500' : 'text-neutral-400'}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-bold">{t.title}</span>
-                      <span className="text-[11.5px] text-neutral-400">{t.sub}</span>
-                    </span>
-                    {t.due && <span className={`chip shrink-0 ${ddayClass(t.due)}`}>{ddayLabel(t.due)}</span>}
-                  </Link>
+                    {/* 업무는 여기서 바로 끝낸다 — 홈에서 제일 흔한 동작인데
+                        예전엔 업무 화면까지 들어갔다 나와야 했다.
+                        한 번 더 누르면 되돌아가므로 잘못 눌러도 안전하다 */}
+                    {t.kind === 'task' ? (
+                      <button
+                        onClick={() => void toggleTask(t.id)}
+                        aria-pressed={t.done}
+                        aria-label={`${t.title} ${t.done ? '되돌리기' : '완료'}`}
+                        className="-my-2 -ml-1 flex h-11 w-9 shrink-0 items-center justify-center py-2"
+                      >
+                        <span
+                          className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 transition ${
+                            t.done ? 'border-green-600 bg-green-600 text-white' : 'border-neutral-300'
+                          }`}
+                        >
+                          {t.done && <Icon name="check" size={13} strokeWidth={3} />}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="flex w-9 shrink-0 justify-center">
+                        <Icon
+                          name={t.kind === 'fix' ? 'wrench' : 'search'}
+                          size={16}
+                          className={t.kind === 'fix' ? 'text-red-500' : 'text-neutral-400'}
+                        />
+                      </span>
+                    )}
+                    <Link href={t.href} className="-my-2 flex min-h-[44px] min-w-0 flex-1 flex-col justify-center py-2">
+                      <span
+                        className={`block truncate text-[14px] font-bold ${
+                          t.done ? 'text-neutral-400 line-through' : ''
+                        }`}
+                      >
+                        {t.title}
+                      </span>
+                      {t.sub && <span className="text-[11.5px] text-neutral-400">{t.sub}</span>}
+                    </Link>
+                    {t.due && !t.done && (
+                      <span className={`chip shrink-0 ${ddayClass(t.due)}`}>{ddayLabel(t.due)}</span>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
             {myTasks.length > 6 && (
               <Link
                 href="/task"
-                className="mt-2 block rounded-xl border border-dashed border-neutral-300 py-2.5 text-center text-[12.5px] font-bold text-neutral-500"
+                className="mt-2 flex min-h-[44px] items-center justify-center rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-bold text-neutral-500"
               >
                 {myTasks.length - 6}건 더 보기 ›
               </Link>
             )}
           </Collapsible>
 
-          {/* 팀 현황 — 둘 다 맨 아래. 사람 수만큼 길어져서 자르는 코드가 없었다 */}
-          <Collapsible
-            id="home-team"
-            title="팀 현황 — 누가 뭘 하고 있나"
-            className="order-6"
-            badge={
-              untouched > 0 ? (
-                <span className="chip bg-amber-100 text-amber-800">미착수 {untouched}</span>
-              ) : undefined
-            }
-          >
-            {loading ? <CardSkeleton rows={3} /> : <TeamBoard work={teamWork} meId={meId} />}
-          </Collapsible>
+          {/* 팀 현황 — **원장만.** 강사가 남의 미착수를 봐도 할 수 있는 게 없고,
+              자기 홈에서 남을 들여다보는 화면은 감시처럼 느껴진다 */}
+          {isAdmin && (
+            <Collapsible
+              id="home-team"
+              title="팀 현황 — 누가 뭘 하고 있나"
+              className="order-6"
+              badge={
+                untouched > 0 ? (
+                  <span className="chip bg-amber-100 text-amber-800">미착수 {untouched}</span>
+                ) : undefined
+              }
+            >
+              {loading ? <CardSkeleton rows={3} /> : <TeamBoard work={teamWork} meId={meId} />}
+            </Collapsible>
+          )}
         </div>
 
         {/* ======================================================= 오른쪽 */}

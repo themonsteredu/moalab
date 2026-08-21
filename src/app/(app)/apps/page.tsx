@@ -61,6 +61,9 @@ export default function AppsPage() {
   const [moveOpen, setMoveOpen] = useState(false);
   /** 목록 전체 인쇄 — 강의계획서 전부 / 검증 현황 표 */
   const [printOpen, setPrintOpen] = useState(false);
+  /** '빠진 것' 칩 줄 — 접어두고 필요할 때만 편다.
+      이미 그 필터가 걸려 있으면 접힌 채로 두면 안 된다 (왜 걸렸는지 안 보인다) */
+  const [piecesOpen, setPiecesOpen] = useState(false);
 
   // 보기 방식은 기억해둔다 (원장은 보드, 강사는 리스트를 주로 쓴다)
   useEffect(() => {
@@ -70,6 +73,11 @@ export default function AppsPage() {
   useEffect(() => {
     window.localStorage.setItem(VIEW_KEY, view);
   }, [view]);
+
+  // '빠진 것' 으로 거르고 있으면 그 줄을 펴둔다
+  useEffect(() => {
+    if (filter.startsWith('missing:')) setPiecesOpen(true);
+  }, [filter]);
 
   // 어떤 주제를 펼쳐뒀는지도 기억한다
   useEffect(() => {
@@ -177,6 +185,8 @@ export default function AppsPage() {
   }, [items, q]);
   /** 6개 항목 중 안 채워진 게 있는 프로그램 수 */
   const missingCount = (k: keyof Completeness) => items.filter((i) => !i.done[k]).length;
+  /** 뭐라도 빠진 프로그램 수 — 접힌 머리글에 이것만 보여준다 */
+  const missingTotal = items.filter((i) => PIECES.some((p) => !i.done[p.key])).length;
 
   return (
     <>
@@ -244,28 +254,30 @@ export default function AppsPage() {
           ))}
         </div>
 
-        <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
-          <span className="flex shrink-0 items-center text-[11.5px] font-bold text-neutral-400">빠진 것</span>
-          {PIECES.map((p) => {
-            const n = missingCount(p.key);
-            const key: Filter = `missing:${p.key}`;
-            return (
-              <Chip key={p.key} on={filter === key} onClick={() => setFilter(filter === key ? 'todo' : key)} dim={n === 0}>
-                <Icon name={p.icon} size={12} className="mr-1" />
-                {p.label} {n > 0 && <span className="ml-0.5 text-brand">{n}</span>}
-              </Chip>
-            );
-          })}
-        </div>
-
-        {/* 정렬 */}
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-[12.5px] text-neutral-400">{filtered.length}개</p>
+        {/* '빠진 것' 과 정렬을 한 줄로 합치고 칩은 접어둔다.
+            예전엔 컨트롤이 여섯 줄이라 첫 카드가 359px 아래에 있었다 —
+            프로그램이 5개든 21개든 매번 그만큼 지나야 했다.
+            (개수는 헤더 부제에 이미 있어서 여기서 뺐다) */}
+        <div className="mb-2 flex items-center gap-2">
+          <button
+            onClick={() => setPiecesOpen((v) => !v)}
+            aria-expanded={piecesOpen}
+            className="tap shrink-0 gap-1 rounded-full border border-neutral-300 bg-surface px-3 text-[12.5px] font-bold text-neutral-500"
+          >
+            <Icon
+              name="chevronDown"
+              size={12}
+              className={`transition-transform ${piecesOpen ? '' : '-rotate-90'}`}
+            />
+            빠진 것
+            {missingTotal > 0 && <span className="ml-0.5 text-brand">{missingTotal}</span>}
+          </button>
+          <span className="flex-1" />
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
             aria-label="정렬"
-            className="h-11 rounded-lg border border-neutral-300 bg-surface px-2 text-[12.5px] font-semibold text-neutral-600"
+            className="h-11 shrink-0 rounded-lg border border-neutral-300 bg-surface px-2 text-[12.5px] font-semibold text-neutral-600"
           >
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>
@@ -274,6 +286,21 @@ export default function AppsPage() {
             ))}
           </select>
         </div>
+
+        {piecesOpen && (
+          <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
+            {PIECES.map((p) => {
+              const n = missingCount(p.key);
+              const key: Filter = `missing:${p.key}`;
+              return (
+                <Chip key={p.key} on={filter === key} onClick={() => setFilter(filter === key ? 'todo' : key)} dim={n === 0}>
+                  <Icon name={p.icon} size={12} className="mr-1" />
+                  {p.label} {n > 0 && <span className="ml-0.5 text-brand">{n}</span>}
+                </Chip>
+              );
+            })}
+          </div>
+        )}
 
         {error && (
           <div className="mb-3">
@@ -311,7 +338,7 @@ export default function AppsPage() {
                   onClick={() => setOpenTopics(allOpen ? [] : groups.map((g) => g.topic))}
                   /* py 로 손가락이 닿는 면을 넓히고 -my 로 되돌린다 —
                      글씨 줄은 그대로인데 탭 영역만 44px 이 된다 */
-                  className="-my-3 py-3 text-[12px] font-bold text-neutral-400"
+                  className="-my-3 flex min-h-[44px] items-center text-[12px] font-bold text-neutral-400"
                 >
                   {allOpen ? '전부 접기' : '전부 펼치기'}
                 </button>
@@ -322,14 +349,14 @@ export default function AppsPage() {
                 <span className="flex items-center gap-3">
                   <button
                     onClick={() => setMoveOpen(true)}
-                    className="-my-3 flex items-center gap-1 py-3 text-[12px] font-bold text-brand"
+                    className="-my-3 flex min-h-[44px] items-center gap-1 text-[12px] font-bold text-brand"
                   >
                     <Icon name="check" size={13} />
                     주제로 옮기기
                   </button>
                   <button
                     onClick={() => setTopicsOpen(true)}
-                    className="-my-3 flex items-center gap-1 py-3 text-[12px] font-bold text-neutral-400"
+                    className="-my-3 flex min-h-[44px] items-center gap-1 text-[12px] font-bold text-neutral-400"
                   >
                     <Icon name="tree" size={13} />
                     주제 관리

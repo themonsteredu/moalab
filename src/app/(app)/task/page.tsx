@@ -306,32 +306,13 @@ export default function TaskPage() {
               ? `내 업무 ${myOpen}건${myLate > 0 ? ` · 기한 지남 ${myLate}` : ''}`
               : `전체 ${all.filter((t) => t.state !== 'done').length}건${noOwner.length > 0 ? ` · 담당자 미정 ${noOwner.length}` : ''}`
         }
+        /* 아이콘만 있는 버튼을 헤더에 늘어놓으면 뭔지 알 수 없고, 부제까지 잘린다.
+           나머지는 아래 '만들기' 줄로 내려 라벨을 붙였다 */
         right={
-          <span className="flex items-center gap-2">
-            {isAdmin && (
-              <>
-                {/* 말로 넣기 — 원장만 쓴다 */}
-                <button
-                  onClick={() => setDictateOpen(true)}
-                  aria-label="말로 업무 넣기"
-                  className="btn-ghost h-10 w-10 px-0"
-                >
-                  <Icon name="megaphone" size={16} />
-                </button>
-                <button
-                  onClick={() => setSpreadOpen(true)}
-                  aria-label="체크리스트로 뿌리기"
-                  className="btn-ghost h-10 w-10 px-0"
-                >
-                  <Icon name="list" size={16} />
-                </button>
-              </>
-            )}
-            <button onClick={startNew} className="btn-primary px-3 text-[13.5px]">
-              <Icon name="plus" size={15} />
-              업무 추가
-            </button>
-          </span>
+          <button onClick={startNew} className="btn-primary px-3 text-[13.5px]">
+            <Icon name="plus" size={15} />
+            업무 추가
+          </button>
         }
       />
 
@@ -356,6 +337,33 @@ export default function TaskPage() {
                 {v === 'me' ? '내 업무' : '전체'}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* 원장이 나눠주는 세 가지 길. 아이콘만 두면 뭔지 몰라서 라벨을 붙였다 */}
+        {isAdmin && (
+          <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
+            <button
+              onClick={() => setDictateOpen(true)}
+              className="tap shrink-0 gap-1.5 rounded-full border border-neutral-300 bg-surface px-3.5 text-[13px] font-bold text-neutral-600"
+            >
+              <Icon name="megaphone" size={13} />
+              말로 넣기
+            </button>
+            <button
+              onClick={() => setSpreadOpen(true)}
+              className="tap shrink-0 gap-1.5 rounded-full border border-neutral-300 bg-surface px-3.5 text-[13px] font-bold text-neutral-600"
+            >
+              <Icon name="list" size={13} />
+              체크리스트로 뿌리기
+            </button>
+            <button
+              onClick={() => setTplOpen(true)}
+              className="tap shrink-0 gap-1.5 rounded-full border border-neutral-300 bg-surface px-3.5 text-[13px] font-bold text-neutral-400"
+            >
+              <Icon name="wrench" size={13} />
+              체크리스트 관리
+            </button>
           </div>
         )}
 
@@ -418,19 +426,6 @@ export default function TaskPage() {
           </section>
         )}
 
-        {/* 체크리스트 관리 — 원장만. 목록 아래에 조용히 둔다 */}
-        {isAdmin && view === 'team' && tasks !== null && (
-          <div className="mb-3 flex justify-end">
-            <button
-              onClick={() => setTplOpen(true)}
-              className="-my-2 flex items-center gap-1 py-2 text-[12px] font-bold text-neutral-400"
-            >
-              <Icon name="wrench" size={13} />
-              체크리스트 관리
-            </button>
-          </div>
-        )}
-
         {tasks === null ? (
           <CardSkeleton rows={4} />
         ) : !hasAny ? (
@@ -461,7 +456,6 @@ export default function TaskPage() {
                         canEdit={canEdit(t)}
                         onState={(s) => void setState(t, s)}
                         onEdit={() => startEdit(t)}
-                        onDelete={() => setDeleting(t)}
                       />
                     ))}
                   </ul>
@@ -486,7 +480,6 @@ export default function TaskPage() {
                       canEdit={canEdit(t)}
                       onState={(s) => void setState(t, s)}
                       onEdit={() => startEdit(t)}
-                      onDelete={() => setDeleting(t)}
                     />
                   ))}
                 </ul>
@@ -591,6 +584,20 @@ export default function TaskPage() {
               className="field resize-none"
             />
           </div>
+
+          {/* 삭제는 여기 있다 — 카드마다 버튼을 깔 만큼 자주 쓰는 게 아니다 */}
+          {editing && (
+            <button
+              onClick={() => {
+                const t = editing;
+                setFormOpen(false);
+                setDeleting(t);
+              }}
+              className="btn-ghost w-full text-red-700"
+            >
+              이 업무 지우기
+            </button>
+          )}
         </div>
       </Sheet>
 
@@ -706,7 +713,6 @@ function TaskCard({
   canEdit,
   onState,
   onEdit,
-  onDelete,
 }: {
   task: Task;
   who: string;
@@ -715,7 +721,6 @@ function TaskCard({
   canEdit: boolean;
   onState: (s: TaskState) => void;
   onEdit: () => void;
-  onDelete: () => void;
 }) {
   const dday = ddayLabel(task.due_date);
   const done = task.state === 'done';
@@ -727,6 +732,16 @@ function TaskCard({
           {task.title}
         </p>
         {dday && !done && <span className={`chip shrink-0 ${ddayClass(task.due_date)}`}>{dday}</span>}
+        {/* 고치기·삭제를 카드마다 한 줄씩 깔면 자리만 먹는다. 자주 쓰는 것도 아니다 */}
+        {canEdit && (
+          <button
+            onClick={onEdit}
+            aria-label={`${task.title} 고치기`}
+            className="-my-2 -mr-1 flex h-11 w-8 shrink-0 items-center justify-center text-neutral-300"
+          >
+            <Icon name="dots" size={16} />
+          </button>
+        )}
       </div>
 
       {task.detail && <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-500">{task.detail}</p>}
@@ -747,34 +762,36 @@ function TaskCard({
         {task.batch_title && <span>{task.batch_title}</span>}
       </div>
 
-      <div className="mt-2 flex gap-1.5" role="group" aria-label={`${task.title} 상태`}>
-        {TASK_STATES.map((s) => {
-          const on = task.state === s.value;
-          return (
-            <button
-              key={s.value}
-              onClick={() => onState(s.value)}
-              disabled={!canEdit}
-              aria-pressed={on}
-              aria-label={`${task.title} ${s.label}`}
-              className={`h-9 flex-1 rounded-lg border text-[12.5px] font-bold transition disabled:opacity-40 ${
-                on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-400'
-              }`}
-            >
-              {s.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {canEdit && (
-        <div className="mt-1.5 flex justify-end gap-3">
-          <button onClick={onEdit} className="-my-2 py-2 text-[12px] font-bold text-neutral-400">
-            고치기
+      {/* 끝난 업무에 3버튼을 그대로 두면 두 칸이 아무 의미가 없다 — 되돌리기 하나면 된다 */}
+      {done ? (
+        canEdit && (
+          <button
+            onClick={() => onState('todo')}
+            className="tap mt-2 w-full rounded-lg border border-neutral-200 bg-surface text-[12.5px] font-bold text-neutral-400"
+          >
+            되돌리기
           </button>
-          <button onClick={onDelete} className="-my-2 py-2 text-[12px] font-bold text-neutral-400">
-            삭제
-          </button>
+        )
+      ) : (
+        <div className="mt-2 flex gap-1.5" role="group" aria-label={`${task.title} 상태`}>
+          {TASK_STATES.map((s) => {
+            const on = task.state === s.value;
+            return (
+              <button
+                key={s.value}
+                onClick={() => onState(s.value)}
+                disabled={!canEdit}
+                aria-pressed={on}
+                aria-label={`${task.title} ${s.label}`}
+                /* 44px — 세 개가 나란히 있어서 잘못 누르기 쉽고, 잘못 누르면 바로 저장된다 */
+                className={`h-11 flex-1 rounded-lg border text-[12.5px] font-bold transition disabled:opacity-40 ${
+                  on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-400'
+                }`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
         </div>
       )}
     </li>

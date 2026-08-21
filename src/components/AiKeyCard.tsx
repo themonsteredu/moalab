@@ -2,32 +2,34 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '@/lib/session';
+import { AI_MODELS, AI_MODEL_DEFAULT, resolveModel } from '@/lib/ai';
 import { Icon } from '@/components/Icon';
 import { ConfirmDialog, ErrorBanner } from '@/components/ui';
 
 interface Status {
   configured: boolean;
   hint?: string | null;
+  model?: string | null;
   updated_at?: string | null;
   missing?: boolean;
   detail?: string;
 }
 
 /**
- * AI 키 등록·삭제 — 원장 전용, `말로 업무 넣기` 에만 쓰인다.
+ * AI 키 등록·삭제 + 쓸 모델 고르기 — 원장 전용, `말로 업무 넣기` 에만 쓰인다.
  *
  * **키는 화면으로 절대 안 내려온다.** 저장되는 표(`app_secrets`)는 PIN 과 똑같이
  * 브라우저에서 아예 못 붙게 잠가뒀고, 서버도 끝 4자리(hint)만 돌려준다.
- * 그래서 한 번 넣으면 다시 확인할 수 없고, 바꾸려면 새로 붙여넣는다.
  *
- * 이미 등록돼 있으면 한 줄로 접는다 — 다 끝난 설정이 관리 화면에서
- * 계속 자리를 먹으면 안 된다 (PushToggle 과 같은 판단).
+ * 모델은 **키를 다시 넣지 않고** 바꿀 수 있다 — 화면에 안 보이는 값을
+ * 다시 찾아오게 하면 안 된다.
  */
 export function AiKeyCard() {
   const { session } = useSession();
   const [status, setStatus] = useState<Status | null>(null);
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
+  const [model, setModel] = useState(AI_MODEL_DEFAULT);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [killing, setKilling] = useState(false);
@@ -40,7 +42,9 @@ export function AiKeyCard() {
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/settings/ai', { headers: headers() });
-      setStatus((await res.json()) as Status);
+      const s = (await res.json()) as Status;
+      setStatus(s);
+      setModel(resolveModel(s.model));
     } catch {
       setStatus({ configured: false });
     }
@@ -57,7 +61,7 @@ export function AiKeyCard() {
       const res = await fetch('/api/settings/ai', {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({ key: value.trim() }),
+        body: JSON.stringify({ key: value.trim(), model }),
       });
       const data = (await res.json()) as Status & { error?: string };
       if (!res.ok) throw new Error(data.error ?? '저장하지 못했어요.');
@@ -68,6 +72,27 @@ export function AiKeyCard() {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** 모델만 바꾸기 — 키는 건드리지 않는다 */
+  const changeModel = async (next: string) => {
+    const before = model;
+    setModel(next);
+    setError('');
+    try {
+      const res = await fetch('/api/settings/ai', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ model: next }),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { error?: string };
+        throw new Error(d.error ?? '모델을 바꾸지 못했어요.');
+      }
+    } catch (e) {
+      setModel(before);
+      setError(e instanceof Error ? e.message : '모델을 바꾸지 못했어요.');
     }
   };
 
@@ -88,31 +113,65 @@ export function AiKeyCard() {
 
   if (!status) return null;
 
-  // 등록돼 있고 고치는 중이 아니면 한 줄로
+  const picked = AI_MODELS.find((m) => m.value === model) ?? AI_MODELS[AI_MODELS.length - 1];
+
+  const modelPicker = (
+    <div>
+      <label className="label" htmlFor="ai-model">
+        어떤 모델을 쓸까요
+      </label>
+      <select
+        id="ai-model"
+        value={model}
+        onChange={(e) => (status.configured && !editing ? void changeModel(e.target.value) : setModel(e.target.value))}
+        className="field"
+      >
+        {AI_MODELS.map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.label} — {m.cost}
+          </option>
+        ))}
+      </select>
+      <p className="mt-1.5 text-[11.5px] leading-relaxed text-neutral-400">{picked.hint}</p>
+    </div>
+  );
+
+  // 등록돼 있고 고치는 중이 아니면 한 줄 + 모델 고르기
   if (status.configured && !editing) {
     return (
       <>
-        <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-surface px-3.5 py-2">
-          <Icon name="checkCircle" size={15} className="shrink-0 text-green-700" />
-          <span className="min-w-0 flex-1 truncate text-[12.5px] text-neutral-600">
-            AI 키 등록됨 · <span className="text-neutral-400">····{status.hint}</span>
-          </span>
-          <button
-            onClick={() => {
-              setEditing(true);
-              setValue('');
-            }}
-            className="-my-2 shrink-0 py-2 text-[12px] font-bold text-neutral-400"
-          >
-            바꾸기
-          </button>
-          <button
-            onClick={() => setKilling(true)}
-            className="-my-2 shrink-0 py-2 text-[12px] font-bold text-neutral-400"
-          >
-            삭제
-          </button>
-        </div>
+        <section className="card p-3.5">
+          <div className="flex items-center gap-2">
+            <Icon name="checkCircle" size={15} className="shrink-0 text-green-700" />
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-neutral-600">
+              AI 키 등록됨 · <span className="text-neutral-400">····{status.hint}</span>
+            </span>
+            <button
+              onClick={() => {
+                setEditing(true);
+                setValue('');
+              }}
+              className="-my-3 flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-neutral-400"
+            >
+              바꾸기
+            </button>
+            <button
+              onClick={() => setKilling(true)}
+              className="-my-3 flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-neutral-400"
+            >
+              삭제
+            </button>
+          </div>
+
+          {error && (
+            <div className="mt-2.5">
+              <ErrorBanner message={error} />
+            </div>
+          )}
+
+          <div className="mt-3 border-t border-neutral-200 pt-3">{modelPicker}</div>
+        </section>
+
         <ConfirmDialog
           open={killing}
           title="AI 키를 지울까요?"
@@ -163,7 +222,9 @@ export function AiKeyCard() {
         키는 <b>서버에만 저장되고 화면으로 다시 내려오지 않습니다.</b> 넣은 뒤에는 끝 4자리만 보여요.
       </p>
 
-      <div className="mt-2.5 flex gap-2">
+      <div className="mt-3">{modelPicker}</div>
+
+      <div className="mt-3 flex gap-2">
         <button
           onClick={() => void save()}
           disabled={busy || !value.trim()}
