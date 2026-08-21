@@ -242,3 +242,83 @@ export function MultiPicker<T extends { id: string; name: string }>({
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ 접이식
+   같은 '접기' 가 지금 세 군데에서 서로 다른 방식으로 구현돼 있었다 —
+   프로그램 페이지의 로컬 Section(상태를 안 기억한다),
+   프로그램 목록의 <details>, 주제 트리의 머리글(localStorage 기억).
+   새로 만드는 곳은 이걸 쓴다.
+
+   · 접힌 채로도 급한지 보이게 badge 를 머리글에 남긴다
+   · 펼침 상태는 기기에 기억한다 (매번 다시 펴게 하면 접은 의미가 없다)
+   · 닫히면 자식을 아예 안 그린다 — 무거운 컴포넌트가 뒤에서 도는 걸 막는다 */
+
+export function Collapsible({
+  id,
+  title,
+  badge,
+  right,
+  defaultOpen = false,
+  className = '',
+  children,
+}: {
+  /** localStorage 키. 화면마다 고유해야 한다 */
+  id: string;
+  title: string;
+  /** 접힌 채로 보여줄 요약 (개수·미착수 같은 것) */
+  badge?: React.ReactNode;
+  /** 머리글 오른쪽 — 링크 등. 펼침 버튼 안에 넣지 않는다 (버튼 중첩 금지) */
+  right?: React.ReactNode;
+  defaultOpen?: boolean;
+  /** 바깥 배치용 (홈의 order-* 처럼) */
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  // 기억해둔 상태로 되돌린다 (없으면 defaultOpen 그대로)
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(`moalab.open.${id}`);
+      if (v !== null) setOpen(v === '1');
+    } catch {
+      /* 무시 */
+    }
+  }, [id]);
+
+  const toggle = () => {
+    setOpen((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem(`moalab.open.${id}`, next ? '1' : '0');
+      } catch {
+        /* 무시 */
+      }
+      return next;
+    });
+  };
+
+  return (
+    <section className={className}>
+      <div className="mb-2.5 flex items-center gap-2">
+        <button
+          onClick={toggle}
+          aria-expanded={open}
+          /* 패딩으로 탭 면을 44px 로 키우고 마진으로 되돌린다 —
+             줄 높이는 그대로라 화면이 길어지지 않는다 (CLAUDE.md 의 방식) */
+          className="-my-3 flex min-w-0 flex-1 items-center gap-1.5 py-3 text-left"
+        >
+          <Icon
+            name="chevronDown"
+            size={14}
+            className={`shrink-0 text-neutral-400 transition-transform ${open ? '' : '-rotate-90'}`}
+          />
+          <span className="truncate text-[15px] font-bold text-neutral-800">{title}</span>
+          {badge}
+        </button>
+        {right}
+      </div>
+      {open && children}
+    </section>
+  );
+}

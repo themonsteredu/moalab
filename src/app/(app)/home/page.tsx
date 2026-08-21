@@ -7,8 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { PIECES, useAppsOverview } from '@/lib/useAppsOverview';
-import type { ActivityLog, CommentRow, Notice, NoticeRead, Schedule } from '@/lib/types';
-import { CardSkeleton, ErrorBanner, ProgressBar, Skeleton } from '@/components/ui';
+import type { ActivityLog, CommentRow, Notice, NoticeRead, Schedule, Task } from '@/lib/types';
+import { CardSkeleton, Collapsible, ErrorBanner, ProgressBar, Skeleton } from '@/components/ui';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { CalendarLegend, KIND_META, MonthCalendar, type CalEntry } from '@/components/MonthCalendar';
@@ -40,6 +40,8 @@ export default function HomePage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [noticeReads, setNoticeReads] = useState<NoticeRead[]>([]);
+  /** 내가 맡은 안 끝난 업무 — '내 할 일' 에 합류한다 */
+  const [myOpen, setMyOpen] = useState<Task[]>([]);
 
   const meId = session?.id ?? '';
 
@@ -52,7 +54,7 @@ export default function HomePage() {
   }, [cursor]);
 
   const loadExtras = useCallback(async () => {
-    const [schedRes, smRes, logRes, noticeRes, readRes] = await Promise.all([
+    const [schedRes, smRes, logRes, noticeRes, readRes, taskRes] = await Promise.all([
       supabase.from('schedules').select('*').gte('date', range.from).lte('date', range.to).order('date').order('start_time'),
       supabase.from('schedule_members').select('*'),
       supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(200),
@@ -63,6 +65,10 @@ export default function HomePage() {
         .order('created_at', { ascending: false })
         .limit(20),
       supabase.from('notice_reads').select('*'),
+      // 내 업무만. 홈에서는 남의 업무를 볼 일이 없다
+      meId
+        ? supabase.from('tasks').select('*').eq('assignee_id', meId).neq('state', 'done')
+        : Promise.resolve({ data: [] }),
     ]);
     setSchedules((schedRes.data ?? []) as Schedule[]);
     const map: Record<string, string[]> = {};
@@ -71,7 +77,8 @@ export default function HomePage() {
     setLogs((logRes.data ?? []) as ActivityLog[]);
     setNotices((noticeRes.data ?? []) as Notice[]);
     setNoticeReads((readRes.data ?? []) as NoticeRead[]);
-  }, [range.from, range.to]);
+    setMyOpen((taskRes.data ?? []) as Task[]);
+  }, [range.from, range.to, meId]);
 
   useEffect(() => {
     void loadExtras();
@@ -237,7 +244,29 @@ export default function HomePage() {
 
   /* ------------------------------------------------------- 내 할 일 */
   const myTasks = useMemo(() => {
-    const out: { id: string; title: string; sub: string; due: string | null; kind: 'review' | 'fix' }[] = [];
+    /* href 를 줄마다 들고 다닌다 — 예전엔 카드가 `/apps/${id}` 로 하드코딩돼 있어서
+       프로그램이 아닌 할 일(업무)을 여기 못 얹었다 */
+    const out: {
+      id: string;
+      title: string;
+      sub: string;
+      due: string | null;
+      kind: 'review' | 'fix' | 'task';
+      href: string;
+    }[] = [];
+
+    // 나눠받은 업무가 먼저다 — 누가 시킨 일이라 기한이 진짜다
+    for (const t of myOpen) {
+      out.push({
+        id: t.id,
+        title: t.title,
+        sub: [t.state === 'doing' ? '하는 중' : '할 일', t.batch_title].filter(Boolean).join(' · '),
+        due: t.due_date,
+        kind: 'task',
+        href: '/task',
+      });
+    }
+
     for (const it of items) {
       // 검증자인데 아직 '검증 완료' 를 안 누른 것
       if (it.reviewerIds.includes(meId) && !it.signedIds.includes(meId)) {
@@ -248,6 +277,7 @@ export default function HomePage() {
           sub: `${it.currentRound?.round_no ?? 1}차 검증${found > 0 ? ` · 내 지적 ${found}` : ''}`,
           due: it.app.due_date,
           kind: 'review',
+          href: `/apps/${it.app.id}`,
         });
       }
       // 내가 만든 프로그램에 답 안 한 지적이 있는 것
@@ -260,12 +290,13 @@ export default function HomePage() {
             sub: `답변 대기 ${need}건`,
             due: it.app.due_date,
             kind: 'fix',
+            href: `/apps/${it.app.id}`,
           });
         }
       }
     }
     return out.sort((a, b) => (!a.due ? 1 : !b.due ? -1 : a.due < b.due ? -1 : 1));
-  }, [items, meId]);
+  }, [items, meId, myOpen]);
 
   const dueSoon = useMemo(
     () =>
@@ -335,8 +366,23 @@ export default function HomePage() {
             강사는 '내 할 일' 부터, 원장은 '전체 현황·일정' 부터.
             내용은 그대로 두고 order-* 만 다르게 주므로 분기는 이 숫자들뿐이다. */}
         <div className="flex flex-col gap-4 lg:col-span-2">
-          {/* 달력 */}
-          <section className={`card p-3.5 ${isAdmin ? 'order-1' : 'order-4'}`}>
+          {/* 달력 — 폰에서 600px 짜리 가장 큰 덩어리라 접어둔다 */}
+          <Collapsible
+            id="home-cal"
+            title="달력"
+            className={isAdmin ? 'order-1' : 'order-3'}
+            badge={
+              upcoming.length > 0 ? (
+                <span className="chip bg-neutral-100 text-neutral-500">다가오는 일정 {upcoming.length}</span>
+              ) : undefined
+            }
+            right={
+              <Link href="/schedule" className="-my-3 flex min-h-[44px] items-center text-[12.5px] font-bold text-neutral-400">
+                전체 ›
+              </Link>
+            }
+          >
+          <div className="card p-3.5">
             <div className="mb-2.5 flex items-center gap-2">
               <button onClick={() => moveMonth(-1)} aria-label="이전 달" className="tap w-9 rounded-lg bg-neutral-100 text-neutral-400">
                 ‹
@@ -347,9 +393,6 @@ export default function HomePage() {
               <button onClick={() => moveMonth(1)} aria-label="다음 달" className="tap w-9 rounded-lg bg-neutral-100 text-neutral-400">
                 ›
               </button>
-              <Link href="/schedule" className="tap px-2 text-[12.5px] font-bold text-neutral-400">
-                전체
-              </Link>
             </div>
 
             {schedules === null ? (
@@ -389,10 +432,17 @@ export default function HomePage() {
                 </ul>
               )}
             </div>
-          </section>
+          </div>
+          </Collapsible>
 
           {/* 통계 3장 */}
-          <div className={`grid grid-cols-2 gap-3 lg:grid-cols-3 ${isAdmin ? 'order-2' : 'order-5'}`}>
+          <Collapsible
+            id="home-stats"
+            title="전체 현황"
+            className={isAdmin ? 'order-2' : 'order-4'}
+            badge={<span className="chip bg-neutral-100 text-neutral-500">검증 완료 {overallPct}%</span>}
+          >
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <StatCard
               icon={<Icon name="checkCircle" size={15} />}
               label="검증 완료"
@@ -433,32 +483,47 @@ export default function HomePage() {
               <Sparkline data={activityTrend} height={34} />
             </StatCard>
           </div>
+          </Collapsible>
 
-          {/* 마감 타임라인 */}
-          <section className="card p-4 order-3">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-bold">마감 타임라인</h2>
-              <span className="text-[11.5px] text-neutral-400">앞으로 4주</span>
+          {/* 마감 타임라인 — 예전엔 order-3 하드코딩이라 강사 화면에서
+              '내 할 일 → 공지' 다음에 원장용 정보가 끼어들었다 */}
+          <Collapsible
+            id="home-timeline"
+            title="마감 타임라인"
+            className={isAdmin ? 'order-3' : 'order-5'}
+            badge={
+              timeline.rows.length > 0 ? (
+                <span className="chip bg-neutral-100 text-neutral-500">{timeline.rows.length}건</span>
+              ) : undefined
+            }
+            right={<span className="text-[11.5px] text-neutral-400">앞으로 4주</span>}
+          >
+            <div className="card p-4">
+              {loading ? (
+                <Skeleton className="h-32 w-full rounded-xl" />
+              ) : (
+                <Timeline rows={timeline.rows} ticks={timeline.ticks} onPick={(id) => router.push(`/apps/${id}`)} />
+              )}
             </div>
-            {loading ? (
-              <Skeleton className="h-32 w-full rounded-xl" />
-            ) : (
-              <Timeline rows={timeline.rows} ticks={timeline.ticks} onPick={(id) => router.push(`/apps/${id}`)} />
-            )}
-          </section>
+          </Collapsible>
 
           {/* 공지 — 전체 공지를 홈에서도 훑을 수 있게 */}
           {noticeCards.total > 0 && (
-            <section className={isAdmin ? 'order-4' : 'order-2'}>
-              <div className="mb-2.5 flex items-center justify-between">
-                <h2 className="text-[15px] font-bold">
-                  공지사항{' '}
-                  {noticeCards.unread > 0 && <span className="text-brand">{noticeCards.unread}</span>}
-                </h2>
-                <Link href="/notice" className="text-[12.5px] font-bold text-neutral-400">
+            <Collapsible
+              id="home-notice"
+              title="공지사항"
+              className={isAdmin ? 'order-4' : 'order-2'}
+              badge={
+                noticeCards.unread > 0 ? (
+                  <span className="chip bg-brand-50 text-brand-700">안 읽음 {noticeCards.unread}</span>
+                ) : undefined
+              }
+              right={
+                <Link href="/notice" className="-my-3 flex min-h-[44px] items-center text-[12.5px] font-bold text-neutral-400">
                   전체 {noticeCards.total}건 ›
                 </Link>
-              </div>
+              }
+            >
               <ul className="space-y-2">
                 {noticeCards.list.map((n) => (
                   <li key={n.id}>
@@ -484,19 +549,27 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-            </section>
+            </Collapsible>
           )}
 
-          {/* 내 할 일 */}
-          <section className={isAdmin ? 'order-5' : 'order-1'}>
-            <div className="mb-2.5 flex items-center justify-between">
-              <h2 className="text-[15px] font-bold">
-                내 할 일 {myTasks.length > 0 && <span className="text-brand">{myTasks.length}</span>}
-              </h2>
-              <Link href="/apps" className="text-[12.5px] font-bold text-neutral-400">
-                프로그램 ›
+          {/* 내 할 일 — 홈에서 유일하게 기본으로 펼쳐두는 것.
+              폰 첫 화면에서 "오늘 뭘 해야 하나" 가 끝나야 한다 */}
+          <Collapsible
+            id="home-mytasks"
+            title="내 할 일"
+            defaultOpen
+            className={isAdmin ? 'order-5' : 'order-1'}
+            badge={
+              myTasks.length > 0 ? (
+                <span className="chip bg-brand-50 text-brand-700">{myTasks.length}</span>
+              ) : undefined
+            }
+            right={
+              <Link href="/task" className="-my-3 flex min-h-[44px] items-center text-[12.5px] font-bold text-neutral-400">
+                업무 ›
               </Link>
-            </div>
+            }
+          >
             {loading ? (
               <CardSkeleton rows={2} />
             ) : myTasks.length === 0 ? (
@@ -509,11 +582,11 @@ export default function HomePage() {
                 {myTasks.slice(0, 6).map((t) => (
                   <Link
                     key={`${t.kind}-${t.id}`}
-                    href={`/apps/${t.id}`}
+                    href={t.href}
                     className="card flex items-center gap-2.5 p-3 transition hover:border-brand-300"
                   >
                     <Icon
-                      name={t.kind === 'fix' ? 'wrench' : 'search'}
+                      name={t.kind === 'fix' ? 'wrench' : t.kind === 'task' ? 'list' : 'search'}
                       size={16}
                       className={t.kind === 'fix' ? 'text-red-500' : 'text-neutral-400'}
                     />
@@ -526,16 +599,29 @@ export default function HomePage() {
                 ))}
               </div>
             )}
-          </section>
+            {myTasks.length > 6 && (
+              <Link
+                href="/task"
+                className="mt-2 block rounded-xl border border-dashed border-neutral-300 py-2.5 text-center text-[12.5px] font-bold text-neutral-500"
+              >
+                {myTasks.length - 6}건 더 보기 ›
+              </Link>
+            )}
+          </Collapsible>
 
-          {/* 팀 현황 — 둘 다 맨 아래 */}
-          <section className="order-6">
-            <div className="mb-2.5 flex items-center justify-between">
-              <h2 className="text-[15px] font-bold">팀 현황 — 누가 뭘 하고 있나</h2>
-              <span className="text-[11.5px] text-neutral-400">미착수 {untouched}건</span>
-            </div>
+          {/* 팀 현황 — 둘 다 맨 아래. 사람 수만큼 길어져서 자르는 코드가 없었다 */}
+          <Collapsible
+            id="home-team"
+            title="팀 현황 — 누가 뭘 하고 있나"
+            className="order-6"
+            badge={
+              untouched > 0 ? (
+                <span className="chip bg-amber-100 text-amber-800">미착수 {untouched}</span>
+              ) : undefined
+            }
+          >
             {loading ? <CardSkeleton rows={3} /> : <TeamBoard work={teamWork} meId={meId} />}
-          </section>
+          </Collapsible>
         </div>
 
         {/* ======================================================= 오른쪽 */}
