@@ -17,6 +17,7 @@ import { ErrorBanner } from '@/components/ui';
 import {
   FINDING_META,
   REPLY_STATES,
+  planKindMeta,
   type Album,
   type AppRow,
   type CostItem,
@@ -172,7 +173,7 @@ export default function PrintPage() {
 
   const openFindings = findings.filter((f) => FINDING_META[f.status].open);
 
-  /** 계획안은 문서별 최신 판만 싣는다 (지난 판까지 넣으면 문서가 지저분해진다) */
+  /** 첨부 문서는 문서별 최신 판만 싣는다 (지난 판까지 넣으면 문서가 지저분해진다) */
   const latestPlans = useMemo(() => {
     const m = new Map<string, PlanFile>();
     for (const f of planFiles) {
@@ -321,11 +322,11 @@ export default function PrintPage() {
         </p>
       )}
 
-      {/* ------------------------------------------------ 계획안 첨부 */}
+      {/* -------------------------------------------------- 문서 첨부 */}
       {parts.has('planfile') && (
-        <Section title="계획안 첨부파일" sub={`문서 ${latestPlans.length}개`}>
+        <Section title="문서 첨부" sub={`문서 ${latestPlans.length}개`}>
           {latestPlans.length === 0 ? (
-            <Empty>첨부된 계획안이 없습니다.</Empty>
+            <Empty>첨부된 문서가 없습니다.</Empty>
           ) : (
             <>
               <ul className="space-y-1">
@@ -333,6 +334,8 @@ export default function PrintPage() {
                   <li key={f.id} className="border-b border-neutral-200 py-1.5">
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="text-[12.5px]">
+                        {/* 종이에서는 색 칩이 안 보이니 갈래를 글로 앞에 적는다 */}
+                        <span className="mr-1.5 font-bold">[{planKindMeta(f.kind).label}]</span>
                         {f.file_name}
                         {f.version > 1 && <span className="ml-1.5 font-bold">{f.version}판</span>}
                       </span>

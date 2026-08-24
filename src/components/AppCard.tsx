@@ -7,7 +7,7 @@ import { ProgressBar } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { PIECES, type AppOverview } from '@/lib/useAppsOverview';
 
-/** 검증·계획안·원가·샘플·사진 중 뭐가 채워졌는지 한 줄로 */
+/** 검증·문서·원가·샘플·사진 중 뭐가 채워졌는지 한 줄로 */
 export function PieceRow({ item, compact = false }: { item: AppOverview; compact?: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-1">

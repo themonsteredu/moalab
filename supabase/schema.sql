@@ -328,7 +328,7 @@ create table if not exists moalab.schedule_members (
 );
 
 -- ---------------------------------------------------------------------
--- 10. 수업계획안 — 프로그램 하나당 본문 1개 + 첨부파일 N개
+-- 10. 문서 첨부(판) — 프로그램 하나당 본문 1개 + 첨부파일 N개
 --     (본문은 apps.plan_body, 파일은 아래 테이블)
 -- ---------------------------------------------------------------------
 alter table moalab.apps add column if not exists plan_body text;
@@ -343,7 +343,7 @@ create table if not exists moalab.plan_files (
 );
 create index if not exists plan_files_app_idx on moalab.plan_files(app_id, created_at);
 
--- 수업계획안은 A 가 올리고 → A 가 고쳐 올리고 → B 가 또 고쳐 올린다.
+-- 문서는 A 가 올리고 → A 가 고쳐 올리고 → B 가 또 고쳐 올린다.
 -- 평면 목록으로 쌓으면 '지도안_최종2.hwp' 가 여러 개 생겨서 뭐가 최신인지 모른다.
 -- 그래서 같은 문서의 판(版)을 group_id 로 묶고 version 으로 줄을 세운다.
 alter table moalab.plan_files add column if not exists member_id uuid
@@ -355,6 +355,20 @@ alter table moalab.plan_files add column if not exists version  int not null def
 -- 예전에 올린 파일은 각자 하나의 문서(1판)로 본다
 update moalab.plan_files set group_id = id where group_id is null;
 create index if not exists plan_files_group_idx on moalab.plan_files(group_id, version desc);
+
+-- 문서 갈래 — 무엇을 올린 건지. 형식(한글이냐 PPT냐)이 아니라 **누가 읽는가**로 가른다.
+--   plan  계획안  프로그램 계획 문서 — 우리끼리·학교
+--   guide 교육안  이 수업을 어떻게 진행하는지 — 강사가 읽는다
+--   form  양식    활동지·학습지 — 인쇄해 나눠준다
+--   etc   기타    PPT·영상·참고자료
+-- 기본값이 plan 인 이유: 이 칸이 생기기 전에 올린 파일은 전부 계획안이었다.
+-- 기본값을 다른 것으로 두면 지난 파일의 뜻이 소급해서 바뀐다.
+alter table moalab.plan_files add column if not exists kind text not null default 'plan';
+do $$ begin
+  alter table moalab.plan_files add constraint plan_files_kind_chk
+    check (kind in ('plan','guide','form','etc'));
+exception when duplicate_object then null; end $$;
+create index if not exists plan_files_kind_idx on moalab.plan_files(app_id, kind);
 
 -- ---------------------------------------------------------------------
 -- 11. 프로그램 샘플 이미지 — 제안서·소개용 예시 작품
@@ -719,7 +733,7 @@ end $$;
 --
 --  ★ 버킷은 나중에 늘어난다. 처음엔 3개였고 plans·notices 는 뒤에 추가됐다.
 --    예전에 이 파일을 돌린 DB 에는 나중에 생긴 버킷이 없어서
---    "수업계획안·공지 첨부만 안 올라간다" 가 된다.
+--    "문서·공지 첨부만 안 올라간다" 가 된다.
 --    그 경우 supabase/storage.sql 만 따로 붙여넣으면 된다.
 -- =====================================================================
 insert into storage.buckets (id, name, public)

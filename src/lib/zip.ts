@@ -2,7 +2,7 @@
 
 /**
  * 파일 여러 개를 zip 으로 묶어 내려받는다. jszip 은 필요할 때만 불러온다.
- * (사진·수업계획안 첨부 등 공용)
+ * (사진·문서 첨부 등 공용)
  */
 export async function downloadFilesAsZip(
   photos: { url: string; name: string }[],

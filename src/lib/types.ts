@@ -36,7 +36,7 @@ export interface AppRow {
   current_round: number;
   status: AppStatus;
   archived: boolean;
-  /** 수업계획안 본문 */
+  /** (구) 계획안 본문. 지금은 문서 첨부(plan_files)로 올린다 */
   plan_body: string | null;
   created_at: string;
 }
@@ -245,6 +245,30 @@ export interface LessonPlanItem {
   created_at: string;
 }
 
+/**
+ * 문서 갈래 — 무엇을 올린 건지.
+ * 형식(한글이냐 PPT냐)이 아니라 **누가 읽는가**로 가른다.
+ * 형식으로 가르면 확장자 라벨(FileBadge)과 겹치기만 하고 아무것도 안 알려준다.
+ */
+export type PlanKind = 'plan' | 'guide' | 'form' | 'etc';
+
+/**
+ * 이 순서 그대로 화면에 나온다. 넷에서 멈춘다 —
+ * 갈래를 늘리면 올릴 때마다 고민이 늘고 375px 에서 칩이 두 줄로 접힌다.
+ * 색은 전부 tailwind.config.ts 에 이미 있는 것만 쓴다 (새 색을 안 만든다).
+ */
+export const PLAN_KINDS: { value: PlanKind; label: string; chip: string; hint: string }[] = [
+  { value: 'plan', label: '계획안', chip: 'bg-neutral-100 text-neutral-600', hint: '프로그램 계획 문서' },
+  { value: 'guide', label: '교육안', chip: 'bg-brand-50 text-brand-700', hint: '이 수업을 어떻게 진행하는지 — 강사가 읽어요' },
+  { value: 'form', label: '양식', chip: 'bg-accent-50 text-accent-600', hint: '활동지·학습지 — 인쇄해 나눠줘요' },
+  { value: 'etc', label: '기타', chip: 'bg-neutral-100 text-neutral-400', hint: 'PPT·영상·참고자료' },
+];
+
+export function planKindMeta(k: PlanKind | null | undefined) {
+  // 칸이 생기기 전에 올린 파일(kind 없음)은 전부 계획안이다
+  return PLAN_KINDS.find((x) => x.value === k) ?? PLAN_KINDS[0];
+}
+
 export interface PlanFile {
   id: string;
   app_id: string;
@@ -259,6 +283,8 @@ export interface PlanFile {
   group_id: string;
   /** 1판, 2판, … 클수록 최신 */
   version: number;
+  /** 문서 갈래. DB 에 칸이 아직 없을 수도 있어서 optional 이다 */
+  kind?: PlanKind;
   created_at: string;
 }
 
