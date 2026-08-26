@@ -43,8 +43,14 @@ type View = 'dept' | 'person' | 'me';
  * 보기 세 가지 — 원장은 `부서별`, 강사는 `내 역할` 로 시작한다.
  * (원장은 나누는 쪽이라 자기 역할부터 보면 정작 미정이 안 보인다 — 업무 화면과 같은 판단)
  *
- * 고치는 건 **원장만.** 한 사람이 누르면 모두의 역할표가 바뀌는 것이라
- * 프로그램 보관·주제 관리와 같은 갈래다.
+ * **권한은 `/apps` 와 같은 갈래다.**
+ *   · 역할(소분류) 추가·수정·담당자 지정 → **전원**. 원장만 두면 등록이 밀린다
+ *     (`+ 새 앱` 을 전원에게 연 것과 같은 이유). 자기가 맡을 역할은 자기가 집는다
+ *   · 부서·중분류(조직의 틀) 만들고 고치고 지우기 → **원장만**.
+ *     한 사람이 누르면 모두의 역할표 모양이 바뀐다 (주제 관리·보관과 같은 갈래)
+ *
+ * **트리는 두 단계가 다 접힌다.** 부서만 접으면 부서 하나를 열었을 때
+ * 소분류가 전부 쏟아져서(1499px) 세로 스크롤이 감당이 안 됐다.
  */
 export default function RolesPage() {
   const { session, isAdmin } = useSession();
@@ -101,26 +107,28 @@ export default function RolesPage() {
   );
   const totals = useMemo(() => orgTotals(tree), [tree]);
 
-  /** 검색 + '담당자 미정만' 을 차례로 건다 */
-  const shown = useMemo(() => {
-    let t = filterOrg(tree, q);
-    if (onlyOpen) {
-      t = t
-        .map((d) => {
-          const gs = d.groups
-            .map((g) => {
-              const ds = g.duties.filter((n) => !n.duty.owner_id);
-              return ds.length ? { ...g, duties: ds, unassigned: ds.length } : null;
-            })
-            .filter((g): g is GroupNode => g !== null);
-          return gs.length
-            ? { ...d, groups: gs, total: gs.reduce((n, g) => n + g.duties.length, 0), unassigned: gs.length && d.unassigned }
-            : null;
-        })
-        .filter((d): d is DeptNode => d !== null);
-    }
-    return t;
-  }, [tree, q, onlyOpen]);
+  /** 트리에는 검색만 건다 */
+  const shown = useMemo(() => filterOrg(tree, q), [tree, q]);
+
+  /**
+   * 담당자 미정은 **트리가 아니라 평평한 목록**으로 보여준다.
+   * 트리로 그리면 부서·중분류를 전부 펼쳐야 해서 15건 보는 데 3.6화면(2949px)이었다.
+   * 채우는 게 목적인 화면이라 헤집을 이유가 없다 — 한 줄에 한 건씩 눌러서 채운다.
+   */
+  const openList = useMemo(
+    () =>
+      shown.flatMap((d) =>
+        d.groups.flatMap((g) =>
+          g.duties
+            .filter((n) => !n.duty.owner_id)
+            .map((n) => ({ duty: n.duty, deptName: d.dept.name, groupName: g.group.name })),
+        ),
+      ),
+    [shown],
+  );
+
+  /** 검색이 걸린 동안에는 트리를 강제로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다 */
+  const forceOpen = Boolean(q.trim());
 
   const people = useMemo(() => groupByPerson(tree, members), [tree, members]);
   const mine = useMemo(() => myDuties(tree, session?.id), [tree, session]);
@@ -232,10 +240,11 @@ export default function RolesPage() {
     const owner = node.duty.owner_id;
     return (
       <li key={node.duty.id}>
+        {/* 누구나 누를 수 있다 — 담당자를 정하는 건 '내가 이거 할게요' 이기도 하다
+            (검증자 참여를 본인이 누르게 연 것과 같은 갈래) */}
         <button
-          onClick={() => isAdmin && setEditing({ duty: node.duty, groupId: node.duty.group_id, label })}
-          disabled={!isAdmin}
-          className="flex min-h-[44px] w-full items-center gap-2 py-1.5 text-left disabled:cursor-default"
+          onClick={() => setEditing({ duty: node.duty, groupId: node.duty.group_id, label })}
+          className="flex min-h-[44px] w-full items-center gap-2 py-1.5 text-left"
         >
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-semibold text-neutral-800">{node.duty.name}</span>
@@ -254,7 +263,7 @@ export default function RolesPage() {
           ) : (
             <span className="chip shrink-0 bg-red-100 text-red-700">미정</span>
           )}
-          {isAdmin && <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />}
+          <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
         </button>
       </li>
     );
@@ -326,7 +335,8 @@ export default function RolesPage() {
           </div>
         )}
 
-        <div className="mb-2.5 flex gap-1.5">
+        {/* PC 에서 끝까지 늘리지 않는다 — 버튼 하나가 500px 이 되면 '막대기가 쩌끝까지 간다' */}
+        <div className="mb-2.5 flex gap-1.5 lg:max-w-lg">
           {views.map((v) => (
             <button
               key={v.key}
@@ -356,9 +366,13 @@ export default function RolesPage() {
         ) : view === 'me' ? (
           /* ------------------------------------------------------ 내 역할 */
           mine.own.length + mine.help.length === 0 ? (
-            <EmptyState icon="users" title="아직 맡은 역할이 없어요" desc="원장님이 정하면 여기 보여요." />
+            <EmptyState
+              icon="users"
+              title="아직 맡은 역할이 없어요"
+              desc="위 '전체' 에서 역할을 눌러 주담당에 내 이름을 넣으면 여기 모여요."
+            />
           ) : (
-            <section className="card p-3.5">
+            <section className="card p-3.5 lg:max-w-3xl">
               <h2 className="mb-1 text-[14px] font-bold">
                 주담당 {mine.own.length} · 부담당 {mine.help.length}
               </h2>
@@ -370,7 +384,7 @@ export default function RolesPage() {
           )
         ) : view === 'person' ? (
           /* ------------------------------------------------------ 사람별 */
-          <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:gap-2.5 lg:space-y-0">
+          <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-2.5 lg:space-y-0">
             {people.map((p) => (
               <section key={p.memberId ?? 'none'} className="card p-3.5">
                 <Collapsible
@@ -404,36 +418,76 @@ export default function RolesPage() {
         ) : (
           /* ------------------------------------------------------ 부서별 */
           <>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="역할·부서 이름으로 찾기"
-              aria-label="역할 검색"
-              className="field mb-2"
-            />
-            {totals.unassigned > 0 && (
-              <button
-                onClick={() => setOnlyOpen((v) => !v)}
-                aria-pressed={onlyOpen}
-                className={`tap mb-2.5 w-full rounded-xl border text-[13px] font-bold transition ${
-                  onlyOpen ? 'border-red-300 bg-red-100 text-red-700' : 'border-neutral-200 bg-surface text-neutral-500'
-                }`}
-              >
-                담당자 미정 {totals.unassigned}건{onlyOpen ? ' — 전체 보기' : '만 보기'}
-              </button>
-            )}
+            {/* 폰은 두 줄, PC 는 한 줄 — 두 줄로 두면 화면 폭만 먹고 목록이 밀린다 */}
+            <div className="mb-2.5 lg:flex lg:items-center lg:gap-2">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="역할·부서 이름으로 찾기"
+                aria-label="역할 검색"
+                className="field mb-2 lg:mb-0 lg:flex-1"
+              />
+              {totals.unassigned > 0 && (
+                <button
+                  onClick={() => setOnlyOpen((v) => !v)}
+                  aria-pressed={onlyOpen}
+                  className={`tap w-full shrink-0 rounded-xl border px-4 text-[13px] font-bold transition lg:w-auto ${
+                    onlyOpen
+                      ? 'border-red-300 bg-red-100 text-red-700'
+                      : 'border-neutral-200 bg-surface text-neutral-500'
+                  }`}
+                >
+                  담당자 미정 {totals.unassigned}건{onlyOpen ? ' — 전체 보기' : '만 보기'}
+                </button>
+              )}
+            </div>
 
-            {shown.length === 0 ? (
+            {onlyOpen ? (
+              openList.length === 0 ? (
+                <EmptyState icon="check" title="담당자가 다 정해졌어요" desc="비어 있는 역할이 없습니다." />
+              ) : (
+                <ul className="card divide-y divide-neutral-100 px-3.5 lg:max-w-3xl">
+                  {openList.map((r) => (
+                    <li key={r.duty.id}>
+                      <button
+                        onClick={() =>
+                          setEditing({
+                            duty: r.duty,
+                            groupId: r.duty.group_id,
+                            label: `${r.deptName} › ${r.groupName}`,
+                          })
+                        }
+                        className="flex min-h-[44px] w-full items-center gap-2 py-2 text-left"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13.5px] font-semibold text-neutral-800">
+                            {r.duty.name}
+                          </span>
+                          <span className="block truncate text-[11.5px] text-neutral-400">
+                            {r.deptName} › {r.groupName}
+                          </span>
+                        </span>
+                        <span className="chip shrink-0 bg-red-100 text-red-700">미정</span>
+                        <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : shown.length === 0 ? (
               <EmptyState icon="search" title="찾는 역할이 없어요" desc="다른 말로 찾아보세요." />
             ) : (
-              <div className="space-y-2.5">
+              /* PC 는 두 칸으로 흘린다 (grid 가 아니라 columns) —
+                 grid 로 깔면 펼친 부서 옆이 통째로 비어 화면이 덜 만든 것처럼 보인다 */
+              <div className="space-y-2.5 lg:columns-2 lg:gap-2.5 lg:space-y-0">
                 {shown.map((d) => (
-                  <section key={d.dept.id} className="card p-3.5">
+                  <section key={d.dept.id} className="card mb-2.5 break-inside-avoid p-3.5 lg:mb-2.5">
                     <Collapsible
                       id={`roles.dept.${d.dept.id}`}
                       title={d.dept.name}
-                      /* 검색·미정 필터가 걸리면 저절로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다 */
-                      defaultOpen={Boolean(q.trim()) || onlyOpen}
+                      /* 검색·미정 필터가 걸리면 저절로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다.
+                         defaultOpen 으로는 안 된다 (첫 값만 잡는다) — Collapsible 의 forceOpen 참고 */
+                      forceOpen={forceOpen}
                       badge={
                         <span className="flex items-center gap-1">
                           <span className="chip bg-neutral-100 text-neutral-500">역할 {d.total}</span>
@@ -469,17 +523,28 @@ export default function RolesPage() {
                       {d.groups.length === 0 ? (
                         <p className="text-[12.5px] text-neutral-400">중분류가 아직 없어요.</p>
                       ) : (
-                        <div className="space-y-3">
+                        /* 왼쪽 선으로 트리의 세로줄을 그린다 — 들여쓰기가 없으면
+                           중분류가 부서와 같은 층으로 읽힌다 (높이는 안 늘어난다) */
+                        <div className="space-y-1.5 border-l border-neutral-200 pl-2.5">
                           {d.groups.map((g) => (
-                            <div key={g.group.id}>
-                              <div className="mb-1 flex items-center gap-1.5">
-                                <p className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-neutral-500">
-                                  {g.group.name}
-                                </p>
-                                {g.unassigned > 0 && (
-                                  <span className="chip shrink-0 bg-red-100 text-red-700">미정 {g.unassigned}</span>
-                                )}
-                                {isAdmin && (
+                            <Collapsible
+                              key={g.group.id}
+                              id={`roles.group.${g.group.id}`}
+                              dense
+                              title={g.group.name}
+                              forceOpen={forceOpen}
+                              /* 중분류가 하나뿐이면 열어둔다 — 누를 게 없는 단계를 만들지 않는다 */
+                              defaultOpen={d.groups.length === 1}
+                              badge={
+                                <span className="flex shrink-0 items-center gap-1">
+                                  <span className="chip bg-neutral-100 text-neutral-500">{g.duties.length}</span>
+                                  {g.unassigned > 0 && (
+                                    <span className="chip bg-red-100 text-red-700">미정 {g.unassigned}</span>
+                                  )}
+                                </span>
+                              }
+                              right={
+                                isAdmin ? (
                                   <button
                                     onClick={() => {
                                       setGroupSheet({ group: g.group, deptId: d.dept.id, deptName: d.dept.name });
@@ -487,31 +552,31 @@ export default function RolesPage() {
                                       setSheetErr('');
                                     }}
                                     aria-label={`${g.group.name} 고치기`}
-                                    className="tap -my-3 w-8 shrink-0 text-neutral-300"
+                                    className="tap w-8 shrink-0 text-neutral-300"
                                   >
                                     <Icon name="dots" size={14} />
                                   </button>
-                                )}
-                              </div>
+                                ) : undefined
+                              }
+                            >
                               <ul className="divide-y divide-neutral-100 border-t border-neutral-100">
                                 {g.duties.map((n) => dutyRow(n, `${d.dept.name} › ${g.group.name}`))}
                               </ul>
-                              {isAdmin && (
-                                <button
-                                  onClick={() =>
-                                    setEditing({
-                                      duty: null,
-                                      groupId: g.group.id,
-                                      label: `${d.dept.name} › ${g.group.name}`,
-                                    })
-                                  }
-                                  className="-my-3 flex min-h-[44px] items-center gap-1 text-[12.5px] font-bold text-brand"
-                                >
-                                  <Icon name="plus" size={13} />
-                                  역할 추가
-                                </button>
-                              )}
-                            </div>
+                              {/* 역할 추가는 전원에게 — 자기가 맡을 일은 자기가 적는 게 빠르다 */}
+                              <button
+                                onClick={() =>
+                                  setEditing({
+                                    duty: null,
+                                    groupId: g.group.id,
+                                    label: `${d.dept.name} › ${g.group.name}`,
+                                  })
+                                }
+                                className="-my-3 flex min-h-[44px] items-center gap-1 text-[12.5px] font-bold text-brand"
+                              >
+                                <Icon name="plus" size={13} />
+                                역할 추가
+                              </button>
+                            </Collapsible>
                           ))}
                         </div>
                       )}
@@ -546,6 +611,7 @@ export default function RolesPage() {
         groupLabel={editing?.label ?? ''}
         duty={editing?.duty ?? null}
         members={members}
+        canDelete={isAdmin}
         onSaved={() => void load()}
       />
 

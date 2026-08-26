@@ -28,6 +28,7 @@ export function DutyForm({
   groupLabel,
   duty,
   members,
+  canDelete,
   onSaved,
 }: {
   open: boolean;
@@ -39,6 +40,11 @@ export function DutyForm({
   /** null 이면 새로 만들기 */
   duty: Duty | null;
   members: MemberPublic[];
+  /**
+   * 지우기는 **원장만.** 만들고 고치는 건 전원이지만, 지우는 것은 남이 적어둔
+   * 역할을 없애는 일이라 갈래가 다르다 (프로그램은 등록·수정이 전원, 보관은 원장인 것과 같다).
+   */
+  canDelete: boolean;
   onSaved: () => void;
 }) {
   const { session } = useSession();
@@ -232,7 +238,7 @@ export function DutyForm({
 
           {error && <ErrorBanner message={error} />}
 
-          {duty && (
+          {duty && canDelete && (
             <button
               onClick={() => setDeleting(true)}
               className="tap w-full gap-1.5 rounded-xl border border-neutral-300 text-[13.5px] font-bold text-neutral-500"

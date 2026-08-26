@@ -31,6 +31,8 @@ const APP = '11111111-1111-1111-1111-111111111111';
 const ME = '00000000-0000-0000-0000-000000000001';
 const NOW = '2026-08-20T02:00:00.000Z';
 const DEPT_NAMES = ['기획개발부', '영업마케팅부', '인사관리부', '경영지원부', '생산운영부'];
+/* 이름이 전부 같으면 검색·줄바꿈을 제대로 못 잰다 — seed-org.sql 에서 뽑아 섞는다 */
+const DUTY_NAMES = ['학교 제안서 작성·발송', '학년·차시 설계', '재고·단가 확인'];
 
 /** 문서 첨부 — 네 갈래가 다 섞인 가장 나쁜 경우로 잰다 */
 const pf = (id, name, kind, version, note) => ({
@@ -69,7 +71,7 @@ const FIXTURES = {
       [1, 2, 3].map((n) => ({
         id: `dep${i}g${k}t${n}`,
         group_id: `dep${i}g${k}`,
-        name: `학교 제안서 작성·발송 ${n}`,
+        name: DUTY_NAMES[n - 1],
         note: '학교에 보내는 프로그램 제안서',
         // 3건 중 1건은 일부러 미정으로 둔다 — '미정' 칩이 실제로 그려지는 상태를 잰다
         owner_id: n === 3 ? null : n === 1 ? ME : 'm2',
@@ -228,6 +230,17 @@ await page.getByRole('button', { name: /담당자 미정/ }).click();
 await page.waitForTimeout(700);
 await measure('미정만 보기');
 await page.getByRole('button', { name: /담당자 미정/ }).click();
+await page.waitForTimeout(500);
+
+/* 검색이 걸리면 트리가 저절로 펼쳐져야 한다.
+   defaultOpen 은 첫 값만 잡아서 실제로는 안 열렸다 — Collapsible 의 forceOpen 으로 고쳤다.
+   접힌 채로 0건처럼 보이면 안 되므로 회귀로 남긴다 */
+const beforeSearch = await page.evaluate(() => document.body.innerText.includes('학년·차시 설계'));
+await page.getByPlaceholder('역할·부서 이름으로 찾기').fill('학년');
+await page.waitForTimeout(900);
+const afterSearch = await page.evaluate(() => document.body.innerText.includes('학년·차시 설계'));
+console.log(`\n검색 자동 펼침: 검색 전 보임=${beforeSearch} → 검색 후 보임=${afterSearch}  ${afterSearch ? 'OK' : '✗ 안 펼쳐진다'}`);
+await page.getByPlaceholder('역할·부서 이름으로 찾기').fill('');
 await page.waitForTimeout(500);
 
 await page.getByRole('button', { name: '사람별', exact: true }).click();
