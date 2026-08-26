@@ -672,6 +672,65 @@ create table if not exists moalab.app_secrets (
 -- 예전에 만든 표에는 없다
 alter table moalab.app_secrets add column if not exists model text;
 
+-- ---------------------------------------------------------------------
+-- 19. 역할분장 — 부서 › 중분류 › 소분류, 그리고 그 역할을 누가 맡나
+--
+--   업무(tasks)와 **축이 다르다.**
+--     tasks : 1건 × 담당자 1명 × 기한. 끝나면 지나간다
+--     여기  : 기한이 없고 계속 남는 '이 일은 누구 담당' 이다
+--   합치면 기한 알림도 못 쓰고 역할표도 못 쓴다
+--   (원가 vs 지출 · 업무 vs 강사양성 을 나눈 것과 같은 이유).
+--
+--   부서·중분류·소분류는 **전부 데이터다.** 조직이 바뀔 때 코드를 안 고친다
+--   (topics 와 같은 판단). 예시 내용은 supabase/seed-org.sql 에 따로 뒀다 —
+--   schema.sql 에 넣으면 원장이 지운 줄이 재실행할 때마다 되살아난다.
+-- ---------------------------------------------------------------------
+create table if not exists moalab.departments (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null unique,
+  -- 부서장. 사람을 지워도 부서는 남아야 하니 set null
+  head_id    uuid references moalab.members(id) on delete set null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists departments_order_idx on moalab.departments(sort_order, name);
+
+-- 중분류 — 부서 안의 묶음
+create table if not exists moalab.duty_groups (
+  id         uuid primary key default gen_random_uuid(),
+  dept_id    uuid not null references moalab.departments(id) on delete cascade,
+  name       text not null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (dept_id, name)
+);
+create index if not exists duty_groups_dept_idx on moalab.duty_groups(dept_id, sort_order);
+
+-- 소분류 = 역할 한 줄. 이게 실제로 사람이 맡는 단위다
+create table if not exists moalab.duties (
+  id         uuid primary key default gen_random_uuid(),
+  group_id   uuid not null references moalab.duty_groups(id) on delete cascade,
+  name       text not null,
+  note       text,                                     -- 무슨 일인지 한 줄
+  -- 주담당. 책임은 한 사람에게 지운다 (tasks 의 assignee_id 와 같은 판단).
+  -- 사람을 지워도 역할은 남고 '담당자 미정' 으로 돌아간다
+  owner_id   uuid references moalab.members(id) on delete set null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (group_id, name)
+);
+create index if not exists duties_group_idx on moalab.duties(group_id, sort_order);
+create index if not exists duties_owner_idx on moalab.duties(owner_id);
+
+-- 부담당 — 같이 하는 사람. 여럿일 수 있다 (app_reviewers 와 같은 꼴).
+-- 사람이 사라지면 부담당 줄도 같이 사라진다 — 주담당과 달리 남겨봐야 뜻이 없다
+create table if not exists moalab.duty_helpers (
+  duty_id   uuid not null references moalab.duties(id) on delete cascade,
+  member_id uuid not null references moalab.members(id) on delete cascade,
+  primary key (duty_id, member_id)
+);
+create index if not exists duty_helpers_member_idx on moalab.duty_helpers(member_id);
+
 -- =====================================================================
 --  권한 + RLS
 --   · members       : RLS on, 정책 없음 → anon 키로는 읽기/쓰기 전부 차단
@@ -718,7 +777,8 @@ begin
     'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',
     'training_courses','training_records',
     'tasks','task_templates','task_template_items',
-    'expenses','expense_files'
+    'expenses','expense_files',
+    'departments','duty_groups','duties','duty_helpers'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);
     execute format('drop policy if exists "internal_all" on moalab.%I', t);
