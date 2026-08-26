@@ -11,7 +11,7 @@ export const PRINT_PARTS = [
   { key: 'verify', label: '검증 (지적·답변)' },
   // 한글 양식 그대로의 A4 한 장. 늘 새 쪽에서 시작한다
   { key: 'plan', label: '강의계획서 (양식 그대로)' },
-  { key: 'planfile', label: '계획안 첨부 목록' },
+  { key: 'planfile', label: '문서 첨부 목록' },
   { key: 'cost', label: '원가표' },
   { key: 'sample', label: '샘플 이미지' },
   { key: 'photo', label: '수업 사진' },

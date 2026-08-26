@@ -259,6 +259,8 @@ export function Collapsible({
   badge,
   right,
   defaultOpen = false,
+  forceOpen = false,
+  dense = false,
   className = '',
   children,
 }: {
@@ -270,6 +272,17 @@ export function Collapsible({
   /** 머리글 오른쪽 — 링크 등. 펼침 버튼 안에 넣지 않는다 (버튼 중첩 금지) */
   right?: React.ReactNode;
   defaultOpen?: boolean;
+  /**
+   * 검색·필터가 걸린 동안 **무조건 펼친다.**
+   *
+   * `defaultOpen` 으로는 안 된다 — `useState(defaultOpen)` 는 첫 값만 잡아서
+   * 나중에 검색어가 들어와도 안 열리고, 기억해둔 상태가 있으면 그것이 이긴다.
+   * 그래서 접힌 채로 0건처럼 보이는 일이 실제로 생겼다.
+   * 이 값이 참인 동안에는 기억도 건드리지 않는다 — 검색을 지우면 원래대로 돌아간다.
+   */
+  forceOpen?: boolean;
+  /** 트리 아래 단계(중분류 같은 것) — 머리글을 한 단계 작게 그린다 */
+  dense?: boolean;
   /** 바깥 배치용 (홈의 order-* 처럼) */
   className?: string;
   children: React.ReactNode;
@@ -298,27 +311,35 @@ export function Collapsible({
     });
   };
 
+  const shown = forceOpen || open;
+
   return (
     <section className={className}>
-      <div className="mb-2.5 flex items-center gap-2">
+      <div className={`flex items-center gap-2 ${dense ? 'mb-1' : 'mb-2.5'}`}>
         <button
           onClick={toggle}
-          aria-expanded={open}
+          aria-expanded={shown}
           /* 패딩으로 탭 면을 44px 로 키우고 마진으로 되돌린다 —
              줄 높이는 그대로라 화면이 길어지지 않는다 (CLAUDE.md 의 방식) */
           className="-my-3 flex min-w-0 flex-1 items-center gap-1.5 py-3 text-left"
         >
           <Icon
             name="chevronDown"
-            size={14}
-            className={`shrink-0 text-neutral-400 transition-transform ${open ? '' : '-rotate-90'}`}
+            size={dense ? 12 : 14}
+            className={`shrink-0 text-neutral-400 transition-transform ${shown ? '' : '-rotate-90'}`}
           />
-          <span className="truncate text-[15px] font-bold text-neutral-800">{title}</span>
+          <span
+            className={`truncate ${
+              dense ? 'text-[12.5px] font-bold text-neutral-500' : 'text-[15px] font-bold text-neutral-800'
+            }`}
+          >
+            {title}
+          </span>
           {badge}
         </button>
         {right}
       </div>
-      {open && children}
+      {shown && children}
     </section>
   );
 }

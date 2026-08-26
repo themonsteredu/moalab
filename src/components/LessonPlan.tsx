@@ -9,7 +9,7 @@ import { downloadFilesAsZip, safeFileName } from '@/lib/zip';
 import { ConfirmDialog, ErrorBanner, Sheet } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { shortTime, relTime } from '@/lib/format';
-import type { PlanFile } from '@/lib/types';
+import { PLAN_KINDS, planKindMeta, type PlanFile, type PlanKind } from '@/lib/types';
 
 /** 문서 하나 = 판(version) 여러 개. [0] 이 최신 */
 interface PlanDoc {
@@ -32,6 +32,40 @@ function groupDocs(files: PlanFile[]): PlanDoc[] {
     }))
     // 최근에 손댄 문서를 위로
     .sort((a, b) => b.versions[0].created_at.localeCompare(a.versions[0].created_at));
+}
+
+/** 문서의 갈래 = 최신 판의 갈래. 칸이 생기기 전 파일은 '계획안' 으로 읽힌다 */
+function kindOf(doc: PlanDoc): PlanKind {
+  return planKindMeta(doc.versions[0].kind).value;
+}
+
+/** 갈래 거르기 칩 — /apps 목록의 상태 칩과 같은 모양이다 */
+function KindChip({
+  on,
+  dim,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  dim?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={on}
+      className={`tap shrink-0 rounded-full border px-3 text-[12.5px] font-bold transition ${
+        on
+          ? 'border-brand bg-brand text-white'
+          : dim
+            ? 'border-neutral-200 bg-surface text-neutral-300'
+            : 'border-neutral-300 bg-surface text-neutral-600'
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'];
@@ -81,7 +115,11 @@ function humanSize(n: number | null): string {
 }
 
 /**
- * 수업계획안 — 파일 첨부 전용.
+ * 문서 첨부 — 파일 전용.
+ *
+ * 계획안 · 교육안 · 양식 · 기타 **네 갈래**를 한 자리에서 올리고 갈래로 거른다.
+ * 갈래는 형식(한글이냐 PPT냐)이 아니라 **누가 읽는가**로 가른다 (types.ts 의 PLAN_KINDS).
+ * 형식으로 가르면 확장자 라벨(FileBadge)과 겹치기만 하고 아무것도 안 알려준다.
  *
  * A 가 올리고 → A 가 고쳐 올리고 → B 가 또 고쳐 올린다.
  * 이걸 평면 목록으로 쌓으면 '지도안_최종2.hwp' 가 여러 개 생겨서
@@ -116,6 +154,11 @@ export function LessonPlan({
   const [verFile, setVerFile] = useState<File | null>(null);
   const [verNote, setVerNote] = useState('');
   const [openHistory, setOpenHistory] = useState<string[]>([]);
+  /** 목록 거르기 */
+  const [filter, setFilter] = useState<PlanKind | 'all'>('all');
+  /** 고른 파일은 바로 안 올라간다 — 갈래를 정한 뒤에 올라간다 */
+  const [pending, setPending] = useState<File[]>([]);
+  const [pendingKind, setPendingKind] = useState<PlanKind | ''>('');
   const inputRef = useRef<HTMLInputElement>(null);
   const verInputRef = useRef<HTMLInputElement>(null);
 
@@ -125,20 +168,38 @@ export function LessonPlan({
   }, [appId]);
 
   const docs = files ? groupDocs(files) : null;
+  const shown = (docs ?? []).filter((d) => filter === 'all' || kindOf(d) === filter);
+  const countOf = (k: PlanKind) => (docs ?? []).filter((d) => kindOf(d) === k).length;
+  /** 실제로 올라와 있는 갈래만. 0건 갈래로 걸러봐야 '없어요' 만 나온다 */
+  const usedKinds = PLAN_KINDS.filter((k) => countOf(k.value) > 0);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  /** 새 문서 올리기 — 파일 하나가 문서 하나(1판)가 된다 */
-  const onFiles = async (picked: File[]) => {
+  /** 파일을 고르면 바로 안 올린다 — 갈래부터 묻는다 */
+  const pickFiles = (picked: File[]) => {
+    // 같은 파일을 다시 골라도 onChange 가 뜨게 값을 비운다
+    if (inputRef.current) inputRef.current.value = '';
     if (picked.length === 0) return;
     setError('');
+    setPending(picked);
+    // 갈래를 미리 골라두지 않는다 — 여러 개가 한꺼번에 엉뚱한 갈래로 들어가면
+    // 되돌리는 것도 그만큼 여러 번이다 (업무 나눠주기와 같은 판단)
+    setPendingKind('');
+  };
+
+  /** 새 문서 올리기 — 파일 하나가 문서 하나(1판)가 된다 */
+  const uploadPending = async () => {
+    if (pending.length === 0 || !pendingKind) return;
+    setError('');
     let ok = 0;
-    for (let i = 0; i < picked.length; i++) {
-      setUploading(`올리는 중… ${i + 1}/${picked.length}`);
+    /** 실패한 것만 남긴다 — 다시 눌렀을 때 성공한 것이 두 번 올라가면 안 된다 */
+    const left: File[] = [];
+    for (let i = 0; i < pending.length; i++) {
+      setUploading(`올리는 중… ${i + 1}/${pending.length}`);
       try {
-        const up = await uploadFile('moalab-plans', picked[i], `app-${appId}`);
+        const up = await uploadFile('moalab-plans', pending[i], `app-${appId}`);
         const { data, error: e } = await supabase
           .from('plan_files')
           .insert({
@@ -147,6 +208,7 @@ export function LessonPlan({
             file_name: up.name,
             file_size: up.size,
             member_id: session?.id ?? null,
+            kind: pendingKind,
             version: 1,
           })
           .select()
@@ -156,13 +218,16 @@ export function LessonPlan({
         await supabase.from('plan_files').update({ group_id: data.id }).eq('id', data.id);
         ok++;
       } catch (e) {
-        setError(friendlyError(e, `${picked[i].name} 을 올리지 못했어요.`));
+        left.push(pending[i]);
+        setError(friendlyError(e, `${pending[i].name} 을 올리지 못했어요.`));
       }
     }
     setUploading('');
-    if (inputRef.current) inputRef.current.value = '';
+    setPending(left);
     if (ok > 0) {
-      logActivity(session?.id, `${appSlug} 수업계획안 ${ok}개 추가`, `app:${appId}`);
+      logActivity(session?.id, `${appSlug} ${planKindMeta(pendingKind).label} ${ok}개 추가`, `app:${appId}`);
+      // 방금 올린 것이 안 보이면 안 된다 — 다른 갈래로 걸러져 있으면 전체로 되돌린다
+      if (filter !== 'all' && filter !== pendingKind) setFilter('all');
       await load();
     }
   };
@@ -184,12 +249,18 @@ export function LessonPlan({
         file_name: up.name,
         file_size: up.size,
         member_id: session?.id ?? null,
+        // 판이 바뀌어도 갈래는 그 문서의 것을 그대로 따라간다
+        kind: kindOf(newVerFor),
         note: verNote.trim() || null,
         group_id: newVerFor.groupId,
         version: nextV,
       });
       if (e) throw e;
-      logActivity(session?.id, `${appSlug} 수업계획안 ${nextV}판 올림`, `app:${appId}`);
+      logActivity(
+        session?.id,
+        `${appSlug} ${planKindMeta(kindOf(newVerFor)).label} ${nextV}판 올림`,
+        `app:${appId}`,
+      );
       setNewVerFor(null);
       setVerFile(null);
       setVerNote('');
@@ -204,17 +275,19 @@ export function LessonPlan({
 
   /** 최신 판만 묶는다 — 지난 판까지 다 받으면 받는 쪽이 또 헷갈린다 */
   const downloadAll = async () => {
-    if (!docs || docs.length === 0) return;
-    const latest = docs.map((d) => d.versions[0]);
+    if (shown.length === 0) return;
+    // 화면에 보이는 것만 묶는다 — 갈래로 걸러놓고 전부 받으면 화면과 다른 게 온다
+    const latest = shown.map((d) => d.versions[0]);
+    const label = filter === 'all' ? '문서' : planKindMeta(filter).label;
     setError('');
     setZipping(`묶는 중… 0/${latest.length}`);
     try {
       await downloadFilesAsZip(
         latest.map((f) => ({ url: f.file_url, name: f.file_name })),
-        safeFileName(`${appTitle}_수업계획안`),
+        safeFileName(`${appTitle}_${label}`),
         (d, t) => setZipping(`묶는 중… ${d}/${t}`),
       );
-      logActivity(session?.id, `${appSlug} 수업계획안 전체 다운로드`, `app:${appId}`);
+      logActivity(session?.id, `${appSlug} ${label} 전체 다운로드`, `app:${appId}`);
     } catch (e) {
       setError(friendlyError(e, '다운로드가 안 됐어요. 다시 눌러주세요.'));
     } finally {
@@ -233,7 +306,7 @@ export function LessonPlan({
     await load();
   };
 
-  const kind = preview ? previewKind(preview.file_name) : 'none';
+  const previewAs = preview ? previewKind(preview.file_name) : 'none';
 
   return (
     <div className="space-y-3">
@@ -244,7 +317,7 @@ export function LessonPlan({
         ref={inputRef}
         type="file"
         multiple
-        onChange={(e) => void onFiles(Array.from(e.target.files ?? []))}
+        onChange={(e) => pickFiles(Array.from(e.target.files ?? []))}
         className="hidden"
       />
 
@@ -258,7 +331,7 @@ export function LessonPlan({
         >
           <Icon name="clip" size={22} className="text-neutral-300" />
           <span className="mt-1.5 text-[13.5px] font-semibold text-neutral-600">
-            {uploading || '지도안 · 활동지 · PPT 를 올려주세요'}
+            {uploading || '교육안 · 양식 · 계획안을 올려주세요'}
           </span>
           <span className="mt-0.5 text-[11.5px] text-neutral-400">한글 · PDF · PPT · 엑셀 · 이미지</span>
         </label>
@@ -266,20 +339,51 @@ export function LessonPlan({
         <>
           <div className="flex items-center gap-2">
             <p className="flex-1 text-[13px] font-bold text-neutral-600">
-              문서 <span className="text-brand">{docs.length}</span>
+              문서 <span className="text-brand">{shown.length}</span>
+              {filter !== 'all' && <span className="text-neutral-400"> / {docs.length}</span>}
             </p>
-            <button onClick={downloadAll} disabled={Boolean(zipping)} className="btn-ghost h-9 px-3 text-[12.5px]">
+            <button
+              onClick={downloadAll}
+              disabled={Boolean(zipping) || shown.length === 0}
+              className="btn-ghost h-9 px-3 text-[12.5px]"
+            >
               <Icon name="download" size={14} />
               {zipping || '최신 전체 받기'}
             </button>
             <label htmlFor={`plan-files-${appId}`} className="btn-primary h-9 cursor-pointer px-3 text-[12.5px]">
               <Icon name="plus" size={14} />
-              {uploading || '새 문서'}
+              새 문서
             </label>
           </div>
 
+          {/* 갈래 거르기 — 있는 갈래만, 한 줄 가로 스크롤.
+              갈래가 하나뿐이면 줄 자체를 안 그린다 (누를 게 없는데 44px 을 먹는다).
+              여러 줄로 깔면 정작 문서 목록이 화면 밖으로 밀린다 (지출결의서에서 겪은 것) */}
+          {usedKinds.length > 1 && (
+            <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+              <KindChip on={filter === 'all'} onClick={() => setFilter('all')}>
+                전체 {docs.length}
+              </KindChip>
+              {usedKinds.map((k) => (
+                <KindChip
+                  key={k.value}
+                  on={filter === k.value}
+                  onClick={() => setFilter(filter === k.value ? 'all' : k.value)}
+                >
+                  {`${k.label} ${countOf(k.value)}`}
+                </KindChip>
+              ))}
+            </div>
+          )}
+
+          {shown.length === 0 && (
+            <p className="rounded-xl border border-dashed border-neutral-200 bg-raised px-4 py-6 text-center text-[13px] text-neutral-400">
+              이 갈래로 올린 문서가 아직 없어요.
+            </p>
+          )}
+
           <ul className="space-y-2.5">
-            {docs.map((doc) => {
+            {shown.map((doc) => {
               const cur = doc.versions[0];
               const past = doc.versions.slice(1);
               const historyOpen = openHistory.includes(doc.groupId);
@@ -288,16 +392,26 @@ export function LessonPlan({
                   {/* 최신 판 */}
                   <div className="flex items-start gap-2.5 p-3">
                     <FileBadge name={cur.file_name} />
-                    <button onClick={() => setPreview(cur)} className="min-w-0 flex-1 text-left">
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <span className="truncate text-[13.5px] font-bold text-neutral-900">
+                    {/* 미리보기를 여는 자리 = 카드에서 가장 크게 누르는 곳.
+                        두 줄이던 것을 한 줄로 줄이면서 40px 이 됐다 — 44px 로 되돌린다 */}
+                    <button
+                      onClick={() => setPreview(cur)}
+                      className="flex min-h-[44px] min-w-0 flex-1 flex-col justify-center text-left"
+                    >
+                      {/* 갈래와 파일 이름을 한 줄에 둔다. 갈래를 따로 한 줄 잡으면
+                          문서 한 장마다 24px 씩 길어진다. 판 번호는 아랫줄로 내렸다 */}
+                      <span className="flex items-center gap-1.5">
+                        <span className={`chip shrink-0 ${planKindMeta(cur.kind).chip}`}>
+                          {planKindMeta(cur.kind).label}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-bold text-neutral-900">
                           {cur.file_name}
                         </span>
-                        {doc.versions.length > 1 && (
-                          <span className="chip bg-brand-50 text-brand-700">{cur.version}판</span>
-                        )}
                       </span>
                       <span className="mt-0.5 block text-[11.5px] text-neutral-400">
+                        {doc.versions.length > 1 && (
+                          <b className="text-neutral-500">{cur.version}판 · </b>
+                        )}
                         {nameOf(cur.member_id)} · {relTime(cur.created_at)} · {humanSize(cur.file_size)}
                       </span>
                     </button>
@@ -335,7 +449,7 @@ export function LessonPlan({
                         setVerNote('');
                         setError('');
                       }}
-                      className="flex items-center gap-1 text-[12.5px] font-bold text-brand"
+                      className="-my-3 flex min-h-[44px] items-center gap-1 text-[12.5px] font-bold text-brand"
                     >
                       <Icon name="refresh" size={13} />
                       고쳐서 올리기
@@ -347,7 +461,7 @@ export function LessonPlan({
                             v.includes(doc.groupId) ? v.filter((x) => x !== doc.groupId) : [...v, doc.groupId],
                           )
                         }
-                        className="ml-auto flex items-center gap-1 text-[12px] font-bold text-neutral-400"
+                        className="-my-3 ml-auto flex min-h-[44px] items-center gap-1 text-[12px] font-bold text-neutral-400"
                       >
                         지난 판 {past.length}개
                         <Icon
@@ -398,6 +512,64 @@ export function LessonPlan({
           </ul>
         </>
       )}
+
+      {/* 올리기 — 갈래를 고른 뒤에 올라간다.
+          미리 골라두면 목록 맨 위 갈래로 여러 개가 한꺼번에 잘못 들어간다 */}
+      <Sheet
+        open={pending.length > 0}
+        onClose={() => setPending([])}
+        title={`문서 ${pending.length}개 올리기`}
+        footer={
+          <button
+            onClick={() => void uploadPending()}
+            disabled={!pendingKind || Boolean(uploading)}
+            className="btn-primary w-full"
+          >
+            {uploading || (pendingKind ? `${planKindMeta(pendingKind).label} 갈래로 올리기` : '갈래를 골라주세요')}
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          <ul className="space-y-1.5 rounded-xl bg-raised px-3 py-2.5">
+            {pending.map((f, i) => (
+              <li key={`${f.name}-${i}`} className="flex items-center gap-2">
+                <FileBadge name={f.name} size={26} />
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-neutral-600">{f.name}</span>
+                <span className="shrink-0 text-[11px] text-neutral-400">{humanSize(f.size)}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div>
+            <p className="label">무엇을 올리나요?</p>
+            <div className="grid grid-cols-2 gap-2">
+              {PLAN_KINDS.map((k) => {
+                const on = pendingKind === k.value;
+                return (
+                  <button
+                    key={k.value}
+                    onClick={() => setPendingKind(k.value)}
+                    aria-pressed={on}
+                    className={`tap flex-col items-start justify-center gap-0.5 rounded-xl border px-3 py-2 text-left transition ${
+                      on ? 'border-brand bg-brand-50' : 'border-neutral-200 bg-surface'
+                    }`}
+                  >
+                    <span className={`text-[13.5px] font-bold ${on ? 'text-brand-700' : 'text-neutral-700'}`}>
+                      {k.label}
+                    </span>
+                    <span className="text-[11px] leading-tight text-neutral-400">{k.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[11.5px] text-neutral-400">
+              고른 갈래가 {pending.length}개 전부에 붙어요. 갈래가 다르면 나눠서 올려주세요.
+            </p>
+          </div>
+
+          {error && <ErrorBanner message={error} />}
+        </div>
+      </Sheet>
 
       {/* 새 버전 올리기 */}
       <Sheet
@@ -485,14 +657,14 @@ export function LessonPlan({
       >
         {preview && (
           <div>
-            {kind === 'image' ? (
+            {previewAs === 'image' ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={preview.file_url}
                 alt={preview.file_name}
                 className="max-h-[62vh] w-full rounded-xl bg-raised object-contain"
               />
-            ) : kind === 'pdf' ? (
+            ) : previewAs === 'pdf' ? (
               <object
                 data={preview.file_url}
                 type="application/pdf"

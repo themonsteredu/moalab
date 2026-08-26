@@ -226,7 +226,7 @@ export function useAppsOverview(includeArchived = false) {
 /** 카드에 찍히는 6개 구성요소 라벨 */
 export const PIECES: { key: keyof Completeness; icon: IconName; label: string }[] = [
   { key: 'verify', icon: 'checkCircle', label: '검증' },
-  { key: 'plan', icon: 'doc', label: '계획안' },
+  { key: 'plan', icon: 'doc', label: '문서' },
   { key: 'lecture', icon: 'cap', label: '강의계획서' },
   { key: 'cost', icon: 'won', label: '원가' },
   { key: 'sample', icon: 'image', label: '샘플' },

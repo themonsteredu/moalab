@@ -328,7 +328,7 @@ create table if not exists moalab.schedule_members (
 );
 
 -- ---------------------------------------------------------------------
--- 10. 수업계획안 — 프로그램 하나당 본문 1개 + 첨부파일 N개
+-- 10. 문서 첨부(판) — 프로그램 하나당 본문 1개 + 첨부파일 N개
 --     (본문은 apps.plan_body, 파일은 아래 테이블)
 -- ---------------------------------------------------------------------
 alter table moalab.apps add column if not exists plan_body text;
@@ -343,7 +343,7 @@ create table if not exists moalab.plan_files (
 );
 create index if not exists plan_files_app_idx on moalab.plan_files(app_id, created_at);
 
--- 수업계획안은 A 가 올리고 → A 가 고쳐 올리고 → B 가 또 고쳐 올린다.
+-- 문서는 A 가 올리고 → A 가 고쳐 올리고 → B 가 또 고쳐 올린다.
 -- 평면 목록으로 쌓으면 '지도안_최종2.hwp' 가 여러 개 생겨서 뭐가 최신인지 모른다.
 -- 그래서 같은 문서의 판(版)을 group_id 로 묶고 version 으로 줄을 세운다.
 alter table moalab.plan_files add column if not exists member_id uuid
@@ -355,6 +355,20 @@ alter table moalab.plan_files add column if not exists version  int not null def
 -- 예전에 올린 파일은 각자 하나의 문서(1판)로 본다
 update moalab.plan_files set group_id = id where group_id is null;
 create index if not exists plan_files_group_idx on moalab.plan_files(group_id, version desc);
+
+-- 문서 갈래 — 무엇을 올린 건지. 형식(한글이냐 PPT냐)이 아니라 **누가 읽는가**로 가른다.
+--   plan  계획안  프로그램 계획 문서 — 우리끼리·학교
+--   guide 교육안  이 수업을 어떻게 진행하는지 — 강사가 읽는다
+--   form  양식    활동지·학습지 — 인쇄해 나눠준다
+--   etc   기타    PPT·영상·참고자료
+-- 기본값이 plan 인 이유: 이 칸이 생기기 전에 올린 파일은 전부 계획안이었다.
+-- 기본값을 다른 것으로 두면 지난 파일의 뜻이 소급해서 바뀐다.
+alter table moalab.plan_files add column if not exists kind text not null default 'plan';
+do $$ begin
+  alter table moalab.plan_files add constraint plan_files_kind_chk
+    check (kind in ('plan','guide','form','etc'));
+exception when duplicate_object then null; end $$;
+create index if not exists plan_files_kind_idx on moalab.plan_files(app_id, kind);
 
 -- ---------------------------------------------------------------------
 -- 11. 프로그램 샘플 이미지 — 제안서·소개용 예시 작품
@@ -658,6 +672,65 @@ create table if not exists moalab.app_secrets (
 -- 예전에 만든 표에는 없다
 alter table moalab.app_secrets add column if not exists model text;
 
+-- ---------------------------------------------------------------------
+-- 19. 역할분장 — 부서 › 중분류 › 소분류, 그리고 그 역할을 누가 맡나
+--
+--   업무(tasks)와 **축이 다르다.**
+--     tasks : 1건 × 담당자 1명 × 기한. 끝나면 지나간다
+--     여기  : 기한이 없고 계속 남는 '이 일은 누구 담당' 이다
+--   합치면 기한 알림도 못 쓰고 역할표도 못 쓴다
+--   (원가 vs 지출 · 업무 vs 강사양성 을 나눈 것과 같은 이유).
+--
+--   부서·중분류·소분류는 **전부 데이터다.** 조직이 바뀔 때 코드를 안 고친다
+--   (topics 와 같은 판단). 예시 내용은 supabase/seed-org.sql 에 따로 뒀다 —
+--   schema.sql 에 넣으면 원장이 지운 줄이 재실행할 때마다 되살아난다.
+-- ---------------------------------------------------------------------
+create table if not exists moalab.departments (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null unique,
+  -- 부서장. 사람을 지워도 부서는 남아야 하니 set null
+  head_id    uuid references moalab.members(id) on delete set null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists departments_order_idx on moalab.departments(sort_order, name);
+
+-- 중분류 — 부서 안의 묶음
+create table if not exists moalab.duty_groups (
+  id         uuid primary key default gen_random_uuid(),
+  dept_id    uuid not null references moalab.departments(id) on delete cascade,
+  name       text not null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (dept_id, name)
+);
+create index if not exists duty_groups_dept_idx on moalab.duty_groups(dept_id, sort_order);
+
+-- 소분류 = 역할 한 줄. 이게 실제로 사람이 맡는 단위다
+create table if not exists moalab.duties (
+  id         uuid primary key default gen_random_uuid(),
+  group_id   uuid not null references moalab.duty_groups(id) on delete cascade,
+  name       text not null,
+  note       text,                                     -- 무슨 일인지 한 줄
+  -- 주담당. 책임은 한 사람에게 지운다 (tasks 의 assignee_id 와 같은 판단).
+  -- 사람을 지워도 역할은 남고 '담당자 미정' 으로 돌아간다
+  owner_id   uuid references moalab.members(id) on delete set null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (group_id, name)
+);
+create index if not exists duties_group_idx on moalab.duties(group_id, sort_order);
+create index if not exists duties_owner_idx on moalab.duties(owner_id);
+
+-- 부담당 — 같이 하는 사람. 여럿일 수 있다 (app_reviewers 와 같은 꼴).
+-- 사람이 사라지면 부담당 줄도 같이 사라진다 — 주담당과 달리 남겨봐야 뜻이 없다
+create table if not exists moalab.duty_helpers (
+  duty_id   uuid not null references moalab.duties(id) on delete cascade,
+  member_id uuid not null references moalab.members(id) on delete cascade,
+  primary key (duty_id, member_id)
+);
+create index if not exists duty_helpers_member_idx on moalab.duty_helpers(member_id);
+
 -- =====================================================================
 --  권한 + RLS
 --   · members       : RLS on, 정책 없음 → anon 키로는 읽기/쓰기 전부 차단
@@ -704,7 +777,8 @@ begin
     'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',
     'training_courses','training_records',
     'tasks','task_templates','task_template_items',
-    'expenses','expense_files'
+    'expenses','expense_files',
+    'departments','duty_groups','duties','duty_helpers'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);
     execute format('drop policy if exists "internal_all" on moalab.%I', t);
@@ -719,7 +793,7 @@ end $$;
 --
 --  ★ 버킷은 나중에 늘어난다. 처음엔 3개였고 plans·notices 는 뒤에 추가됐다.
 --    예전에 이 파일을 돌린 DB 에는 나중에 생긴 버킷이 없어서
---    "수업계획안·공지 첨부만 안 올라간다" 가 된다.
+--    "문서·공지 첨부만 안 올라간다" 가 된다.
 --    그 경우 supabase/storage.sql 만 따로 붙여넣으면 된다.
 -- =====================================================================
 insert into storage.buckets (id, name, public)

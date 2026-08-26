@@ -459,14 +459,16 @@ export default function AppDetailPage() {
           )}
         </Section>
 
-        {/* ------------------------------------------------ 수업계획안
+        {/* ------------------------------------------------ 계획 문서
             위: 양식 그대로 채우는 강의계획서 (그대로 인쇄된다)
-            아래: 한글 원본 첨부 + 판(버전) — 예전부터 쓰던 것을 그대로 둔다 */}
+            아래: 한글·PPT 원본 첨부 + 판(버전).
+                  '계획안 첨부파일' 이던 이름을 '문서 첨부' 로 넓혔다 —
+                  이제 계획안뿐 아니라 교육안·양식도 여기로 올라온다 */}
         <Section id="plan" icon="doc" title="강의계획서">
           <PlanForm appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
         </Section>
 
-        <Section id="planfile" icon="clip" title="계획안 첨부파일">
+        <Section id="planfile" icon="clip" title="문서 첨부">
           <LessonPlan appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
         </Section>
 
