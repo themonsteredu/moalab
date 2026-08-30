@@ -20,6 +20,10 @@ import type { Department, Duty, DutyGroup, DutyHelper } from '@/lib/types';
  *   · `person`     사람별 — **한 사람 = 한 쪽.** 뽑아서 그대로 건넨다
  *   · `unassigned` 담당자 미정만 — 지금 48건이 미정이라 이것만 뽑는 일이 잦다
  *
+ * **설명(`note`)은 인쇄물에 안 싣는다.** 줄마다 회색 글씨가 따라붙으면 표가
+ * 시끄러워서 정작 역할 이름이 안 읽힌다. 설명은 화면에서 보면 된다 —
+ * 종이는 "누가 무엇을 맡았나" 만 한눈에 들어오면 된다.
+ *
  * 프로그램·지출결의서 인쇄와 같이 **PDF 라이브러리를 쓰지 않는다** (브라우저 인쇄).
  * 고정 경로라 빌드 때 미리 그려보므로 `useSearchParams` 를 Suspense 로 감싼다.
  * 이 화면은 `(app)` 레이아웃 밖이라 로그인 가드를 직접 붙였다.
@@ -205,12 +209,7 @@ function RolesPrint() {
                     <td className="py-1.5 pr-1 tabular-nums text-neutral-500">{i + 1}</td>
                     <td className="py-1.5 pr-2">{r.deptName}</td>
                     <td className="py-1.5 pr-2 text-neutral-600">{r.groupName}</td>
-                    <td className="py-1.5 pr-2 font-semibold">
-                      {r.duty.name}
-                      {r.duty.note && (
-                        <span className="ml-1.5 font-normal text-neutral-500">{r.duty.note}</span>
-                      )}
-                    </td>
+                    <td className="py-1.5 pr-2 font-semibold">{r.duty.name}</td>
                     {/* 종이에 적어 넣을 자리 — 회의에서 이 문서를 놓고 정하는 게 실제 흐름이다 */}
                     <td className="py-1.5 text-neutral-300">서명 __________</td>
                   </tr>
@@ -286,12 +285,7 @@ function DeptDoc({
                       <td className="py-1.5 pr-2 align-top font-semibold">
                         {i === 0 ? g.group.name : ''}
                       </td>
-                      <td className="py-1.5 pr-2">
-                        <span className="font-semibold">{n.duty.name}</span>
-                        {n.duty.note && (
-                          <span className="ml-1.5 text-neutral-500">{n.duty.note}</span>
-                        )}
-                      </td>
+                      <td className="py-1.5 pr-2 font-semibold">{n.duty.name}</td>
                       <td className="py-1.5 pr-2">
                         {n.duty.owner_id ? (
                           nameOf(n.duty.owner_id)
@@ -363,10 +357,7 @@ function PersonSheet({
                 <td className="py-1.5 pr-1 tabular-nums text-neutral-500">{i + 1}</td>
                 <td className="py-1.5 pr-2">{r.deptName}</td>
                 <td className="py-1.5 pr-2 text-neutral-600">{r.groupName}</td>
-                <td className="py-1.5 pr-2">
-                  <span className="font-semibold">{r.duty.name}</span>
-                  {r.duty.note && <span className="ml-1.5 text-neutral-500">{r.duty.note}</span>}
-                </td>
+                <td className="py-1.5 pr-2 font-semibold">{r.duty.name}</td>
                 <td className="py-1.5">{kind}</td>
               </tr>
             ))}
