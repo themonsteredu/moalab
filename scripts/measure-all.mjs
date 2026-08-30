@@ -234,6 +234,11 @@ for (const [path, label] of PAGES) {
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) return false;
           if (el.closest('[aria-hidden="true"]')) return false;
+          /* 체크박스는 20px 이어도 감싼 <label> 줄 전체가 눌린다 —
+             실제 탭 대상은 그 줄이다. 이걸 안 걸러내면 멀쩡한 화면이
+             위반으로 잡혀서 진짜 위반이 묻힌다 */
+          const lab = el.closest('label');
+          if (lab && lab.getBoundingClientRect().height >= 44) return false;
           return r.height < 44;
         })
         .map((el) => (el.textContent || el.getAttribute('aria-label') || '?').trim().slice(0, 14));

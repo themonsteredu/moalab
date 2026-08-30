@@ -13,6 +13,15 @@ export interface NavItem {
   icon: IconName;
   /** 원장만 보이는 메뉴 */
   admin?: boolean;
+  /**
+   * **아직 안 쓰는 것.** 화면은 만들어뒀지만 내용이 아직 없는 메뉴다
+   * (모의수업·강사양성은 뼈대만, 갤러리는 앨범 0건).
+   *
+   * 지우지는 않는다 — 지우면 첫 한 건을 넣을 방법이 없어진다.
+   * 대신 아래 묶음으로 내려서, 매일 쓰는 메뉴가 이것들에 밀리지 않게 한다.
+   * 쓰기 시작하면 이 표시만 떼면 제자리로 올라온다.
+   */
+  quiet?: boolean;
 }
 
 /**
@@ -28,8 +37,8 @@ export const WORK_NAV: NavItem[] = [
   { href: '/task', label: '업무', icon: 'list' },
   { href: '/apps', label: '프로그램계획', icon: 'doc' },
   { href: '/verify', label: '프로그램검증', icon: 'checkCircle' },
-  { href: '/mock', label: '모의수업', icon: 'present' },
-  { href: '/training', label: '강사양성', icon: 'cap' },
+  { href: '/mock', label: '모의수업', icon: 'present', quiet: true },
+  { href: '/training', label: '강사양성', icon: 'cap', quiet: true },
   // 역할분장은 강사양성 옆이다 — 둘 다 '사람' 쪽 일이고,
   // 한 번 정하면 오래 가는 화면이라 자주 쓰는 메뉴를 밀어내지 않는다
   { href: '/roles', label: '역할분장', icon: 'target' },
@@ -39,7 +48,7 @@ export const RESOURCE_NAV: NavItem[] = [
   { href: '/cost', label: '원가', icon: 'won' },
   // 원가(계획) 바로 아래에 지출(실제)을 둔다 — 돈 얘기는 붙어 있어야 비교가 된다
   { href: '/expense', label: '지출결의서', icon: 'receipt' },
-  { href: '/gallery', label: '갤러리', icon: 'image' },
+  { href: '/gallery', label: '갤러리', icon: 'image', quiet: true },
   { href: '/schedule', label: '일정', icon: 'calendar' },
   { href: '/admin', label: '관리', icon: 'users', admin: true },
 ];
@@ -81,6 +90,22 @@ export function BottomNav() {
     setMoreOpen(false);
   }, [pathname]);
 
+  const moreTile = (t: NavItem) => {
+    const active = isActive(pathname, t.href);
+    return (
+      <Link
+        key={t.href}
+        href={t.href}
+        className={`flex min-h-[74px] flex-col items-center justify-center gap-1.5 rounded-xl border transition ${
+          active ? 'border-brand bg-brand-50 text-brand-700' : 'border-neutral-200 bg-surface text-neutral-600'
+        }`}
+      >
+        <Icon name={t.icon} size={20} />
+        <span className="text-[12px] font-bold">{t.label}</span>
+      </Link>
+    );
+  };
+
   return (
     <>
       {moreOpen && (
@@ -89,25 +114,17 @@ export function BottomNav() {
             className="absolute inset-x-0 bottom-[56px] rounded-t-2xl border-t border-neutral-200 bg-surface p-3 safe-bottom"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="grid grid-cols-3 gap-2">
-              {more.map((t) => {
-                const active = isActive(pathname, t.href);
-                return (
-                  <Link
-                    key={t.href}
-                    href={t.href}
-                    className={`flex min-h-[74px] flex-col items-center justify-center gap-1.5 rounded-xl border transition ${
-                      active
-                        ? 'border-brand bg-brand-50 text-brand-700'
-                        : 'border-neutral-200 bg-surface text-neutral-600'
-                    }`}
-                  >
-                    <Icon name={t.icon} size={20} />
-                    <span className="text-[12px] font-bold">{t.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
+            {/* 쓰는 것 먼저, 아직 안 쓰는 것(모의수업·강사양성·갤러리)은 아래로.
+                섞어두면 매일 쓰는 업무·지출이 빈 화면들 사이에 파묻힌다 */}
+            <div className="grid grid-cols-3 gap-2">{more.filter((t) => !t.quiet).map(moreTile)}</div>
+            {more.some((t) => t.quiet) && (
+              <>
+                <p className="mb-1.5 mt-3 px-1 text-[11px] font-bold text-neutral-400">아직 안 쓰는 것</p>
+                <div className="grid grid-cols-3 gap-2 opacity-60">
+                  {more.filter((t) => t.quiet).map(moreTile)}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -154,6 +171,7 @@ export function SideNav() {
   const pathname = usePathname();
   const work = useVisible(WORK_NAV);
   const resource = useVisible(RESOURCE_NAV);
+  const quiet = [...work, ...resource].filter((t) => t.quiet);
   const { session, signOut } = useSession();
 
   const link = (t: NavItem) => {
@@ -189,10 +207,20 @@ export function SideNav() {
       </Link>
 
       <nav className="flex flex-1 flex-col gap-1">
-        {work.map(link)}
+        {work.filter((t) => !t.quiet).map(link)}
 
         <p className="mb-1 mt-5 px-3 text-[10.5px] font-bold tracking-wide text-sidebar-text/70">자료</p>
-        {resource.map(link)}
+        {resource.filter((t) => !t.quiet).map(link)}
+
+        {/* 아직 내용이 없는 메뉴는 맨 아래로. 지우지 않는 이유는 NavItem.quiet 주석에 */}
+        {quiet.length > 0 && (
+          <>
+            <p className="mb-1 mt-5 px-3 text-[10.5px] font-bold tracking-wide text-sidebar-text/50">
+              아직 안 쓰는 것
+            </p>
+            <span className="opacity-60">{quiet.map(link)}</span>
+          </>
+        )}
       </nav>
 
       {session && (
