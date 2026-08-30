@@ -93,6 +93,38 @@ export interface RevenueShareResult {
 /** 계산 화면에서 쓰기 좋은 결과 타입 별칭. */
 export type RevenueShareCalculation = RevenueShareResult;
 
+export type RevenueShareRateStatus = 'undecided' | 'draft' | 'agreed';
+
+/** 프로그램 하나의 월 계산 결과를 월 전체 합계로 묶을 때 필요한 최소 스냅샷. */
+export interface MonthlyRevenueShareSnapshot {
+  rateStatus: RevenueShareRateStatus;
+  calculation: RevenueShareResult;
+  /** 멤버가 나중에 비활성화돼도 당시 이름을 보여주기 위한 id → 이름 스냅샷. */
+  memberNames?: Record<string, string>;
+}
+
+export interface MonthlyMemberRevenueShare {
+  memberId: string;
+  memberName?: string;
+  baseAmount: number;
+  performanceAmount: number;
+  totalAmount: number;
+  programCount: number;
+}
+
+export interface MonthlyRevenueShareSummary {
+  settlementCount: number;
+  grossAmount: number;
+  directCosts: number;
+  contributionProfit: number;
+  deficitAmount: number;
+  totalDistributed: number;
+  undecidedCount: number;
+  draftCount: number;
+  agreedCount: number;
+  members: MonthlyMemberRevenueShare[];
+}
+
 export interface IncentiveRecommendation {
   /** 누진 구간으로 계산한 추천 금액(정수 원, 1원 미만 버림) */
   amount: number;
@@ -290,6 +322,113 @@ export function calculateRevenueShare(input: RevenueShareInput): RevenueShareRes
     pools,
     members,
     totalDistributed,
+  };
+}
+
+/**
+ * 여러 프로그램의 월 계산 결과를 사람별로 합친다.
+ *
+ * 누진 영업·제안서 금액은 프로그램마다 먼저 계산되어야 한다. 월 전체 이익을 합친 뒤
+ * 다시 누진율을 적용하면 프로그램별 계산과 다른 값이 되므로, 이 함수는 이미 끝난
+ * 프로그램 계산을 더하기만 한다.
+ */
+export function aggregateMonthlyRevenueShares(
+  settlements: MonthlyRevenueShareSnapshot[],
+): MonthlyRevenueShareSummary {
+  const summary: Omit<MonthlyRevenueShareSummary, 'members'> = {
+    settlementCount: settlements.length,
+    grossAmount: 0,
+    directCosts: 0,
+    contributionProfit: 0,
+    deficitAmount: 0,
+    totalDistributed: 0,
+    undecidedCount: 0,
+    draftCount: 0,
+    agreedCount: 0,
+  };
+  const memberMap = new Map<string, MonthlyMemberRevenueShare>();
+
+  for (const [index, settlement] of settlements.entries()) {
+    const calculation = settlement?.calculation;
+    const amounts = [
+      calculation?.grossAmount,
+      calculation?.directCosts,
+      calculation?.contributionProfit,
+      calculation?.deficitAmount,
+      calculation?.totalDistributed,
+    ];
+    if (amounts.some((amount) => !Number.isSafeInteger(amount) || amount! < 0)) {
+      throw new RevenueShareValidationError([`${index + 1}번째 월 계산 스냅샷의 금액이 올바르지 않아요.`]);
+    }
+    if (!Array.isArray(calculation.members)) {
+      throw new RevenueShareValidationError([`${index + 1}번째 월 계산 스냅샷에 멤버 결과가 없어요.`]);
+    }
+    const invalidMember = calculation.members.some((member) => {
+      const hasPoolAmounts = Boolean(
+        member?.poolAmounts && typeof member.poolAmounts === 'object' && !Array.isArray(member.poolAmounts),
+      );
+      const poolAmounts = hasPoolAmounts
+        ? Object.values(member.poolAmounts)
+        : [];
+      return (
+        typeof member?.memberId !== 'string' || !member.memberId ||
+        !hasPoolAmounts ||
+        !Number.isSafeInteger(member.baseAmount) || member.baseAmount < 0 ||
+        !Number.isSafeInteger(member.totalAmount) || member.totalAmount < 0 ||
+        poolAmounts.some((amount) => !Number.isSafeInteger(amount) || amount < 0)
+      );
+    });
+    if (invalidMember) {
+      throw new RevenueShareValidationError([`${index + 1}번째 월 계산 스냅샷의 멤버 금액이 올바르지 않아요.`]);
+    }
+    const memberTotal = calculation.members.reduce((sum, member) => sum + member.totalAmount, 0);
+    if (
+      calculation.totalDistributed !== calculation.contributionProfit ||
+      memberTotal !== calculation.totalDistributed
+    ) {
+      throw new RevenueShareValidationError([`${index + 1}번째 월 계산 스냅샷의 배분 합계가 맞지 않아요.`]);
+    }
+
+    summary.grossAmount += calculation.grossAmount;
+    summary.directCosts += calculation.directCosts;
+    summary.contributionProfit += calculation.contributionProfit;
+    summary.deficitAmount += calculation.deficitAmount;
+    summary.totalDistributed += calculation.totalDistributed;
+    if (
+      !Number.isSafeInteger(summary.grossAmount) ||
+      !Number.isSafeInteger(summary.directCosts) ||
+      !Number.isSafeInteger(summary.contributionProfit) ||
+      !Number.isSafeInteger(summary.deficitAmount) ||
+      !Number.isSafeInteger(summary.totalDistributed)
+    ) {
+      throw new RevenueShareValidationError(['월 합계가 안전하게 계산할 수 있는 금액 범위를 넘었어요.']);
+    }
+    if (settlement.rateStatus === 'agreed') summary.agreedCount += 1;
+    else if (settlement.rateStatus === 'draft') summary.draftCount += 1;
+    else summary.undecidedCount += 1;
+
+    for (const member of calculation.members) {
+      const performanceAmount = Object.values(member.poolAmounts).reduce((sum, amount) => sum + amount, 0);
+      const current = memberMap.get(member.memberId) ?? {
+        memberId: member.memberId,
+        memberName: settlement.memberNames?.[member.memberId],
+        baseAmount: 0,
+        performanceAmount: 0,
+        totalAmount: 0,
+        programCount: 0,
+      };
+      current.memberName ??= settlement.memberNames?.[member.memberId];
+      current.baseAmount += member.baseAmount;
+      current.performanceAmount += performanceAmount;
+      current.totalAmount += member.totalAmount;
+      current.programCount += 1;
+      memberMap.set(member.memberId, current);
+    }
+  }
+
+  return {
+    ...summary,
+    members: [...memberMap.values()].sort((a, b) => a.memberId.localeCompare(b.memberId)),
   };
 }
 

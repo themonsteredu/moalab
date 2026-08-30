@@ -91,6 +91,50 @@ console.log('--- 기본 1/N + 성과 풀 ---');
   });
 }
 
+console.log('\n--- 월별 여러 프로그램 합산 ---');
+{
+  const creatorProgram = calc({
+    pools: [pool({ id: 'creator', ratePercent: 20, memberIds: ['m1'] })],
+  });
+  const salesProgram = calc({
+    grossAmount: 50_000,
+    directCosts: 10_000,
+    pools: [pool({ id: 'sales', kind: 'sales', ratePercent: 25, memberIds: ['m2'] })],
+  });
+  const monthly = R.aggregateMonthlyRevenueShares([
+    {
+      rateStatus: 'undecided',
+      calculation: creatorProgram,
+      memberNames: { m1: '가', m2: '나', m3: '다', m4: '라', m5: '마' },
+    },
+    { rateStatus: 'draft', calculation: salesProgram },
+  ]);
+  eq('두 프로그램 월 금액 합계', {
+    count: monthly.settlementCount,
+    gross: monthly.grossAmount,
+    costs: monthly.directCosts,
+    profit: monthly.contributionProfit,
+    distributed: monthly.totalDistributed,
+  }, { count: 2, gross: 150_000, costs: 10_000, profit: 140_000, distributed: 140_000 });
+  eq('월 사람별 기본+성과 합산', Object.fromEntries(monthly.members.map((m) => [m.memberId, m.totalAmount])), {
+    m1: 42_000, m2: 32_000, m3: 22_000, m4: 22_000, m5: 22_000,
+  });
+  eq('월 상태별 가안 수', [monthly.undecidedCount, monthly.draftCount, monthly.agreedCount], [1, 1, 0]);
+  eq('당시 멤버 이름과 프로그램 수 보존', [monthly.members[0].memberName, monthly.members[0].programCount], ['가', 2]);
+
+  const reversed = R.aggregateMonthlyRevenueShares([
+    { rateStatus: 'draft', calculation: salesProgram },
+    { rateStatus: 'undecided', calculation: creatorProgram },
+  ]);
+  eq('프로그램 순서가 바뀌어도 월 합계 동일',
+    monthly.members.map((m) => [m.memberId, m.totalAmount]),
+    reversed.members.map((m) => [m.memberId, m.totalAmount]),
+  );
+  throwsValidation('깨진 월 스냅샷 합계 차단', () => R.aggregateMonthlyRevenueShares([
+    { rateStatus: 'draft', calculation: { ...creatorProgram, totalDistributed: 99_999 } },
+  ]));
+}
+
 console.log('\n--- 여러 풀과 남은 비율 ---');
 {
   const r = calc({

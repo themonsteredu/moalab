@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { calcSheet } from '@/lib/cost';
-import { commaNumber, digitsOnly } from '@/lib/expense';
+import { commaNumber, digitsOnly, monthLabel, shiftMonth, thisMonth } from '@/lib/expense';
 import { won } from '@/lib/format';
 import { logActivity } from '@/lib/log';
 import {
@@ -29,6 +29,8 @@ import type {
   MemberPublic,
   RevenueFundingType,
   RevenueSharePlan,
+  RevenueShareMonth,
+  RevenueShareRateStatus,
   RevenueSharePoolKind,
   RevenueSharePoolRule,
 } from '@/lib/types';
@@ -79,6 +81,33 @@ const POOL_META: Record<
     desc: '별도로 합의한 성과',
   },
 };
+
+const RATE_STATUS_META: Record<
+  RevenueShareRateStatus,
+  { label: string; hint: string; tone: string }
+> = {
+  undecided: {
+    label: '비율 미정',
+    hint: '현재 비율은 비교를 위한 시작값이에요. 지급액으로 확정되지 않아요.',
+    tone: 'border-amber-200 bg-amber-50 text-amber-800',
+  },
+  draft: {
+    label: '검토안',
+    hint: '팀이 검토 중인 비율이에요. 바꾸면 이 달 예상액도 다시 계산돼요.',
+    tone: 'border-blue-200 bg-blue-50 text-blue-800',
+  },
+  agreed: {
+    label: '합의됨',
+    hint: '팀이 합의한 비율로 표시했지만, 이 화면은 아직 지급 확정 원장이 아니에요.',
+    tone: 'border-green-200 bg-green-50 text-green-800',
+  },
+};
+
+const MONTH_KEY_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function monthKeyOf(row: RevenueShareMonth): string {
+  return row.settlement_month.slice(0, 7);
+}
 
 interface CostPreset {
   sheet: CostSheet;
@@ -166,12 +195,39 @@ function poolInput(pool: RevenueSharePoolRule, contributionProfit: number): Shar
 }
 
 export default function RevenueSharePage() {
+  return (
+    <Suspense fallback={<RevenuePageFallback />}>
+      <RevenueSharePageContent />
+    </Suspense>
+  );
+}
+
+function RevenuePageFallback() {
+  return (
+    <>
+      <PageHeader title="수익배분" back="/revenue" />
+      <div className="space-y-3 px-4 py-4">
+        <CardSkeleton rows={4} />
+      </div>
+    </>
+  );
+}
+
+function RevenueSharePageContent() {
   const { appId } = useParams<{ appId: string }>();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { session, isAdmin } = useSession();
   const toast = useToast();
+  const loadGeneration = useRef(0);
+
+  const requestedMonth = searchParams.get('month');
+  const month = requestedMonth && MONTH_KEY_RE.test(requestedMonth) ? requestedMonth : thisMonth();
 
   const [app, setApp] = useState<AppRow | null>(null);
   const [members, setMembers] = useState<MemberPublic[]>([]);
+  const [monthlyRows, setMonthlyRows] = useState<RevenueShareMonth[]>([]);
+  const [rateStatus, setRateStatus] = useState<RevenueShareRateStatus>('undecided');
   const [costPresets, setCostPresets] = useState<CostPreset[]>([]);
   const [selectedCostId, setSelectedCostId] = useState('');
   const [fundingType, setFundingType] = useState<RevenueFundingType>('private');
@@ -181,20 +237,31 @@ export default function RevenueSharePage() {
   const [pools, setPools] = useState<RevenueSharePoolRule[]>([]);
   const [note, setNote] = useState('');
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [loadedMonth, setLoadedMonth] = useState<string | null>(null);
+  const [monthStorageReady, setMonthStorageReady] = useState(true);
+  const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError('');
+    setLoadedMonth(null);
     try {
-      const [appRes, memberRes, planRes, sheetRes] = await Promise.all([
+      const [appRes, memberRes, planRes, monthRes, sheetRes] = await Promise.all([
         supabase.from('apps').select('*').eq('id', appId).maybeSingle(),
-        supabase.from('members_public').select('*').eq('active', true).order('sort_order').order('name'),
+        supabase.from('members_public').select('*').order('sort_order').order('name'),
         supabase.from('revenue_share_plans').select('*').eq('app_id', appId).maybeSingle(),
+        supabase
+          .from('revenue_share_months')
+          .select('*')
+          .eq('app_id', appId)
+          .order('settlement_month', { ascending: false }),
         supabase.from('cost_sheets').select('*').eq('app_id', appId).order('updated_at', { ascending: false }),
       ]);
+      if (generation !== loadGeneration.current) return;
       if (appRes.error) throw appRes.error;
       if (memberRes.error) throw memberRes.error;
       if (sheetRes.error) throw sheetRes.error;
@@ -202,26 +269,35 @@ export default function RevenueSharePage() {
 
       const nextApp = appRes.data as AppRow;
       const nextMembers = (memberRes.data ?? []) as MemberPublic[];
-      const plan = planRes.error ? null : (planRes.data as RevenueSharePlan | null);
+      const nextPlan = planRes.error ? null : (planRes.data as RevenueSharePlan | null);
+      const nextMonthlyRows = monthRes.error ? [] : ((monthRes.data ?? []) as RevenueShareMonth[]);
+      const savedMonth = nextMonthlyRows.find((row) => monthKeyOf(row) === month) ?? null;
       const sheets = (sheetRes.data ?? []) as CostSheet[];
 
       setApp(nextApp);
       setMembers(nextMembers);
+      setMonthlyRows(nextMonthlyRows);
+      setMonthStorageReady(!monthRes.error);
       setBaseMemberIds(
-        plan?.base_member_ids?.filter((id) => nextMembers.some((m) => m.id === id)) ??
-          nextMembers.map((m) => m.id),
+        (savedMonth?.base_member_ids ?? nextPlan?.base_member_ids)?.filter((id) =>
+          nextMembers.some((member) => member.id === id),
+        ) ?? nextMembers.filter((member) => member.active).map((member) => member.id),
       );
-      setPools(normalizePools(plan?.pools, nextApp, nextMembers));
-      if (planRes.error) {
-        setError(friendlyError(planRes.error, '저장된 배분 기준만 불러오지 못했어요.'));
-      }
-      if (plan) {
-        setFundingType(plan.funding_type);
-        setGrossAmount(String(Math.round(Number(plan.gross_amount) || 0)));
-        setDirectCosts(String(Math.round(Number(plan.direct_costs) || 0)));
-        setNote(plan.note ?? '');
-        setSavedAt(plan.updated_at);
-      }
+      setPools(normalizePools(savedMonth?.pools ?? nextPlan?.pools, nextApp, nextMembers));
+      setFundingType(savedMonth?.funding_type ?? nextPlan?.funding_type ?? 'private');
+      // 새 달에 과거 예상 매출이 자동으로 복사되면 실제 매출처럼 보이므로 반드시 0원부터 시작한다.
+      setGrossAmount(savedMonth ? String(Math.round(Number(savedMonth.gross_amount) || 0)) : '0');
+      setDirectCosts(savedMonth ? String(Math.round(Number(savedMonth.direct_costs) || 0)) : '0');
+      setRateStatus(savedMonth?.rate_status ?? 'undecided');
+      setNote(savedMonth?.note ?? '');
+      setSavedAt(savedMonth?.updated_at ?? null);
+      setLoadedMonth(month);
+      setDirty(false);
+
+      const warnings = [];
+      if (planRes.error) warnings.push(friendlyError(planRes.error, '프로그램 기본안은 불러오지 못했어요.'));
+      if (monthRes.error) warnings.push(friendlyError(monthRes.error, '월별 계산안은 불러오지 못했어요.'));
+      if (warnings.length > 0) setError(warnings.join(' '));
 
       if (sheets.length === 0) {
         setCostPresets([]);
@@ -230,6 +306,7 @@ export default function RevenueSharePage() {
           .from('cost_items')
           .select('*')
           .in('sheet_id', sheets.map((s) => s.id));
+        if (generation !== loadGeneration.current) return;
         if (itemError) throw itemError;
         const items = (itemData ?? []) as CostItem[];
         setCostPresets(
@@ -244,11 +321,12 @@ export default function RevenueSharePage() {
         );
       }
     } catch (e) {
+      if (generation !== loadGeneration.current) return;
       setError(friendlyError(e, '수익배분 기준을 불러오지 못했어요. 다시 시도해주세요.'));
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
-  }, [appId]);
+  }, [appId, month]);
 
   useEffect(() => {
     void load();
@@ -283,6 +361,8 @@ export default function RevenueSharePage() {
 
   const updatePool = (id: string, patch: Partial<RevenueSharePoolRule>) => {
     setPools((current) => current.map((pool) => (pool.id === id ? { ...pool, ...patch } : pool)));
+    setRateStatus((current) => (current === 'agreed' ? 'draft' : current));
+    setDirty(true);
   };
 
   const applyCostPreset = () => {
@@ -290,39 +370,82 @@ export default function RevenueSharePage() {
     if (!preset) return;
     setGrossAmount(String(preset.revenue));
     setDirectCosts(String(preset.directCosts));
+    setDirty(true);
     toast.show(`${preset.sheet.title} 값을 불러왔어요.`);
+  };
+
+  const changeMonth = (nextMonth: string) => {
+    if (!MONTH_KEY_RE.test(nextMonth) || nextMonth === month) return;
+    if (saving) return;
+    if (dirty && !window.confirm('저장하지 않은 수정이 있어요. 이 달을 떠날까요?')) return;
+    loadGeneration.current += 1;
+    setLoading(true);
+    router.replace(`/revenue/${appId}?month=${nextMonth}`, { scroll: false });
+  };
+
+  const copyPreviousRules = () => {
+    if (!app) return;
+    const previous = monthlyRows
+      .filter((row) => monthKeyOf(row) < month)
+      .sort((a, b) => b.settlement_month.localeCompare(a.settlement_month))[0];
+    if (!previous) return;
+    setFundingType(previous.funding_type);
+    setBaseMemberIds(previous.base_member_ids.filter((id) => members.some((member) => member.id === id)));
+    setPools(normalizePools(previous.pools, app, members));
+    setRateStatus('undecided');
+    setDirty(true);
+    toast.show(`${monthLabel(monthKeyOf(previous))} 참여자와 비율 가안을 불러왔어요.`);
   };
 
   const save = async () => {
     if (!app || !session || !isAdmin) return;
-    if (issues.length > 0) {
-      setError(issues[0]);
+    if (!monthStorageReady || loadedMonth !== month) {
+      setError('이 달의 저장소를 확인하지 못했어요. 다시 불러온 뒤 저장해주세요.');
+      return;
+    }
+    if (issues.length > 0 || !calculation) {
+      setError(issues[0] ?? '계산할 내용을 확인해주세요.');
       return;
     }
     setSaving(true);
     setError('');
     try {
       const now = new Date().toISOString();
-      const { error: saveError } = await supabase.from('revenue_share_plans').upsert(
-        {
-          app_id: app.id,
-          funding_type: fundingType,
-          gross_amount: amountNumbers.gross,
-          direct_costs: amountNumbers.costs,
-          base_member_ids: baseMemberIds,
-          pools,
-          note: note.trim() || null,
-          updated_by: session.id,
-          updated_at: now,
-        },
-        { onConflict: 'app_id' },
-      );
+      const memberSnapshot = baseMemberIds.flatMap((id) => {
+        const member = members.find((item) => item.id === id);
+        return member ? [{ id: member.id, name: member.name }] : [];
+      });
+      const { data, error: saveError } = await supabase
+        .from('revenue_share_months')
+        .upsert(
+          {
+            app_id: app.id,
+            settlement_month: `${month}-01`,
+            rate_status: rateStatus,
+            funding_type: fundingType,
+            gross_amount: amountNumbers.gross,
+            direct_costs: amountNumbers.costs,
+            base_member_ids: baseMemberIds,
+            pools,
+            member_snapshot: memberSnapshot,
+            calculation,
+            note: note.trim() || null,
+            updated_by: session.id,
+            updated_at: now,
+          },
+          { onConflict: 'app_id,settlement_month' },
+        )
+        .select('*')
+        .single();
       if (saveError) throw saveError;
+      const saved = data as RevenueShareMonth;
+      setMonthlyRows((current) => [saved, ...current.filter((row) => row.id !== saved.id)]);
       setSavedAt(now);
-      logActivity(session.id, `${app.slug} 수익배분 기준 저장`, `app:${app.id}`);
-      toast.show('수익배분 기준을 저장했어요.');
+      setDirty(false);
+      logActivity(session.id, `${app.slug} ${monthLabel(month)} 수익배분 가안 저장`, `app:${app.id}`);
+      toast.show(`${monthLabel(month)} 계산안을 저장했어요.`);
     } catch (e) {
-      setError(friendlyError(e, '수익배분 기준을 저장하지 못했어요. 다시 눌러주세요.'));
+      setError(friendlyError(e, '월 계산안을 저장하지 못했어요. 다시 눌러주세요.'));
     } finally {
       setSaving(false);
     }
@@ -350,19 +473,140 @@ export default function RevenueSharePage() {
     );
   }
 
+  if (loadedMonth !== month) {
+    return (
+      <>
+        <PageHeader title={app.title_ko} subtitle={monthLabel(month)} back={`/revenue?month=${month}`} />
+        <div className="px-4 py-4">
+          <ErrorBanner
+            message={error || '이 달의 계산안을 불러오지 못했어요.'}
+            onRetry={() => void load()}
+          />
+        </div>
+      </>
+    );
+  }
+
   const funding = FUNDING_META[fundingType];
+  const rateMeta = RATE_STATUS_META[rateStatus];
   const activePoolCount = pools.filter((pool) => pool.active).length;
+  const currentMonthRow = monthlyRows.find((row) => monthKeyOf(row) === month) ?? null;
+  const previousMonthRow = monthlyRows
+    .filter((row) => monthKeyOf(row) < month)
+    .sort((a, b) => b.settlement_month.localeCompare(a.settlement_month))[0] ?? null;
 
   return (
     <>
       <PageHeader
         title={app.title_ko}
-        subtitle={`수익배분 · 기본 ${baseMemberIds.length}명 1/N`}
-        back="/revenue"
+        subtitle={`${monthLabel(month)} · 기본 ${baseMemberIds.length}명 1/N`}
+        back={`/revenue?month=${month}`}
       />
 
       <main className="space-y-3 px-4 pb-28 pt-3 lg:max-w-4xl">
         {error && <ErrorBanner message={error} onRetry={() => void load()} />}
+
+        <section className="card p-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => changeMonth(shiftMonth(month, -1))}
+              aria-label="지난 달"
+              className="tap w-11 shrink-0 rounded-xl border border-neutral-200 bg-surface text-neutral-500"
+            >
+              ‹
+            </button>
+            <label className="min-w-0 flex-1">
+              <span className="sr-only">계산할 달</span>
+              <input
+                type="month"
+                value={month}
+                onChange={(event) => changeMonth(event.target.value)}
+                className="field text-center text-[15px] font-bold"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => changeMonth(shiftMonth(month, 1))}
+              aria-label="다음 달"
+              className="tap w-11 shrink-0 rounded-xl border border-neutral-200 bg-surface text-neutral-500"
+            >
+              ›
+            </button>
+            {month !== thisMonth() && (
+              <button type="button" onClick={() => changeMonth(thisMonth())} className="btn-ghost h-11 shrink-0 px-3 text-[12px]">
+                이 달
+              </button>
+            )}
+          </div>
+
+          <div className="mt-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[14px] font-bold">{monthLabel(month)} 계산안</p>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-neutral-400">
+                새 달은 매출·비용 0원부터 시작하고, 저장한 달끼리 서로 덮어쓰지 않아요.
+              </p>
+            </div>
+            <span className={`chip shrink-0 ${currentMonthRow ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-500'}`}>
+              {currentMonthRow ? '저장됨' : '새 계산'}
+            </span>
+          </div>
+
+          {!currentMonthRow && previousMonthRow && (
+            <button type="button" onClick={copyPreviousRules} className="btn-ghost mt-3 w-full text-[12.5px]">
+              {monthLabel(monthKeyOf(previousMonthRow))} 참여자·비율 가안 불러오기
+            </button>
+          )}
+
+          {monthlyRows.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-neutral-100 pt-3">
+              {monthlyRows.slice(0, 8).map((row) => {
+                const savedMonth = monthKeyOf(row);
+                return (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => changeMonth(savedMonth)}
+                    aria-pressed={savedMonth === month}
+                    className={`chip ${savedMonth === month ? 'bg-brand text-white' : 'bg-neutral-100 text-neutral-600'}`}
+                  >
+                    {monthLabel(savedMonth)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-4 border-t border-neutral-100 pt-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[13px] font-bold">비율 상태</p>
+              <span className="text-[11px] text-neutral-400">나중에 언제든 변경 가능</span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="비율 합의 상태">
+              {(Object.keys(RATE_STATUS_META) as RevenueShareRateStatus[]).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  aria-pressed={rateStatus === status}
+                  onClick={() => {
+                    setRateStatus(status);
+                    setDirty(true);
+                  }}
+                  className={`min-h-[42px] rounded-xl border px-2 text-[12.5px] font-bold ${
+                    rateStatus === status
+                      ? 'border-brand bg-brand text-white'
+                      : 'border-neutral-200 bg-surface text-neutral-500'
+                  }`}
+                >
+                  {RATE_STATUS_META[status].label}
+                </button>
+              ))}
+            </div>
+            <p className={`mt-2.5 rounded-xl border px-3 py-2.5 text-[12px] leading-relaxed ${rateMeta.tone}`}>
+              {rateMeta.hint}
+            </p>
+          </div>
+        </section>
 
         <section className="card p-4">
           <div className="flex items-start gap-3">
@@ -381,25 +625,29 @@ export default function RevenueSharePage() {
           </div>
           <details className="mt-3 rounded-xl bg-neutral-50 px-3.5 py-2.5">
             <summary className="tap -my-2 cursor-pointer text-[12.5px] font-bold text-neutral-600">
-              규모별 추천 시작안 보기
+              규모별 검토용 시작안 보기
             </summary>
             <div className="space-y-1.5 pb-1 pt-2 text-[12px] leading-relaxed text-neutral-500">
               <p><b className="text-neutral-700">영업</b> 첫 300만원 15% · 다음 700만원 10% · 다음 2,000만원 7% · 초과분 5%</p>
               <p><b className="text-neutral-700">제안서</b> 첫 300만원 10% · 다음 700만원 7% · 다음 2,000만원 5% · 초과분 3%</p>
               <p>전체 금액에 한 비율을 곱하지 않고 구간마다 계산해서, 사업이 커져도 보상액이 갑자기 줄지 않아요.</p>
-              <p>법정·업계 표준이 아니라 모아랩의 합의를 시작하기 위한 값이며, 직접 입력으로 바꿀 수 있어요.</p>
+              <p>법정·업계 표준이나 확정 비율이 아니며, 비교용 가안으로만 불러와 직접 바꿀 수 있어요.</p>
             </div>
           </details>
         </section>
 
         <section className="card p-4">
           <h2 className="text-[15px] font-bold">1. 재원과 금액</h2>
-          <div className="mt-3 grid grid-cols-3 gap-1.5">
+          <div className="mt-3 grid grid-cols-3 gap-1.5" role="group" aria-label="재원 유형">
             {(Object.keys(FUNDING_META) as RevenueFundingType[]).map((type) => (
               <button
                 key={type}
                 type="button"
-                onClick={() => setFundingType(type)}
+                aria-pressed={fundingType === type}
+                onClick={() => {
+                  setFundingType(type);
+                  setDirty(true);
+                }}
                 className={`min-h-[48px] rounded-xl border px-1.5 text-[12px] font-bold transition ${
                   fundingType === type
                     ? 'border-brand bg-brand text-white'
@@ -424,7 +672,10 @@ export default function RevenueSharePage() {
                   id="revenue-gross"
                   inputMode="numeric"
                   value={commaNumber(grossAmount)}
-                  onChange={(event) => setGrossAmount(digitsOnly(event.target.value))}
+                  onChange={(event) => {
+                    setGrossAmount(digitsOnly(event.target.value));
+                    setDirty(true);
+                  }}
                   className="field pr-9 text-right font-bold tabular-nums"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-neutral-400">원</span>
@@ -437,7 +688,10 @@ export default function RevenueSharePage() {
                   id="revenue-costs"
                   inputMode="numeric"
                   value={commaNumber(directCosts)}
-                  onChange={(event) => setDirectCosts(digitsOnly(event.target.value))}
+                  onChange={(event) => {
+                    setDirectCosts(digitsOnly(event.target.value));
+                    setDirty(true);
+                  }}
                   className="field pr-9 text-right font-bold tabular-nums"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-neutral-400">원</span>
@@ -480,7 +734,15 @@ export default function RevenueSharePage() {
             <span className="chip bg-neutral-100 text-neutral-600">{baseMemberIds.length}명</span>
           </div>
           <div className="mt-3">
-            <MultiPicker options={members} selected={baseMemberIds} onChange={setBaseMemberIds} />
+            <MultiPicker
+              options={members}
+              selected={baseMemberIds}
+              onChange={(memberIds) => {
+                setBaseMemberIds(memberIds);
+                setRateStatus((current) => (current === 'agreed' ? 'draft' : current));
+                setDirty(true);
+              }}
+            />
           </div>
         </section>
 
@@ -518,28 +780,37 @@ export default function RevenueSharePage() {
         )}
 
         {calculation && (
-          <Results calculation={calculation} pools={pools} members={members} />
+          <Results calculation={calculation} pools={pools} members={members} rateStatus={rateStatus} />
         )}
 
         <section className="card p-4">
-          <label htmlFor="revenue-note" className="label">합의 메모 (선택)</label>
+          <label htmlFor="revenue-note" className="label">이 달 메모 (선택)</label>
           <textarea
             id="revenue-note"
             value={note}
-            onChange={(event) => setNote(event.target.value)}
+            onChange={(event) => {
+              setNote(event.target.value);
+              setDirty(true);
+            }}
             rows={3}
             className="field resize-none leading-relaxed"
-            placeholder="예: 2026년 9월부터 적용, 제안서 공동 작성자는 1/2"
+            placeholder="예: 8월 수금 완료, 영업 비율은 다음 회의에서 재검토"
           />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-neutral-400">
-            <span>{savedAt ? `저장된 기준 · ${new Date(savedAt).toLocaleString('ko-KR')}` : '아직 저장하지 않은 계산이에요.'}</span>
-            <span>실제 지급 내역이 아닌 배분 기준</span>
+            <span>
+              {dirty
+                ? '저장하지 않은 수정이 있어요.'
+                : savedAt
+                  ? `저장된 월 계산안 · ${new Date(savedAt).toLocaleString('ko-KR')}`
+                  : '아직 저장하지 않은 월 계산이에요.'}
+            </span>
+            <span>실제 지급·송금 내역 아님</span>
           </div>
         </section>
 
         {!isAdmin && (
           <p className="rounded-xl bg-neutral-50 px-3.5 py-3 text-center text-[12.5px] text-neutral-500">
-            누구나 숫자를 바꿔 계산해볼 수 있고, 합의 기준 저장은 원장만 할 수 있어요.
+            누구나 숫자를 바꿔 월별 예상액을 계산할 수 있고, 계산안 저장은 원장만 할 수 있어요.
           </p>
         )}
 
@@ -550,11 +821,15 @@ export default function RevenueSharePage() {
         <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-neutral-200 bg-surface/95 px-4 py-2.5 backdrop-blur safe-bottom lg:bottom-0 lg:left-[232px]">
           <div className="mx-auto flex max-w-4xl items-center gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[11.5px] text-neutral-400">최종 배분액</p>
+              <p className="truncate text-[11.5px] text-neutral-400">{monthLabel(month)} 예상 배분액</p>
               <p className="text-[17px] font-black tabular-nums">{won(calculation?.totalDistributed ?? 0)}원</p>
             </div>
-            <button onClick={() => void save()} disabled={saving || issues.length > 0} className="btn-primary min-w-[116px]">
-              {saving ? '저장 중…' : '기준 저장'}
+            <button
+              onClick={() => void save()}
+              disabled={saving || issues.length > 0 || !monthStorageReady}
+              className="btn-primary min-w-[116px]"
+            >
+              {saving ? '저장 중…' : monthStorageReady ? '계산안 저장' : '저장 준비 안 됨'}
             </button>
           </div>
         </div>
@@ -611,19 +886,21 @@ function PoolCard({
       {pool.active && (
         <div className="space-y-3 border-t border-neutral-100 px-4 py-3.5">
           {canRecommend && (
-            <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-neutral-50 p-1">
+            <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-neutral-50 p-1" role="group" aria-label="비율 입력 방식">
               <button
                 type="button"
                 onClick={() => onChange({ rate_mode: 'recommended' })}
+                aria-pressed={pool.rate_mode === 'recommended'}
                 className={`min-h-[42px] rounded-lg px-2 text-[12.5px] font-bold ${
                   pool.rate_mode === 'recommended' ? 'bg-surface text-brand shadow-sm' : 'text-neutral-400'
                 }`}
               >
-                규모 추천 자동
+                추천 가안 보기
               </button>
               <button
                 type="button"
                 onClick={() => onChange({ rate_mode: 'manual' })}
+                aria-pressed={pool.rate_mode === 'manual'}
                 className={`min-h-[42px] rounded-lg px-2 text-[12.5px] font-bold ${
                   pool.rate_mode === 'manual' ? 'bg-surface text-brand shadow-sm' : 'text-neutral-400'
                 }`}
@@ -637,7 +914,7 @@ function PoolCard({
             <div className="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2.5">
               <div className="flex items-end justify-between gap-2">
                 <div>
-                  <p className="text-[11px] font-bold text-brand-700">규모별 누진 추천</p>
+                  <p className="text-[11px] font-bold text-brand-700">규모별 누진 검토안</p>
                   <p className="mt-0.5 text-[17px] font-black tabular-nums text-neutral-900">{won(recommendation.amount)}원</p>
                 </div>
                 <span className="chip bg-surface text-brand-700">실효 {recommendation.effectiveRate.toFixed(1)}%</span>
@@ -658,6 +935,23 @@ function PoolCard({
                   className="field pr-9 text-right font-bold tabular-nums"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-neutral-400">%</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5" aria-label="빠른 비율 비교">
+                {[5, 10, 15, 20].map((rate) => (
+                  <button
+                    key={rate}
+                    type="button"
+                    aria-pressed={pool.rate_percent === rate}
+                    onClick={() => onChange({ rate_percent: rate })}
+                    className={`chip min-h-[32px] px-3 ${
+                      pool.rate_percent === rate
+                        ? 'bg-brand text-white'
+                        : 'bg-neutral-100 text-neutral-600'
+                    }`}
+                  >
+                    {rate}%
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -690,10 +984,12 @@ function Results({
   calculation,
   pools,
   members,
+  rateStatus,
 }: {
   calculation: RevenueShareCalculation;
   pools: RevenueSharePoolRule[];
   members: MemberPublic[];
+  rateStatus: RevenueShareRateStatus;
 }) {
   const incentiveTotal = calculation.contributionProfit - calculation.baseAmount;
   const poolLabel = new Map(pools.map((pool) => [pool.id, POOL_META[pool.kind].short]));
@@ -702,8 +998,15 @@ function Results({
     <section className="space-y-2.5">
       <div className="card overflow-hidden">
         <div className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-[15px] font-bold">4. 계산 결과</h2>
-          <p className="mt-0.5 text-[12px] text-neutral-400">원 단위까지 합계가 정확히 맞아요.</p>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-[15px] font-bold">4. 월 예상 배분</h2>
+            <span className={`chip ${rateStatus === 'agreed' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+              {RATE_STATUS_META[rateStatus].label}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[12px] text-neutral-400">
+            원 단위까지 합계는 맞지만, 비율이 바뀌면 사람별 금액도 다시 계산돼요.
+          </p>
         </div>
         {calculation.hasLoss ? (
           <div className="m-3.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-[13px] leading-relaxed text-red-800">

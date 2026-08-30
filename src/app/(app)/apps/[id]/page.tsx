@@ -478,17 +478,17 @@ export default function AppDetailPage() {
           <CostInline appId={id} appTitle={app.title_ko} appSlug={app.slug} />
         </Section>
 
-        {/* ----------------------------------------------- 수익배분 기준 */}
+        {/* ------------------------------------------------ 월별 수익배분 */}
         <Section id="revenue" icon="won" title="수익배분">
           <div className="rounded-xl bg-neutral-50 px-3.5 py-3">
-            <p className="text-[13.5px] font-bold text-neutral-800">성과몫 + 남은 이익 1/N</p>
+            <p className="text-[13.5px] font-bold text-neutral-800">월별 성과몫 + 남은 이익 1/N</p>
             <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-500">
-              창작·사업계획서·영업 담당자는 각 성과몫을 받고, 남은 금액은 팀 기본 참여자와 똑같이
-              다시 나눠 받아요.
+              달마다 실제 수금액과 직접비를 넣고, 창작·사업계획서·영업 성과몫과 팀 기본 1/N을
+              사람별 예상액으로 계산해요.
             </p>
           </div>
           <Link href={`/revenue/${id}`} className="btn-primary mt-3 w-full">
-            이 프로그램 배분 계산하기
+            월별 배분 계산하기
           </Link>
         </Section>
 

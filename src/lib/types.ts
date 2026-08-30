@@ -209,6 +209,7 @@ export interface CostItemPhoto {
 export type RevenueFundingType = 'private' | 'public_contract' | 'grant';
 export type RevenueSharePoolKind = 'creator' | 'proposal' | 'sales' | 'custom';
 export type RevenueShareRateMode = 'manual' | 'recommended';
+export type RevenueShareRateStatus = 'undecided' | 'draft' | 'agreed';
 
 export interface RevenueSharePoolRule {
   id: string;
@@ -229,6 +230,31 @@ export interface RevenueSharePlan {
   direct_costs: number;
   base_member_ids: string[];
   pools: RevenueSharePoolRule[];
+  note: string | null;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface RevenueShareMemberSnapshot {
+  id: string;
+  name: string;
+}
+
+/** 프로그램 한 개의 한 달 수익배분 계산 스냅샷. */
+export interface RevenueShareMonth {
+  id: string;
+  app_id: string;
+  /** 해당 월의 첫날, YYYY-MM-01. DATE라 시간대 영향을 받지 않는다. */
+  settlement_month: string;
+  rate_status: RevenueShareRateStatus;
+  funding_type: RevenueFundingType;
+  gross_amount: number;
+  direct_costs: number;
+  base_member_ids: string[];
+  pools: RevenueSharePoolRule[];
+  member_snapshot: RevenueShareMemberSnapshot[];
+  calculation: import('./revenueShare').RevenueShareCalculation;
   note: string | null;
   updated_by: string | null;
   updated_at: string;
