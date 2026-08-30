@@ -118,6 +118,20 @@ const EXPENSES = [{
   approved: false, created_at: '2026-08-18T00:00:00Z', updated_at: '2026-08-18T00:00:00Z',
 }];
 
+// 역할분장 — 부서 5 · 중분류 15 · 역할 48 · 담당자 0 (실제와 같다)
+const DEPTS = ['인사관리부', '경영지원부', '교육기획부', '영업마케팅부', '연구개발부']
+  .map((name, i) => ({ id: `d${i}`, name, head_id: null, sort_order: i, created_at: '2026-08-01T00:00:00Z' }));
+const DUTY_GROUPS = [
+  '회계·정산', '문서·총무', '채용·교육', '평가·보상', '기획', '홍보', '제휴', '수업설계',
+  '교재', '검수', '영업', '고객관리', '연구', '개발', '품질',
+].map((name, i) => ({ id: `g${i}`, dept_id: `d${Math.floor(i / 3)}`, name, sort_order: i % 3, created_at: '2026-08-01T00:00:00Z' }));
+const DUTY_NAMES = ['지출결의서 확인', '영수증 증빙 보관', '세금계산서·매출', '계약 행정문서 관리',
+  '총무 자산관리', '계정 권한 관리', '개인정보 자료보안', '계약서·공문 보관'];
+const DUTIES = Array.from({ length: 48 }, (_, i) => ({
+  id: `u${i}`, group_id: `g${i % 15}`, name: DUTY_NAMES[i % 8],
+  note: '올라온 지출을 확인한다', owner_id: null, sort_order: i, created_at: '2026-08-01T00:00:00Z',
+}));
+
 const COST_SHEETS = Array.from({ length: 10 }, (_, i) => ({
   id: `cs${i}`, title: `${TOPIC_NAMES[i]} 원가표`, app_id: `app${i}`,
   headcount: 20, price: 15000, memo: null,
@@ -132,6 +146,7 @@ function rowsFor(url) {
     apps: APPS, topics: TOPICS, rounds: ROUNDS, findings: FINDINGS,
     app_reviewers: REVIEWERS, tasks: TASKS, notices: NOTICES,
     schedules: SCHEDULES, expenses: EXPENSES, cost_sheets: COST_SHEETS,
+    departments: DEPTS, duty_groups: DUTY_GROUPS, duties: DUTIES, duty_helpers: [],
   };
   return map[table] ?? [];
 }
@@ -144,6 +159,7 @@ const PAGES = [
   ['/task', '업무'],
   ['/apps', '프로그램계획'],
   ['/verify', '프로그램검증'],
+  ['/roles', '역할분장'],
   ['/mock', '모의수업'],
   ['/training', '강사양성'],
   ['/cost', '원가'],

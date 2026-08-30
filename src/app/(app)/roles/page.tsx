@@ -43,11 +43,12 @@ type View = 'dept' | 'person' | 'me';
  * 보기 세 가지 — 원장은 `부서별`, 강사는 `내 역할` 로 시작한다.
  * (원장은 나누는 쪽이라 자기 역할부터 보면 정작 미정이 안 보인다 — 업무 화면과 같은 판단)
  *
- * **권한은 `/apps` 와 같은 갈래다.**
- *   · 역할(소분류) 추가·수정·담당자 지정 → **전원**. 원장만 두면 등록이 밀린다
- *     (`+ 새 앱` 을 전원에게 연 것과 같은 이유). 자기가 맡을 역할은 자기가 집는다
- *   · 부서·중분류(조직의 틀) 만들고 고치고 지우기 → **원장만**.
- *     한 사람이 누르면 모두의 역할표 모양이 바뀐다 (주제 관리·보관과 같은 갈래)
+ * **만드는 건 전원, 지우는 건 원장만.**
+ *   · 부서·중분류·역할 추가와 수정 → **전원**. 원장만 두면 등록이 밀린다
+ *     (`+ 새 앱` 을 전원에게 연 것과 같은 이유). 자기가 맡을 역할은 자기가 집고,
+ *     "회계·정산" 같은 칸도 그 일을 하는 사람이 쪼개는 게 빠르다
+ *   · **지우기만 원장이다.** 부서를 지우면 그 안의 중분류·역할이 `cascade` 로
+ *     통째로 사라진다 — 되돌릴 수 없는 것과 만드는 것은 갈래가 다르다
  *
  * **트리는 두 단계가 다 접힌다.** 부서만 접으면 부서 하나를 열었을 때
  * 소분류가 전부 쏟아져서(1499px) 세로 스크롤이 감당이 안 됐다.
@@ -62,7 +63,12 @@ export default function RolesPage() {
   const [duties, setDuties] = useState<Duty[]>([]);
   const [helpers, setHelpers] = useState<DutyHelper[]>([]);
   const [error, setError] = useState('');
+  /* 원장은 나누는 쪽이라 `부서별`, 강사는 `내 역할` 로 시작한다.
+     다만 **맡은 역할이 하나도 없으면 강사도 `전체` 로 연다** — 안 그러면 다섯 명
+     전원이 빈 화면부터 본다 (업무 화면에서 원장이 빈 '내 업무' 로 시작하던 것과 같다).
+     역할이 생긴 뒤로는 원래대로 `내 역할` 이다. */
   const [view, setView] = useState<View>(isAdmin ? 'dept' : 'me');
+  const [viewPinned, setViewPinned] = useState(false);
   const [q, setQ] = useState('');
   const [onlyOpen, setOnlyOpen] = useState(false);
 
@@ -132,6 +138,18 @@ export default function RolesPage() {
 
   const people = useMemo(() => groupByPerson(tree, members), [tree, members]);
   const mine = useMemo(() => myDuties(tree, session?.id), [tree, session]);
+
+  /* 강사가 맡은 역할이 0개면 '전체' 로 연다. 손으로 탭을 한 번 누른 뒤에는(viewPinned)
+     다시 안 건드린다 — 고른 걸 되돌려버리면 그게 더 답답하다 */
+  useEffect(() => {
+    if (isAdmin || viewPinned || depts === null) return;
+    if (mine.own.length + mine.help.length === 0) setView('dept');
+  }, [isAdmin, viewPinned, depts, mine]);
+
+  const pickView = (v: View) => {
+    setViewPinned(true);
+    setView(v);
+  };
 
   /* ------------------------------------------------------------ 저장 */
 
@@ -310,21 +328,21 @@ export default function RolesPage() {
             ? '불러오는 중…'
             : `부서 ${totals.depts} · 역할 ${totals.duties}${totals.unassigned ? ` · 미정 ${totals.unassigned}` : ''}`
         }
+        /* 부서 만들기도 전원에게. 원장만 두면 "이런 칸이 필요한데요" 를 말로 전하고
+           기다려야 한다 — 등록이 밀리는 그 문제가 층만 바뀌어 그대로 생긴다 */
         right={
-          isAdmin ? (
-            <button
-              onClick={() => {
-                setDeptSheet('new');
-                setNameDraft('');
-                setHeadDraft('');
-                setSheetErr('');
-              }}
-              className="btn-primary px-3 text-[13.5px]"
-            >
-              <Icon name="plus" size={15} />
-              부서
-            </button>
-          ) : undefined
+          <button
+            onClick={() => {
+              setDeptSheet('new');
+              setNameDraft('');
+              setHeadDraft('');
+              setSheetErr('');
+            }}
+            className="btn-primary px-3 text-[13.5px]"
+          >
+            <Icon name="plus" size={15} />
+            부서
+          </button>
         }
       />
 
@@ -340,7 +358,7 @@ export default function RolesPage() {
           {views.map((v) => (
             <button
               key={v.key}
-              onClick={() => setView(v.key)}
+              onClick={() => pickView(v.key)}
               aria-pressed={view === v.key}
               className={`tap flex-1 rounded-xl border text-[13px] font-bold transition ${
                 view === v.key ? 'border-brand bg-brand text-white' : 'border-neutral-200 bg-surface text-neutral-500'
@@ -360,7 +378,7 @@ export default function RolesPage() {
             desc={
               isAdmin
                 ? '오른쪽 위 + 부서로 만들거나, supabase/seed-org.sql 을 한 번 실행하면 예시가 채워져요.'
-                : '원장님이 부서를 만들면 여기 보여요.'
+                : '오른쪽 위 “+ 부서” 로 만들 수 있어요.'
             }
           />
         ) : view === 'me' ? (
@@ -369,7 +387,9 @@ export default function RolesPage() {
             <EmptyState
               icon="users"
               title="아직 맡은 역할이 없어요"
-              desc="위 '전체' 에서 역할을 눌러 주담당에 내 이름을 넣으면 여기 모여요."
+              /* 예전엔 "역할을 눌러 내 이름을 넣으면" 만 적혀 있어서, **이미 있는 역할을
+                 맡으라는 말**로만 읽혔다. 새로 만들 수도 있다는 걸 같이 적는다 */
+              desc="위 '전체' 에서 역할을 눌러 주담당에 내 이름을 넣으면 여기 모여요. 없는 역할은 '+ 역할 추가' 로 직접 만들어도 됩니다."
             />
           ) : (
             <section className="card p-3.5 lg:max-w-3xl">
@@ -497,20 +517,18 @@ export default function RolesPage() {
                         </span>
                       }
                       right={
-                        isAdmin ? (
-                          <button
-                            onClick={() => {
-                              setDeptSheet(d.dept);
-                              setNameDraft(d.dept.name);
-                              setHeadDraft(d.dept.head_id ?? '');
-                              setSheetErr('');
-                            }}
-                            aria-label={`${d.dept.name} 고치기`}
-                            className="tap w-9 shrink-0 text-neutral-400"
-                          >
-                            <Icon name="dots" size={16} />
-                          </button>
-                        ) : undefined
+                        <button
+                          onClick={() => {
+                            setDeptSheet(d.dept);
+                            setNameDraft(d.dept.name);
+                            setHeadDraft(d.dept.head_id ?? '');
+                            setSheetErr('');
+                          }}
+                          aria-label={`${d.dept.name} 고치기`}
+                          className="tap w-9 shrink-0 text-neutral-400"
+                        >
+                          <Icon name="dots" size={16} />
+                        </button>
                       }
                     >
                       {d.dept.head_id && (
@@ -544,19 +562,17 @@ export default function RolesPage() {
                                 </span>
                               }
                               right={
-                                isAdmin ? (
-                                  <button
-                                    onClick={() => {
-                                      setGroupSheet({ group: g.group, deptId: d.dept.id, deptName: d.dept.name });
-                                      setNameDraft(g.group.name);
-                                      setSheetErr('');
-                                    }}
-                                    aria-label={`${g.group.name} 고치기`}
-                                    className="tap w-8 shrink-0 text-neutral-300"
-                                  >
-                                    <Icon name="dots" size={14} />
-                                  </button>
-                                ) : undefined
+                                <button
+                                  onClick={() => {
+                                    setGroupSheet({ group: g.group, deptId: d.dept.id, deptName: d.dept.name });
+                                    setNameDraft(g.group.name);
+                                    setSheetErr('');
+                                  }}
+                                  aria-label={`${g.group.name} 고치기`}
+                                  className="tap w-8 shrink-0 text-neutral-300"
+                                >
+                                  <Icon name="dots" size={14} />
+                                </button>
                               }
                             >
                               <ul className="divide-y divide-neutral-100 border-t border-neutral-100">
@@ -581,19 +597,18 @@ export default function RolesPage() {
                         </div>
                       )}
 
-                      {isAdmin && (
-                        <button
-                          onClick={() => {
-                            setGroupSheet({ group: null, deptId: d.dept.id, deptName: d.dept.name });
-                            setNameDraft('');
-                            setSheetErr('');
-                          }}
-                          className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-bold text-neutral-500"
-                        >
-                          <Icon name="plus" size={13} />
-                          중분류 추가
-                        </button>
-                      )}
+                      {/* 중분류 추가도 전원에게 — 일하는 사람이 칸을 쪼개는 게 빠르다 */}
+                      <button
+                        onClick={() => {
+                          setGroupSheet({ group: null, deptId: d.dept.id, deptName: d.dept.name });
+                          setNameDraft('');
+                          setSheetErr('');
+                        }}
+                        className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-bold text-neutral-500"
+                      >
+                        <Icon name="plus" size={13} />
+                        중분류 추가
+                      </button>
                     </Collapsible>
                   </section>
                 ))}
@@ -693,19 +708,23 @@ export default function RolesPage() {
                   아래로
                 </button>
               </div>
-              <button
-                onClick={() =>
-                  setConfirmDel({
-                    kind: 'dept',
-                    id: deptSheet.id,
-                    name: deptSheet.name,
-                    n: tree.find((t) => t.dept.id === deptSheet.id)?.total ?? 0,
-                  })
-                }
-                className="tap w-full gap-1.5 rounded-xl border border-neutral-300 text-[13.5px] font-bold text-neutral-500"
-              >
-                <Icon name="trash" size={14} />이 부서 지우기
-              </button>
+              {/* ⚠️ 지우기만 원장이다. 고치기 시트를 전원에게 열었으니 여기서 다시 막는다 —
+                  부서를 지우면 그 안의 중분류·역할이 cascade 로 통째로 사라진다 */}
+              {isAdmin && (
+                <button
+                  onClick={() =>
+                    setConfirmDel({
+                      kind: 'dept',
+                      id: deptSheet.id,
+                      name: deptSheet.name,
+                      n: tree.find((t) => t.dept.id === deptSheet.id)?.total ?? 0,
+                    })
+                  }
+                  className="tap w-full gap-1.5 rounded-xl border border-neutral-300 text-[13.5px] font-bold text-neutral-500"
+                >
+                  <Icon name="trash" size={14} />이 부서 지우기
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -772,19 +791,21 @@ export default function RolesPage() {
                   아래로
                 </button>
               </div>
-              <button
-                onClick={() =>
-                  setConfirmDel({
-                    kind: 'group',
-                    id: groupSheet.group!.id,
-                    name: groupSheet.group!.name,
-                    n: duties.filter((t) => t.group_id === groupSheet.group!.id).length,
-                  })
-                }
-                className="tap w-full gap-1.5 rounded-xl border border-neutral-300 text-[13.5px] font-bold text-neutral-500"
-              >
-                <Icon name="trash" size={14} />이 중분류 지우기
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() =>
+                    setConfirmDel({
+                      kind: 'group',
+                      id: groupSheet.group!.id,
+                      name: groupSheet.group!.name,
+                      n: duties.filter((t) => t.group_id === groupSheet.group!.id).length,
+                    })
+                  }
+                  className="tap w-full gap-1.5 rounded-xl border border-neutral-300 text-[13.5px] font-bold text-neutral-500"
+                >
+                  <Icon name="trash" size={14} />이 중분류 지우기
+                </button>
+              )}
             </div>
           )}
         </div>
