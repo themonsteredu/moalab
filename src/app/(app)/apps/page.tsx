@@ -228,15 +228,33 @@ export default function AppsPage() {
           ))}
         </div>
 
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="프로그램 이름으로 찾기"
-          className="field mb-2.5"
-          aria-label="프로그램 검색"
-        />
+        {/* 검색과 정렬을 한 줄로. 따로 두면 그 자체로 100px 인데,
+            둘 다 '목록을 좁히는' 같은 일이라 나란히 두는 게 읽기도 쉽다 */}
+        <div className="mb-2 flex items-center gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="프로그램 이름으로 찾기"
+            className="field min-w-0 flex-1"
+            aria-label="프로그램 검색"
+          />
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
+            aria-label="정렬"
+            className="h-11 shrink-0 rounded-lg border border-neutral-300 bg-surface px-2 text-[12.5px] font-semibold text-neutral-600"
+          >
+            {SORTS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        {/* 필터 — 상태 + "빠진 것" */}
+        {/* 상태 칩과 '빠진 것' 을 **같은 가로 스크롤 줄**에 태운다.
+            줄을 나누면 그것만으로 52px 인데, 둘 다 '무엇만 볼까' 라 성격이 같다.
+            예전엔 컨트롤이 여섯 줄이었다 — 프로그램이 몇 개든 매번 그만큼 지나야 했다. */}
         <div className="no-scrollbar -mx-4 mb-2 flex gap-2 overflow-x-auto px-4">
           <Chip on={filter === 'todo'} onClick={() => setFilter('todo')}>
             할 일 {todoCount}
@@ -252,39 +270,21 @@ export default function AppsPage() {
               {STATUS_META[s].label}
             </Chip>
           ))}
-        </div>
-
-        {/* '빠진 것' 과 정렬을 한 줄로 합치고 칩은 접어둔다.
-            예전엔 컨트롤이 여섯 줄이라 첫 카드가 359px 아래에 있었다 —
-            프로그램이 5개든 21개든 매번 그만큼 지나야 했다.
-            (개수는 헤더 부제에 이미 있어서 여기서 뺐다) */}
-        <div className="mb-2 flex items-center gap-2">
-          <button
-            onClick={() => setPiecesOpen((v) => !v)}
-            aria-expanded={piecesOpen}
-            className="tap shrink-0 gap-1 rounded-full border border-neutral-300 bg-surface px-3 text-[12.5px] font-bold text-neutral-500"
-          >
-            <Icon
-              name="chevronDown"
-              size={12}
-              className={`transition-transform ${piecesOpen ? '' : '-rotate-90'}`}
-            />
-            빠진 것
-            {missingTotal > 0 && <span className="ml-0.5 text-brand">{missingTotal}</span>}
-          </button>
-          <span className="flex-1" />
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
-            aria-label="정렬"
-            className="h-11 shrink-0 rounded-lg border border-neutral-300 bg-surface px-2 text-[12.5px] font-semibold text-neutral-600"
-          >
-            {SORTS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          <span className="shrink-0 self-center border-l border-neutral-200 pl-2">
+            <button
+              onClick={() => setPiecesOpen((v) => !v)}
+              aria-expanded={piecesOpen}
+              className="tap shrink-0 gap-1 rounded-full border border-neutral-300 bg-surface px-3 text-[12.5px] font-bold text-neutral-500"
+            >
+              <Icon
+                name="chevronDown"
+                size={12}
+                className={`transition-transform ${piecesOpen ? '' : '-rotate-90'}`}
+              />
+              빠진 것
+              {missingTotal > 0 && <span className="ml-0.5 text-brand">{missingTotal}</span>}
+            </button>
+          </span>
         </div>
 
         {piecesOpen && (
@@ -368,10 +368,16 @@ export default function AppsPage() {
               const open = isOpen(g.topic);
               return (
                 <div key={g.topic} className="card overflow-hidden">
+                  {/* 접힌 머리글에 **프로그램 이름을 싣는다.**
+                      주제 16개에 프로그램 33개라 주제마다 2개꼴인데, 예전 머리글은
+                      "2개" 라고만 적혀 있어서 **두 화면을 넘겨도 프로그램 이름이
+                      하나도 안 보였다.** 이름을 실으면 펼치지 않고도 찾을 수 있다.
+                      개수·수정필요·완료는 오른쪽 배지로 옮겨 두 줄을 유지하면서도
+                      줄 높이를 87px → 약 56px 로 줄였다. */}
                   <button
                     onClick={() => toggleTopic(g.topic)}
                     aria-expanded={open}
-                    className="flex w-full items-center gap-2 px-3.5 py-3 text-left"
+                    className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left"
                   >
                     <Icon
                       name="chevronDown"
@@ -379,18 +385,28 @@ export default function AppsPage() {
                       className={`shrink-0 text-neutral-400 transition-transform ${open ? '' : '-rotate-90'}`}
                     />
                     <span className="min-w-0 flex-1">
-                      <span
-                        className={`block truncate text-[14.5px] ${
-                          g.topic === NO_TOPIC ? 'font-semibold text-neutral-500' : 'font-bold text-neutral-900'
-                        }`}
-                      >
-                        {g.topic}
+                      <span className="flex items-baseline gap-1.5">
+                        <span
+                          className={`min-w-0 truncate text-[14px] ${
+                            g.topic === NO_TOPIC ? 'font-semibold text-neutral-500' : 'font-bold text-neutral-900'
+                          }`}
+                        >
+                          {g.topic}
+                        </span>
+                        <span className="shrink-0 text-[11.5px] text-neutral-400">{g.list.length}</span>
+                        {g.fixing > 0 && (
+                          <span className="shrink-0 text-[11.5px] font-bold text-red-600">수정 {g.fixing}</span>
+                        )}
+                        {g.done > 0 && (
+                          <span className="shrink-0 text-[11.5px] font-bold text-green-700">완료 {g.done}</span>
+                        )}
                       </span>
-                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-neutral-400">
-                        {g.list.length}개
-                        {g.fixing > 0 && <span className="font-bold text-red-600">수정 필요 {g.fixing}</span>}
-                        {g.done > 0 && <span className="font-bold text-green-700">완료 {g.done}</span>}
-                      </span>
+                      {/* 펼치면 바로 아래에 같은 이름이 카드로 나오니 그때는 안 그린다 */}
+                      {!open && (
+                        <span className="mt-0.5 block truncate text-[11.5px] text-neutral-400">
+                          {g.list.map((i) => i.app.title_ko).join(' · ')}
+                        </span>
+                      )}
                     </span>
                     {/* 접혀 있어도 상태 구성이 보이게 */}
                     <span className="flex shrink-0 gap-0.5">

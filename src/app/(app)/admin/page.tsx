@@ -159,25 +159,30 @@ function MembersTab({ onToast }: { onToast: (m: string) => void }) {
             {!m.active && <p className="mt-1 text-[12px] text-neutral-500">비활성 — 로그인 목록에 안 보여요</p>}
 
             <div className="mt-3 flex gap-2">
+              {/* 44px — 셋이 나란히 있고 그중 하나가 삭제다. 36px 이라 잘못 누르기 쉬웠다.
+                  이름을 aria-label 에 넣는다 — 다섯 명이면 같은 글자의 버튼이 15개다 */}
               <button
                 onClick={() => {
                   setEditing(m);
                   setFormOpen(true);
                 }}
-                className="h-9 flex-1 rounded-lg border border-neutral-300 text-[13px] font-semibold text-neutral-600"
+                aria-label={`${m.name} 수정 / PIN 변경`}
+                className="h-11 flex-1 rounded-lg border border-neutral-300 text-[13px] font-semibold text-neutral-600"
               >
                 수정 / PIN 변경
               </button>
               <button
                 onClick={() => toggleActive(m)}
-                className="h-9 rounded-lg border border-neutral-300 px-3 text-[13px] text-neutral-500"
+                aria-label={`${m.name} ${m.active ? '비활성으로' : '활성으로'}`}
+                className="h-11 rounded-lg border border-neutral-300 px-3 text-[13px] text-neutral-500"
               >
                 {m.active ? '비활성' : '활성'}
               </button>
               {m.id !== session?.id && (
                 <button
                   onClick={() => setDeleting(m)}
-                  className="h-9 rounded-lg border border-neutral-300 px-3 text-[13px] text-red-500"
+                  aria-label={`${m.name} 삭제`}
+                  className="h-11 rounded-lg border border-neutral-300 px-3 text-[13px] text-red-500"
                 >
                   삭제
                 </button>

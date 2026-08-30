@@ -424,14 +424,21 @@ export default function HomePage() {
             강사는 '내 할 일' 부터, 원장은 '전체 현황·일정' 부터.
             내용은 그대로 두고 order-* 만 다르게 주므로 분기는 이 숫자들뿐이다. */}
         <div className="flex flex-col gap-4 lg:col-span-2">
-          {/* 달력 — 폰에서 600px 짜리 가장 큰 덩어리라 접어둔다 */}
+          {/* 달력 + 마감 타임라인 — **한 섹션이다.**
+              둘 다 "언제" 를 보는 것인데 따로 접어두니 머리글만 두 줄(96px)이었다.
+              접힌 머리글 넷이 히어로와 '내 할 일' 사이를 막고 있던 게
+              원장 홈에서 할 일이 545px 아래에 있던 이유다. */}
           <Collapsible
             id="home-cal"
-            title="달력"
+            title="일정 · 마감"
             className={isAdmin ? 'order-1' : 'order-3'}
             badge={
-              upcoming.length > 0 ? (
-                <span className="chip bg-neutral-100 text-neutral-500">다가오는 일정 {upcoming.length}</span>
+              upcoming.length > 0 || timeline.rows.length > 0 ? (
+                <span className="chip bg-neutral-100 text-neutral-500">
+                  {upcoming.length > 0 ? `일정 ${upcoming.length}` : ''}
+                  {upcoming.length > 0 && timeline.rows.length > 0 ? ' · ' : ''}
+                  {timeline.rows.length > 0 ? `마감 ${timeline.rows.length}` : ''}
+                </span>
               ) : undefined
             }
             right={
@@ -491,14 +498,38 @@ export default function HomePage() {
               )}
             </div>
           </div>
+
+          {/* 마감 타임라인 — 앞으로 4주. 달력과 같은 '언제' 라 여기 붙였다 */}
+          {timeline.rows.length > 0 && (
+            <div className="card mt-3 p-4">
+              <div className="mb-2 flex items-baseline gap-2">
+                <h3 className="text-[12.5px] font-bold text-neutral-500">마감 타임라인</h3>
+                <span className="text-[11.5px] text-neutral-400">앞으로 4주 · {timeline.rows.length}건</span>
+              </div>
+              {loading ? (
+                <Skeleton className="h-32 w-full rounded-xl" />
+              ) : (
+                <Timeline rows={timeline.rows} ticks={timeline.ticks} onPick={(id) => router.push(`/apps/${id}`)} />
+              )}
+            </div>
+          )}
           </Collapsible>
 
-          {/* 통계 3장 */}
+          {/* 통계 3장 + 팀 현황 — **한 섹션이다.** 둘 다 '지금 어떤가' 를 보는 것인데
+              따로 접어두니 머리글만 두 줄이었다. 팀 현황은 원장에게만 그린다 —
+              강사가 남의 미착수를 봐도 할 수 있는 게 없고 감시처럼 느껴진다 */}
           <Collapsible
             id="home-stats"
             title="전체 현황"
             className={isAdmin ? 'order-2' : 'order-4'}
-            badge={<span className="chip bg-neutral-100 text-neutral-500">검증 완료 {overallPct}%</span>}
+            badge={
+              <span className="flex items-center gap-1">
+                <span className="chip bg-neutral-100 text-neutral-500">검증 완료 {overallPct}%</span>
+                {isAdmin && untouched > 0 && (
+                  <span className="chip bg-amber-100 text-amber-800">팀 미착수 {untouched}</span>
+                )}
+              </span>
+            }
           >
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <StatCard
@@ -541,28 +572,13 @@ export default function HomePage() {
               <Sparkline data={activityTrend} height={34} />
             </StatCard>
           </div>
-          </Collapsible>
 
-          {/* 마감 타임라인 — 예전엔 order-3 하드코딩이라 강사 화면에서
-              '내 할 일 → 공지' 다음에 원장용 정보가 끼어들었다 */}
-          <Collapsible
-            id="home-timeline"
-            title="마감 타임라인"
-            className={isAdmin ? 'order-3' : 'order-5'}
-            badge={
-              timeline.rows.length > 0 ? (
-                <span className="chip bg-neutral-100 text-neutral-500">{timeline.rows.length}건</span>
-              ) : undefined
-            }
-            right={<span className="text-[11.5px] text-neutral-400">앞으로 4주</span>}
-          >
-            <div className="card p-4">
-              {loading ? (
-                <Skeleton className="h-32 w-full rounded-xl" />
-              ) : (
-                <Timeline rows={timeline.rows} ticks={timeline.ticks} onPick={(id) => router.push(`/apps/${id}`)} />
-              )}
+          {isAdmin && (
+            <div className="mt-3">
+              <h3 className="mb-1.5 text-[12.5px] font-bold text-neutral-500">누가 뭘 하고 있나</h3>
+              {loading ? <CardSkeleton rows={3} /> : <TeamBoard work={teamWork} meId={meId} />}
             </div>
+          )}
           </Collapsible>
 
           {/* 공지 — 전체 공지를 홈에서도 훑을 수 있게 */}
@@ -696,22 +712,6 @@ export default function HomePage() {
             )}
           </Collapsible>
 
-          {/* 팀 현황 — **원장만.** 강사가 남의 미착수를 봐도 할 수 있는 게 없고,
-              자기 홈에서 남을 들여다보는 화면은 감시처럼 느껴진다 */}
-          {isAdmin && (
-            <Collapsible
-              id="home-team"
-              title="팀 현황 — 누가 뭘 하고 있나"
-              className="order-6"
-              badge={
-                untouched > 0 ? (
-                  <span className="chip bg-amber-100 text-amber-800">미착수 {untouched}</span>
-                ) : undefined
-              }
-            >
-              {loading ? <CardSkeleton rows={3} /> : <TeamBoard work={teamWork} meId={meId} />}
-            </Collapsible>
-          )}
         </div>
 
         {/* ======================================================= 오른쪽 */}
