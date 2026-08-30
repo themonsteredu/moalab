@@ -7,7 +7,7 @@ import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { korDateFull } from '@/lib/format';
 import { buildOrg, groupByPerson, orgTotals, type DeptNode, type DutyRef } from '@/lib/org';
-import { parseRoleParts, type RolePrintPart } from '@/lib/print';
+import { mergeRuns, parseRoleParts, type RolePrintPart } from '@/lib/print';
 import { Icon } from '@/components/Icon';
 import { ErrorBanner } from '@/components/ui';
 import type { Department, Duty, DutyGroup, DutyHelper } from '@/lib/types';
@@ -111,6 +111,13 @@ function RolesPrint() {
     [tree],
   );
 
+  /* 미정 표도 같은 규칙 — 부서·중분류가 이어지면 한 칸으로 */
+  const noneDeptSpans = useMemo(() => mergeRuns(unassigned.map((r) => r.deptName)), [unassigned]);
+  const noneGroupSpans = useMemo(
+    () => mergeRuns(unassigned.map((r) => `${r.deptName} › ${r.groupName}`)),
+    [unassigned],
+  );
+
   if (sessionLoading || !session || depts === null) {
     return <p className="p-10 text-center text-[14px] text-neutral-500">인쇄할 내용을 준비하고 있어요…</p>;
   }
@@ -205,13 +212,33 @@ function RolesPrint() {
               </thead>
               <tbody>
                 {unassigned.map((r, i) => (
-                  <tr key={r.duty.id} className="print-block border-b border-neutral-200">
-                    <td className="py-1.5 pr-1 tabular-nums text-neutral-500">{i + 1}</td>
-                    <td className="py-1.5 pr-2">{r.deptName}</td>
-                    <td className="py-1.5 pr-2 text-neutral-600">{r.groupName}</td>
-                    <td className="py-1.5 pr-2 font-semibold">{r.duty.name}</td>
+                  <tr key={r.duty.id} className="print-block">
+                    <td className="border-b border-neutral-200 py-1.5 pr-1 tabular-nums text-neutral-500">
+                      {i + 1}
+                    </td>
+                    {noneDeptSpans[i].render && (
+                      <td
+                        rowSpan={noneDeptSpans[i].rowSpan}
+                        className="border-b border-r border-neutral-200 py-1.5 pr-2 align-top"
+                      >
+                        {r.deptName}
+                      </td>
+                    )}
+                    {noneGroupSpans[i].render && (
+                      <td
+                        rowSpan={noneGroupSpans[i].rowSpan}
+                        className="border-b border-r border-neutral-200 py-1.5 pl-2 pr-2 align-top text-neutral-600"
+                      >
+                        {r.groupName}
+                      </td>
+                    )}
+                    <td className="border-b border-neutral-200 py-1.5 pl-2 pr-2 font-semibold">
+                      {r.duty.name}
+                    </td>
                     {/* 종이에 적어 넣을 자리 — 회의에서 이 문서를 놓고 정하는 게 실제 흐름이다 */}
-                    <td className="py-1.5 text-neutral-300">서명 __________</td>
+                    <td className="border-b border-neutral-200 py-1.5 text-neutral-300">
+                      서명 __________
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -248,7 +275,12 @@ function DeptDoc({
           <p className="mt-1 text-[11px] text-neutral-400">출력일 {today}</p>
         </header>
       )}
-      {tree.map((d) => (
+      {tree.map((d) => {
+        /* 표를 그리기 전에 평평하게 펴둔다 — 통합 셀(rowSpan)은 '몇 번째 줄인지' 를
+           알아야 계산되는데, 중첩 map 안에서는 그 번호가 묶음마다 0으로 돌아간다 */
+        const rows = d.groups.flatMap((g) => g.duties.map((node) => ({ group: g.group, node })));
+        const spans = mergeRuns(rows.map((r) => r.group.name));
+        return (
         /* 부서마다 새 쪽에서 시작하지는 않는다 — 부서가 5개인데 각각 반 쪽이면
            종이가 두 배가 된다. 대신 부서 덩어리가 쪽 경계에서 안 잘리게만 한다 */
         <section key={d.dept.id} className="print-block mb-5">
@@ -278,32 +310,39 @@ function DeptDoc({
                 </tr>
               </thead>
               <tbody>
-                {d.groups.flatMap((g) =>
-                  g.duties.map((n, i) => (
-                    <tr key={n.duty.id} className="print-block border-b border-neutral-200">
-                      {/* 중분류 이름은 그 묶음의 첫 줄에만 — 같은 이름이 반복되면 표가 시끄럽다 */}
-                      <td className="py-1.5 pr-2 align-top font-semibold">
-                        {i === 0 ? g.group.name : ''}
+                {rows.map(({ group, node }, i) => (
+                  <tr key={node.duty.id} className="print-block">
+                    {/* 같은 중분류가 이어지면 **한 칸으로 합친다.** 빈 칸으로 두면
+                        줄마다 가로선이 그어져서 묶음이 안 보인다 (mergeRuns) */}
+                    {spans[i].render && (
+                      <td
+                        rowSpan={spans[i].rowSpan}
+                        className="border-b border-r border-neutral-200 py-1.5 pr-2 align-top font-semibold"
+                      >
+                        {group.name}
                       </td>
-                      <td className="py-1.5 pr-2 font-semibold">{n.duty.name}</td>
-                      <td className="py-1.5 pr-2">
-                        {n.duty.owner_id ? (
-                          nameOf(n.duty.owner_id)
-                        ) : (
-                          <span className="font-bold text-neutral-700">미정</span>
-                        )}
-                      </td>
-                      <td className="py-1.5 text-neutral-600">
-                        {n.helperIds.length > 0 ? n.helperIds.map((h) => nameOf(h)).join(', ') : ''}
-                      </td>
-                    </tr>
-                  )),
-                )}
+                    )}
+                    <td className="border-b border-neutral-200 py-1.5 pl-2 pr-2 font-semibold">
+                      {node.duty.name}
+                    </td>
+                    <td className="border-b border-neutral-200 py-1.5 pr-2">
+                      {node.duty.owner_id ? (
+                        nameOf(node.duty.owner_id)
+                      ) : (
+                        <span className="font-bold text-neutral-700">미정</span>
+                      )}
+                    </td>
+                    <td className="border-b border-neutral-200 py-1.5 text-neutral-600">
+                      {node.helperIds.length > 0 ? node.helperIds.map((h) => nameOf(h)).join(', ') : ''}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
         </section>
-      ))}
+        );
+      })}
     </section>
   );
 }
@@ -327,6 +366,12 @@ function PersonSheet({
     ...own.map((r) => ({ r, kind: '주담당' })),
     ...help.map((r) => ({ r, kind: '부담당' })),
   ];
+  /* 한 사람이 같은 부서에서 여러 역할을 맡는 게 보통이라 부서·중분류가 줄줄이
+     반복된다. 이어지는 것은 한 칸으로 합친다 (부서별 표와 같은 규칙).
+     중분류는 **부서가 같을 때만** 합친다 — 부서가 다른데 중분류 이름이 우연히
+     같다고 합치면 서로 다른 부서가 한 칸에 묶인다 */
+  const deptSpans = mergeRuns(rows.map(({ r }) => r.deptName));
+  const groupSpans = mergeRuns(rows.map(({ r }) => `${r.deptName} › ${r.groupName}`));
 
   return (
     <section className={`mb-6 ${breakBefore ? 'print-page-break' : ''}`}>
@@ -353,12 +398,30 @@ function PersonSheet({
           </thead>
           <tbody>
             {rows.map(({ r, kind }, i) => (
-              <tr key={`${r.duty.id}-${kind}`} className="print-block border-b border-neutral-200">
-                <td className="py-1.5 pr-1 tabular-nums text-neutral-500">{i + 1}</td>
-                <td className="py-1.5 pr-2">{r.deptName}</td>
-                <td className="py-1.5 pr-2 text-neutral-600">{r.groupName}</td>
-                <td className="py-1.5 pr-2 font-semibold">{r.duty.name}</td>
-                <td className="py-1.5">{kind}</td>
+              <tr key={`${r.duty.id}-${kind}`} className="print-block">
+                <td className="border-b border-neutral-200 py-1.5 pr-1 tabular-nums text-neutral-500">
+                  {i + 1}
+                </td>
+                {deptSpans[i].render && (
+                  <td
+                    rowSpan={deptSpans[i].rowSpan}
+                    className="border-b border-r border-neutral-200 py-1.5 pr-2 align-top"
+                  >
+                    {r.deptName}
+                  </td>
+                )}
+                {groupSpans[i].render && (
+                  <td
+                    rowSpan={groupSpans[i].rowSpan}
+                    className="border-b border-r border-neutral-200 py-1.5 pl-2 pr-2 align-top text-neutral-600"
+                  >
+                    {r.groupName}
+                  </td>
+                )}
+                <td className="border-b border-neutral-200 py-1.5 pl-2 pr-2 font-semibold">
+                  {r.duty.name}
+                </td>
+                <td className="border-b border-neutral-200 py-1.5">{kind}</td>
               </tr>
             ))}
           </tbody>
