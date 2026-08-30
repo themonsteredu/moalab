@@ -202,6 +202,39 @@ export interface CostItemPhoto {
   photo_url: string;
 }
 
+/* ------------------------------------------------------------- 수익배분
+   직접비를 먼저 빼고, 역할별 성과몫을 뺀 나머지를 참여자 1/N로 나눈다.
+   한 사람이 여러 역할을 맡으면 각 성과몫과 기본 1/N을 모두 받는다. */
+
+export type RevenueFundingType = 'private' | 'public_contract' | 'grant';
+export type RevenueSharePoolKind = 'creator' | 'proposal' | 'sales' | 'custom';
+export type RevenueShareRateMode = 'manual' | 'recommended';
+
+export interface RevenueSharePoolRule {
+  id: string;
+  kind: RevenueSharePoolKind;
+  label: string;
+  active: boolean;
+  /** recommended는 사업 규모별 누진 추천액을 자동으로 쓴다. */
+  rate_mode: RevenueShareRateMode;
+  rate_percent: number;
+  member_ids: string[];
+}
+
+/** 프로그램별 현재 배분 합의안. 실제 지급 내역은 아니다. */
+export interface RevenueSharePlan {
+  app_id: string;
+  funding_type: RevenueFundingType;
+  gross_amount: number;
+  direct_costs: number;
+  base_member_ids: string[];
+  pools: RevenueSharePoolRule[];
+  note: string | null;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
 /* -------------------------------------------------------- 강의계획서
    원장이 준 한글 양식(강의계획서.hwp) 그대로 화면에서 채우고 그대로 인쇄한다.
    양식 한 장 = 프로그램 하나라서 app_id 가 그대로 기본키다. */

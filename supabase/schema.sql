@@ -273,6 +273,29 @@ create table if not exists moalab.cost_item_photos (
 create index if not exists cost_item_photos_item_idx on moalab.cost_item_photos(item_id);
 
 -- ---------------------------------------------------------------------
+-- 7-1. 프로그램별 수익배분 기준
+--
+-- 한 프로그램의 현재 합의안을 한 행으로 저장한다. 성과 항목은 종류가 고정되지 않고
+-- 참여자가 여러 명일 수 있어 JSONB 스냅샷으로 둔다. 실제 지급 원장이 아니라
+-- "직접비 → 성과몫 → 남은 금액 1/N" 계산 기준이다.
+-- ---------------------------------------------------------------------
+create table if not exists moalab.revenue_share_plans (
+  app_id           uuid primary key references moalab.apps(id) on delete cascade,
+  funding_type     text not null default 'private'
+                   check (funding_type in ('private','public_contract','grant')),
+  gross_amount     numeric not null default 100000 check (gross_amount >= 0),
+  direct_costs     numeric not null default 0 check (direct_costs >= 0),
+  base_member_ids  uuid[] not null default '{}',
+  pools            jsonb not null default '[]'::jsonb check (jsonb_typeof(pools) = 'array'),
+  note             text,
+  updated_by       uuid references moalab.members(id) on delete set null,
+  updated_at       timestamptz not null default now(),
+  created_at       timestamptz not null default now()
+);
+create index if not exists revenue_share_plans_updated_idx
+  on moalab.revenue_share_plans(updated_at desc);
+
+-- ---------------------------------------------------------------------
 -- 8. 갤러리
 -- ---------------------------------------------------------------------
 create table if not exists moalab.albums (
@@ -771,7 +794,7 @@ begin
   foreach t in array array[
     'topics','apps','app_reviewers','rounds','checks','check_files','comments','comment_files',
     'findings','finding_files','finding_replies','round_signoffs',
-    'cost_sheets','cost_items','cost_item_photos',
+    'cost_sheets','cost_items','cost_item_photos','revenue_share_plans',
     'albums','photos','schedules','schedule_members','activity_logs',
     'plan_files','app_samples','lesson_plans','lesson_plan_items',
     'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',
