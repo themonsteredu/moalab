@@ -48,3 +48,39 @@ export function parseRoleParts(raw: string | null): Set<RolePrintPart> {
   );
   return new Set(keys);
 }
+
+/* ---------------------------------------------------------------- 통합 셀
+   인쇄물에서 **같은 값이 이어지는 칸은 하나로 합친다** (`rowSpan`).
+
+   예전엔 첫 줄에만 이름을 적고 나머지는 빈 칸으로 뒀는데, 빈 칸도 칸이라
+   줄마다 가로선이 그어져서 묶음이 안 보였다. 종이에서 "이 넷이 회계·정산" 이
+   한눈에 들어와야 표를 읽는 값어치가 있다.
+
+   **연속한 것만 합친다.** 떨어져 있는 같은 값을 합치면 표가 뒤집힌다
+   (같은 부서가 두 군데 떨어져 나오면 그건 그대로 두 덩어리다). */
+
+/** 한 줄이 그 칸을 그릴지 / 몇 줄을 덮을지 */
+export interface CellSpan {
+  /** false 면 `<td>` 를 아예 그리지 않는다 — 위 칸이 이미 덮고 있다 */
+  render: boolean;
+  /** render 일 때만 의미가 있다 */
+  rowSpan: number;
+}
+
+/**
+ * 값 목록을 받아 줄마다 통합 셀 정보를 낸다.
+ *
+ * `['a','a','b','a']` → `[{true,2},{false,0},{true,1},{true,1}]`
+ * (마지막 'a' 는 'b' 로 끊겼으니 앞의 'a' 와 안 합친다)
+ */
+export function mergeRuns(values: string[]): CellSpan[] {
+  const out: CellSpan[] = values.map(() => ({ render: false, rowSpan: 0 }));
+  let i = 0;
+  while (i < values.length) {
+    let n = 1;
+    while (i + n < values.length && values[i + n] === values[i]) n += 1;
+    out[i] = { render: true, rowSpan: n };
+    i += n;
+  }
+  return out;
+}
