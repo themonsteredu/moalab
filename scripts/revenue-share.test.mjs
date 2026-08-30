@@ -91,7 +91,7 @@ console.log('--- 기본 1/N + 성과 풀 ---');
   });
 }
 
-console.log('\n--- 월별 여러 프로그램 합산 ---');
+console.log('\n--- 월별 여러 프로젝트 합산 ---');
 {
   const creatorProgram = calc({
     pools: [pool({ id: 'creator', ratePercent: 20, memberIds: ['m1'] })],
@@ -109,7 +109,7 @@ console.log('\n--- 월별 여러 프로그램 합산 ---');
     },
     { rateStatus: 'draft', calculation: salesProgram },
   ]);
-  eq('두 프로그램 월 금액 합계', {
+  eq('두 프로젝트 월 금액 합계', {
     count: monthly.settlementCount,
     gross: monthly.grossAmount,
     costs: monthly.directCosts,
@@ -120,13 +120,13 @@ console.log('\n--- 월별 여러 프로그램 합산 ---');
     m1: 42_000, m2: 32_000, m3: 22_000, m4: 22_000, m5: 22_000,
   });
   eq('월 상태별 가안 수', [monthly.undecidedCount, monthly.draftCount, monthly.agreedCount], [1, 1, 0]);
-  eq('당시 멤버 이름과 프로그램 수 보존', [monthly.members[0].memberName, monthly.members[0].programCount], ['가', 2]);
+  eq('당시 멤버 이름과 프로젝트 수 보존', [monthly.members[0].memberName, monthly.members[0].projectCount], ['가', 2]);
 
   const reversed = R.aggregateMonthlyRevenueShares([
     { rateStatus: 'draft', calculation: salesProgram },
     { rateStatus: 'undecided', calculation: creatorProgram },
   ]);
-  eq('프로그램 순서가 바뀌어도 월 합계 동일',
+  eq('프로젝트 순서가 바뀌어도 월 합계 동일',
     monthly.members.map((m) => [m.memberId, m.totalAmount]),
     reversed.members.map((m) => [m.memberId, m.totalAmount]),
   );

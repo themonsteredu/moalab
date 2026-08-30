@@ -273,18 +273,34 @@ create table if not exists moalab.cost_item_photos (
 create index if not exists cost_item_photos_item_idx on moalab.cost_item_photos(item_id);
 
 -- ---------------------------------------------------------------------
--- 7-1. 프로그램별 수익배분 기준
+-- 7-1. 수익 프로젝트
 --
--- 한 프로그램의 현재 합의안을 한 행으로 저장한다. 성과 항목은 종류가 고정되지 않고
--- 참여자가 여러 명일 수 있어 JSONB 스냅샷으로 둔다. 실제 지급 원장이 아니라
--- "직접비 → 성과몫 → 남은 금액 1/N" 계산 기준이다.
+-- 광주중학교·모두의창업처럼 매출과 비용을 따로 정산하는 사업 단위다.
+-- 교육 프로그램(apps)과는 다르며, 필요할 때만 창작자·원가표 참조용으로 연결한다.
 -- ---------------------------------------------------------------------
-create table if not exists moalab.revenue_share_plans (
-  app_id           uuid primary key references moalab.apps(id) on delete cascade,
+create table if not exists moalab.revenue_projects (
+  id             uuid primary key default gen_random_uuid(),
+  name           text not null check (char_length(btrim(name)) between 1 and 120),
+  linked_app_id  uuid references moalab.apps(id) on delete set null,
+  archived       boolean not null default false,
+  created_by     uuid references moalab.members(id) on delete set null,
+  updated_at     timestamptz not null default now(),
+  created_at     timestamptz not null default now()
+);
+create index if not exists revenue_projects_active_idx
+  on moalab.revenue_projects(archived, updated_at desc);
+create index if not exists revenue_projects_linked_app_idx
+  on moalab.revenue_projects(linked_app_id);
+
+-- ---------------------------------------------------------------------
+-- 7-2. 프로젝트별 수익배분 기본안
+-- ---------------------------------------------------------------------
+create table if not exists moalab.revenue_project_plans (
+  project_id       uuid primary key references moalab.revenue_projects(id) on delete cascade,
   funding_type     text not null default 'private'
                    check (funding_type in ('private','public_contract','grant')),
-  gross_amount     numeric not null default 100000 check (gross_amount >= 0),
-  direct_costs     numeric not null default 0 check (direct_costs >= 0),
+  gross_amount     numeric(18,0) not null default 0 check (gross_amount >= 0),
+  direct_costs     numeric(18,0) not null default 0 check (direct_costs >= 0),
   base_member_ids  uuid[] not null default '{}',
   pools            jsonb not null default '[]'::jsonb check (jsonb_typeof(pools) = 'array'),
   note             text,
@@ -292,19 +308,19 @@ create table if not exists moalab.revenue_share_plans (
   updated_at       timestamptz not null default now(),
   created_at       timestamptz not null default now()
 );
-create index if not exists revenue_share_plans_updated_idx
-  on moalab.revenue_share_plans(updated_at desc);
+create index if not exists revenue_project_plans_updated_idx
+  on moalab.revenue_project_plans(updated_at desc);
 
 -- ---------------------------------------------------------------------
--- 7-2. 프로그램별 월 수익배분 계산안
+-- 7-3. 프로젝트별 월 수익배분 계산안
 --
--- 프로그램 기본안(revenue_share_plans)과 실제 월별 숫자는 다른 축이다. 월별 행에는
+-- 프로젝트 기본안과 실제 월별 숫자는 다른 축이다. 월별 행에는
 -- 그때의 금액·참여자·비율·계산 결과·이름을 한 덩어리로 저장한다. 비율이 아직 미정이면
 -- rate_status='undecided'인 가안이며, 지급 근거로 확정하지 않는다.
 -- ---------------------------------------------------------------------
-create table if not exists moalab.revenue_share_months (
+create table if not exists moalab.revenue_project_months (
   id                uuid primary key default gen_random_uuid(),
-  app_id            uuid not null references moalab.apps(id) on delete cascade,
+  project_id        uuid not null references moalab.revenue_projects(id) on delete cascade,
   settlement_month  date not null check (extract(day from settlement_month) = 1),
   rate_status       text not null default 'undecided'
                     check (rate_status in ('undecided','draft','agreed')),
@@ -320,12 +336,12 @@ create table if not exists moalab.revenue_share_months (
   updated_by        uuid references moalab.members(id) on delete set null,
   updated_at        timestamptz not null default now(),
   created_at        timestamptz not null default now(),
-  unique (app_id, settlement_month)
+  unique (project_id, settlement_month)
 );
-create index if not exists revenue_share_months_month_idx
-  on moalab.revenue_share_months(settlement_month desc);
-create index if not exists revenue_share_months_updated_idx
-  on moalab.revenue_share_months(updated_at desc);
+create index if not exists revenue_project_months_month_idx
+  on moalab.revenue_project_months(settlement_month desc);
+create index if not exists revenue_project_months_project_idx
+  on moalab.revenue_project_months(project_id, settlement_month desc);
 
 -- ---------------------------------------------------------------------
 -- 8. 갤러리
@@ -826,7 +842,7 @@ begin
   foreach t in array array[
     'topics','apps','app_reviewers','rounds','checks','check_files','comments','comment_files',
     'findings','finding_files','finding_replies','round_signoffs',
-    'cost_sheets','cost_items','cost_item_photos','revenue_share_plans','revenue_share_months',
+    'cost_sheets','cost_items','cost_item_photos','revenue_projects','revenue_project_plans','revenue_project_months',
     'albums','photos','schedules','schedule_members','activity_logs',
     'plan_files','app_samples','lesson_plans','lesson_plan_items',
     'notices','notice_files','notice_reads','push_subscriptions','mock_lessons','mock_feedback',

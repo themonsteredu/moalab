@@ -1,9 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { calcSheet } from '@/lib/cost';
 import { commaNumber, digitsOnly, monthLabel, shiftMonth, thisMonth } from '@/lib/expense';
 import { won } from '@/lib/format';
 import { logActivity } from '@/lib/log';
@@ -23,13 +21,11 @@ import { Icon } from '@/components/Icon';
 import { PageHeader } from '@/components/PageHeader';
 import { CardSkeleton, ErrorBanner, MultiPicker, useToast } from '@/components/ui';
 import type {
-  AppRow,
-  CostItem,
-  CostSheet,
+  RevenueProject,
   MemberPublic,
   RevenueFundingType,
-  RevenueSharePlan,
-  RevenueShareMonth,
+  RevenueProjectPlan,
+  RevenueProjectMonth,
   RevenueShareRateStatus,
   RevenueSharePoolKind,
   RevenueSharePoolRule,
@@ -105,18 +101,12 @@ const RATE_STATUS_META: Record<
 
 const MONTH_KEY_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-function monthKeyOf(row: RevenueShareMonth): string {
+function monthKeyOf(row: RevenueProjectMonth): string {
   return row.settlement_month.slice(0, 7);
 }
 
-interface CostPreset {
-  sheet: CostSheet;
-  revenue: number;
-  directCosts: number;
-}
-
-function defaultPools(app: AppRow, memberIds: Set<string>): RevenueSharePoolRule[] {
-  const creatorIds = app.creator_id && memberIds.has(app.creator_id) ? [app.creator_id] : [];
+function defaultPools(): RevenueSharePoolRule[] {
+  const creatorIds: string[] = [];
   return [
     {
       id: 'creator',
@@ -150,11 +140,10 @@ function defaultPools(app: AppRow, memberIds: Set<string>): RevenueSharePoolRule
 
 function normalizePools(
   raw: RevenueSharePoolRule[] | null | undefined,
-  app: AppRow,
   members: MemberPublic[],
 ): RevenueSharePoolRule[] {
   const validIds = new Set(members.map((m) => m.id));
-  const defaults = defaultPools(app, validIds);
+  const defaults = defaultPools();
   if (!Array.isArray(raw)) return defaults;
 
   return defaults.map((fallback) => {
@@ -214,7 +203,7 @@ function RevenuePageFallback() {
 }
 
 function RevenueSharePageContent() {
-  const { appId } = useParams<{ appId: string }>();
+  const { appId: projectId } = useParams<{ appId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { session, isAdmin } = useSession();
@@ -224,12 +213,10 @@ function RevenueSharePageContent() {
   const requestedMonth = searchParams.get('month');
   const month = requestedMonth && MONTH_KEY_RE.test(requestedMonth) ? requestedMonth : thisMonth();
 
-  const [app, setApp] = useState<AppRow | null>(null);
+  const [project, setProject] = useState<RevenueProject | null>(null);
   const [members, setMembers] = useState<MemberPublic[]>([]);
-  const [monthlyRows, setMonthlyRows] = useState<RevenueShareMonth[]>([]);
+  const [monthlyRows, setMonthlyRows] = useState<RevenueProjectMonth[]>([]);
   const [rateStatus, setRateStatus] = useState<RevenueShareRateStatus>('undecided');
-  const [costPresets, setCostPresets] = useState<CostPreset[]>([]);
-  const [selectedCostId, setSelectedCostId] = useState('');
   const [fundingType, setFundingType] = useState<RevenueFundingType>('private');
   const [grossAmount, setGrossAmount] = useState('100000');
   const [directCosts, setDirectCosts] = useState('0');
@@ -250,31 +237,28 @@ function RevenueSharePageContent() {
     setError('');
     setLoadedMonth(null);
     try {
-      const [appRes, memberRes, planRes, monthRes, sheetRes] = await Promise.all([
-        supabase.from('apps').select('*').eq('id', appId).maybeSingle(),
+      const [projectRes, memberRes, planRes, monthRes] = await Promise.all([
+        supabase.from('revenue_projects').select('*').eq('id', projectId).maybeSingle(),
         supabase.from('members_public').select('*').order('sort_order').order('name'),
-        supabase.from('revenue_share_plans').select('*').eq('app_id', appId).maybeSingle(),
+        supabase.from('revenue_project_plans').select('*').eq('project_id', projectId).maybeSingle(),
         supabase
-          .from('revenue_share_months')
+          .from('revenue_project_months')
           .select('*')
-          .eq('app_id', appId)
+          .eq('project_id', projectId)
           .order('settlement_month', { ascending: false }),
-        supabase.from('cost_sheets').select('*').eq('app_id', appId).order('updated_at', { ascending: false }),
       ]);
       if (generation !== loadGeneration.current) return;
-      if (appRes.error) throw appRes.error;
+      if (projectRes.error) throw projectRes.error;
       if (memberRes.error) throw memberRes.error;
-      if (sheetRes.error) throw sheetRes.error;
-      if (!appRes.data) throw new Error('프로그램을 찾지 못했어요.');
+      if (!projectRes.data) throw new Error('프로젝트를 찾지 못했어요.');
 
-      const nextApp = appRes.data as AppRow;
+      const nextProject = projectRes.data as RevenueProject;
       const nextMembers = (memberRes.data ?? []) as MemberPublic[];
-      const nextPlan = planRes.error ? null : (planRes.data as RevenueSharePlan | null);
-      const nextMonthlyRows = monthRes.error ? [] : ((monthRes.data ?? []) as RevenueShareMonth[]);
+      const nextPlan = planRes.error ? null : (planRes.data as RevenueProjectPlan | null);
+      const nextMonthlyRows = monthRes.error ? [] : ((monthRes.data ?? []) as RevenueProjectMonth[]);
       const savedMonth = nextMonthlyRows.find((row) => monthKeyOf(row) === month) ?? null;
-      const sheets = (sheetRes.data ?? []) as CostSheet[];
 
-      setApp(nextApp);
+      setProject(nextProject);
       setMembers(nextMembers);
       setMonthlyRows(nextMonthlyRows);
       setMonthStorageReady(!monthRes.error);
@@ -283,7 +267,7 @@ function RevenueSharePageContent() {
           nextMembers.some((member) => member.id === id),
         ) ?? nextMembers.filter((member) => member.active).map((member) => member.id),
       );
-      setPools(normalizePools(savedMonth?.pools ?? nextPlan?.pools, nextApp, nextMembers));
+      setPools(normalizePools(savedMonth?.pools ?? nextPlan?.pools, nextMembers));
       setFundingType(savedMonth?.funding_type ?? nextPlan?.funding_type ?? 'private');
       // 새 달에 과거 예상 매출이 자동으로 복사되면 실제 매출처럼 보이므로 반드시 0원부터 시작한다.
       setGrossAmount(savedMonth ? String(Math.round(Number(savedMonth.gross_amount) || 0)) : '0');
@@ -295,38 +279,16 @@ function RevenueSharePageContent() {
       setDirty(false);
 
       const warnings = [];
-      if (planRes.error) warnings.push(friendlyError(planRes.error, '프로그램 기본안은 불러오지 못했어요.'));
+      if (planRes.error) warnings.push(friendlyError(planRes.error, '프로젝트 기본안은 불러오지 못했어요.'));
       if (monthRes.error) warnings.push(friendlyError(monthRes.error, '월별 계산안은 불러오지 못했어요.'));
       if (warnings.length > 0) setError(warnings.join(' '));
-
-      if (sheets.length === 0) {
-        setCostPresets([]);
-      } else {
-        const { data: itemData, error: itemError } = await supabase
-          .from('cost_items')
-          .select('*')
-          .in('sheet_id', sheets.map((s) => s.id));
-        if (generation !== loadGeneration.current) return;
-        if (itemError) throw itemError;
-        const items = (itemData ?? []) as CostItem[];
-        setCostPresets(
-          sheets.map((sheet) => {
-            const totals = calcSheet(
-              items.filter((item) => item.sheet_id === sheet.id),
-              sheet.headcount,
-              Number(sheet.sale_price) || 0,
-            );
-            return { sheet, revenue: Math.round(totals.revenue), directCosts: Math.round(totals.total) };
-          }),
-        );
-      }
     } catch (e) {
       if (generation !== loadGeneration.current) return;
       setError(friendlyError(e, '수익배분 기준을 불러오지 못했어요. 다시 시도해주세요.'));
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
     }
-  }, [appId, month]);
+  }, [projectId, month]);
 
   useEffect(() => {
     void load();
@@ -365,40 +327,31 @@ function RevenueSharePageContent() {
     setDirty(true);
   };
 
-  const applyCostPreset = () => {
-    const preset = costPresets.find((item) => item.sheet.id === selectedCostId);
-    if (!preset) return;
-    setGrossAmount(String(preset.revenue));
-    setDirectCosts(String(preset.directCosts));
-    setDirty(true);
-    toast.show(`${preset.sheet.title} 값을 불러왔어요.`);
-  };
-
   const changeMonth = (nextMonth: string) => {
     if (!MONTH_KEY_RE.test(nextMonth) || nextMonth === month) return;
     if (saving) return;
     if (dirty && !window.confirm('저장하지 않은 수정이 있어요. 이 달을 떠날까요?')) return;
     loadGeneration.current += 1;
     setLoading(true);
-    router.replace(`/revenue/${appId}?month=${nextMonth}`, { scroll: false });
+    router.replace(`/revenue/${projectId}?month=${nextMonth}`, { scroll: false });
   };
 
   const copyPreviousRules = () => {
-    if (!app) return;
+    if (!project) return;
     const previous = monthlyRows
       .filter((row) => monthKeyOf(row) < month)
       .sort((a, b) => b.settlement_month.localeCompare(a.settlement_month))[0];
     if (!previous) return;
     setFundingType(previous.funding_type);
     setBaseMemberIds(previous.base_member_ids.filter((id) => members.some((member) => member.id === id)));
-    setPools(normalizePools(previous.pools, app, members));
+    setPools(normalizePools(previous.pools, members));
     setRateStatus('undecided');
     setDirty(true);
     toast.show(`${monthLabel(monthKeyOf(previous))} 참여자와 비율 가안을 불러왔어요.`);
   };
 
   const save = async () => {
-    if (!app || !session || !isAdmin) return;
+    if (!project || !session || !isAdmin) return;
     if (!monthStorageReady || loadedMonth !== month) {
       setError('이 달의 저장소를 확인하지 못했어요. 다시 불러온 뒤 저장해주세요.');
       return;
@@ -416,10 +369,10 @@ function RevenueSharePageContent() {
         return member ? [{ id: member.id, name: member.name }] : [];
       });
       const { data, error: saveError } = await supabase
-        .from('revenue_share_months')
+        .from('revenue_project_months')
         .upsert(
           {
-            app_id: app.id,
+            project_id: project.id,
             settlement_month: `${month}-01`,
             rate_status: rateStatus,
             funding_type: fundingType,
@@ -433,16 +386,16 @@ function RevenueSharePageContent() {
             updated_by: session.id,
             updated_at: now,
           },
-          { onConflict: 'app_id,settlement_month' },
+          { onConflict: 'project_id,settlement_month' },
         )
         .select('*')
         .single();
       if (saveError) throw saveError;
-      const saved = data as RevenueShareMonth;
+      const saved = data as RevenueProjectMonth;
       setMonthlyRows((current) => [saved, ...current.filter((row) => row.id !== saved.id)]);
       setSavedAt(now);
       setDirty(false);
-      logActivity(session.id, `${app.slug} ${monthLabel(month)} 수익배분 가안 저장`, `app:${app.id}`);
+      logActivity(session.id, `${project.name} ${monthLabel(month)} 수익배분 가안 저장`, `revenue-project:${project.id}`);
       toast.show(`${monthLabel(month)} 계산안을 저장했어요.`);
     } catch (e) {
       setError(friendlyError(e, '월 계산안을 저장하지 못했어요. 다시 눌러주세요.'));
@@ -462,12 +415,12 @@ function RevenueSharePageContent() {
     );
   }
 
-  if (!app) {
+  if (!project) {
     return (
       <>
         <PageHeader title="수익배분" back="/revenue" />
         <div className="px-4 py-4">
-          <ErrorBanner message={error || '프로그램을 찾지 못했어요.'} onRetry={() => void load()} />
+          <ErrorBanner message={error || '프로젝트를 찾지 못했어요.'} onRetry={() => void load()} />
         </div>
       </>
     );
@@ -476,7 +429,7 @@ function RevenueSharePageContent() {
   if (loadedMonth !== month) {
     return (
       <>
-        <PageHeader title={app.title_ko} subtitle={monthLabel(month)} back={`/revenue?month=${month}`} />
+        <PageHeader title={project.name} subtitle={monthLabel(month)} back={`/revenue?month=${month}`} />
         <div className="px-4 py-4">
           <ErrorBanner
             message={error || '이 달의 계산안을 불러오지 못했어요.'}
@@ -498,7 +451,7 @@ function RevenueSharePageContent() {
   return (
     <>
       <PageHeader
-        title={app.title_ko}
+        title={project.name}
         subtitle={`${monthLabel(month)} · 기본 ${baseMemberIds.length}명 1/N`}
         back={`/revenue?month=${month}`}
       />
@@ -700,29 +653,7 @@ function RevenueSharePageContent() {
             </div>
           </div>
 
-          {costPresets.length > 0 && (
-            <div className="mt-3 rounded-xl bg-neutral-50 p-3">
-              <label htmlFor="cost-preset" className="label">연결된 원가표 불러오기</label>
-              <div className="flex gap-2">
-                <select
-                  id="cost-preset"
-                  value={selectedCostId}
-                  onChange={(event) => setSelectedCostId(event.target.value)}
-                  className="field min-w-0 flex-1"
-                >
-                  <option value="">원가표 선택</option>
-                  {costPresets.map((preset) => (
-                    <option key={preset.sheet.id} value={preset.sheet.id}>
-                      {preset.sheet.title} · 매출 {won(preset.revenue)}원 · 원가 {won(preset.directCosts)}원
-                    </option>
-                  ))}
-                </select>
-                <button type="button" onClick={applyCostPreset} disabled={!selectedCostId} className="btn-ghost shrink-0 px-3">
-                  적용
-                </button>
-              </div>
-            </div>
-          )}
+
         </section>
 
         <section className="card p-4">
@@ -814,7 +745,6 @@ function RevenueSharePageContent() {
           </p>
         )}
 
-        <Link href={`/apps/${app.id}`} className="btn-ghost w-full">프로그램 페이지로 돌아가기</Link>
       </main>
 
       {isAdmin && (

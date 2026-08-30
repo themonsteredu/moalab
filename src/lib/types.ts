@@ -222,9 +222,21 @@ export interface RevenueSharePoolRule {
   member_ids: string[];
 }
 
-/** 프로그램별 현재 배분 합의안. 실제 지급 내역은 아니다. */
-export interface RevenueSharePlan {
-  app_id: string;
+/** 학교·기관·지원사업처럼 수익과 비용을 따로 정산하는 사업 단위. */
+export interface RevenueProject {
+  id: string;
+  name: string;
+  /** 창작자·원가표를 가져올 교육 프로그램. 프로젝트와 프로그램은 같은 개념이 아니다. */
+  linked_app_id: string | null;
+  archived: boolean;
+  created_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+/** 프로젝트별 현재 배분 기본안. 실제 지급 내역은 아니다. */
+export interface RevenueProjectPlan {
+  project_id: string;
   funding_type: RevenueFundingType;
   gross_amount: number;
   direct_costs: number;
@@ -241,10 +253,10 @@ export interface RevenueShareMemberSnapshot {
   name: string;
 }
 
-/** 프로그램 한 개의 한 달 수익배분 계산 스냅샷. */
-export interface RevenueShareMonth {
+/** 프로젝트 한 개의 한 달 수익배분 계산 스냅샷. */
+export interface RevenueProjectMonth {
   id: string;
-  app_id: string;
+  project_id: string;
   /** 해당 월의 첫날, YYYY-MM-01. DATE라 시간대 영향을 받지 않는다. */
   settlement_month: string;
   rate_status: RevenueShareRateStatus;

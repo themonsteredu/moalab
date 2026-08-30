@@ -1,5 +1,5 @@
 /**
- * 프로그램별 수익 배분 계산.
+ * 프로젝트별 수익 배분 계산.
  *
  * 실제 수금액에서 직접비를 먼저 뺀 뒤, 성과 풀(창작·제안·영업·사용자 정의)을
  * 정해진 비율만큼 떼어 해당 참여자에게 똑같이 나눈다. 남은 금액은 기본 멤버
@@ -17,7 +17,7 @@ export const CREATOR_DEFAULT_RATE = DEFAULT_CREATOR_RATE_PERCENT;
 export type RevenuePoolKind = 'creator' | 'proposal' | 'sales' | 'custom';
 
 export interface RevenuePoolInput {
-  /** 한 프로그램 안에서 바뀌지 않는 고유 id. 잔여 1원의 결정적 배정에도 쓴다. */
+  /** 한 프로젝트 안에서 바뀌지 않는 고유 id. 잔여 1원의 결정적 배정에도 쓴다. */
   id: string;
   kind: RevenuePoolKind;
   label?: string;
@@ -95,7 +95,7 @@ export type RevenueShareCalculation = RevenueShareResult;
 
 export type RevenueShareRateStatus = 'undecided' | 'draft' | 'agreed';
 
-/** 프로그램 하나의 월 계산 결과를 월 전체 합계로 묶을 때 필요한 최소 스냅샷. */
+/** 프로젝트 하나의 월 계산 결과를 월 전체 합계로 묶을 때 필요한 최소 스냅샷. */
 export interface MonthlyRevenueShareSnapshot {
   rateStatus: RevenueShareRateStatus;
   calculation: RevenueShareResult;
@@ -109,7 +109,7 @@ export interface MonthlyMemberRevenueShare {
   baseAmount: number;
   performanceAmount: number;
   totalAmount: number;
-  programCount: number;
+  projectCount: number;
 }
 
 export interface MonthlyRevenueShareSummary {
@@ -326,11 +326,11 @@ export function calculateRevenueShare(input: RevenueShareInput): RevenueShareRes
 }
 
 /**
- * 여러 프로그램의 월 계산 결과를 사람별로 합친다.
+ * 여러 프로젝트의 월 계산 결과를 사람별로 합친다.
  *
- * 누진 영업·제안서 금액은 프로그램마다 먼저 계산되어야 한다. 월 전체 이익을 합친 뒤
- * 다시 누진율을 적용하면 프로그램별 계산과 다른 값이 되므로, 이 함수는 이미 끝난
- * 프로그램 계산을 더하기만 한다.
+ * 누진 영업·제안서 금액은 프로젝트마다 먼저 계산되어야 한다. 월 전체 이익을 합친 뒤
+ * 다시 누진율을 적용하면 프로젝트별 계산과 다른 값이 되므로, 이 함수는 이미 끝난
+ * 프로젝트 계산을 더하기만 한다.
  */
 export function aggregateMonthlyRevenueShares(
   settlements: MonthlyRevenueShareSnapshot[],
@@ -415,13 +415,13 @@ export function aggregateMonthlyRevenueShares(
         baseAmount: 0,
         performanceAmount: 0,
         totalAmount: 0,
-        programCount: 0,
+        projectCount: 0,
       };
       current.memberName ??= settlement.memberNames?.[member.memberId];
       current.baseAmount += member.baseAmount;
       current.performanceAmount += performanceAmount;
       current.totalAmount += member.totalAmount;
-      current.programCount += 1;
+      current.projectCount += 1;
       memberMap.set(member.memberId, current);
     }
   }

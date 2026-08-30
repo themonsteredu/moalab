@@ -487,8 +487,8 @@ export default function AppDetailPage() {
               사람별 예상액으로 계산해요.
             </p>
           </div>
-          <Link href={`/revenue/${id}`} className="btn-primary mt-3 w-full">
-            월별 배분 계산하기
+          <Link href="/revenue" className="btn-primary mt-3 w-full">
+            수익 프로젝트에서 계산하기
           </Link>
         </Section>
 
