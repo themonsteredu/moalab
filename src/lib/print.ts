@@ -25,3 +25,26 @@ export function parsePrintParts(raw: string | null): Set<PrintPart> {
   const keys = raw.split(',').filter((k): k is PrintPart => PRINT_PARTS.some((p) => p.key === k));
   return new Set(keys);
 }
+
+/* ------------------------------------------------------------- 역할분장 인쇄
+   부서 5 · 중분류 15 · 역할 48 이면 한 장에 안 들어간다. 그래서 무엇을 넣을지
+   고르게 한다 (프로그램 인쇄·지출결의서 인쇄와 같은 방식).
+
+   `사람별` 은 **한 사람 = 한 쪽**이다. 그래야 뽑아서 그 사람에게 그대로 건넨다 —
+   "이게 당신 담당입니다" 가 이 문서의 쓸모다. */
+
+export const ROLE_PRINT_PARTS = [
+  { key: 'dept', label: '부서별 통합 (부서 › 중분류 › 역할)' },
+  { key: 'person', label: '사람별 (한 사람 = 한 쪽, 나눠주기용)' },
+  { key: 'unassigned', label: '담당자 미정만 따로' },
+] as const;
+
+export type RolePrintPart = (typeof ROLE_PRINT_PARTS)[number]['key'];
+
+export function parseRoleParts(raw: string | null): Set<RolePrintPart> {
+  if (!raw) return new Set(ROLE_PRINT_PARTS.map((p) => p.key));
+  const keys = raw.split(',').filter((k): k is RolePrintPart =>
+    ROLE_PRINT_PARTS.some((p) => p.key === k),
+  );
+  return new Set(keys);
+}

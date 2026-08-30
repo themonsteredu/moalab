@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { DutyForm } from '@/components/DutyForm';
+import { ROLE_PRINT_PARTS, type RolePrintPart } from '@/lib/print';
 import {
   CardSkeleton,
   Collapsible,
@@ -69,6 +70,11 @@ export default function RolesPage() {
      역할이 생긴 뒤로는 원래대로 `내 역할` 이다. */
   const [view, setView] = useState<View>(isAdmin ? 'dept' : 'me');
   const [viewPinned, setViewPinned] = useState(false);
+  /** 인쇄 고르기 — 기본은 전부 넣는다 */
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printParts, setPrintParts] = useState<RolePrintPart[]>(
+    ROLE_PRINT_PARTS.map((p) => p.key),
+  );
   const [q, setQ] = useState('');
   const [onlyOpen, setOnlyOpen] = useState(false);
 
@@ -331,18 +337,27 @@ export default function RolesPage() {
         /* 부서 만들기도 전원에게. 원장만 두면 "이런 칸이 필요한데요" 를 말로 전하고
            기다려야 한다 — 등록이 밀리는 그 문제가 층만 바뀌어 그대로 생긴다 */
         right={
-          <button
-            onClick={() => {
-              setDeptSheet('new');
-              setNameDraft('');
-              setHeadDraft('');
-              setSheetErr('');
-            }}
-            className="btn-primary px-3 text-[13.5px]"
-          >
-            <Icon name="plus" size={15} />
-            부서
-          </button>
+          <span className="flex items-center gap-1.5">
+            <button
+              onClick={() => setPrintOpen(true)}
+              aria-label="역할분장 인쇄"
+              className="btn-ghost h-10 w-10 px-0"
+            >
+              <Icon name="printer" size={16} />
+            </button>
+            <button
+              onClick={() => {
+                setDeptSheet('new');
+                setNameDraft('');
+                setHeadDraft('');
+                setSheetErr('');
+              }}
+              className="btn-primary px-3 text-[13.5px]"
+            >
+              <Icon name="plus" size={15} />
+              부서
+            </button>
+          </span>
         }
       />
 
@@ -822,6 +837,66 @@ export default function RolesPage() {
         onCancel={() => setConfirmDel(null)}
         onConfirm={() => void removeNode()}
       />
+
+      {/* ---------------------------------------------------------- 인쇄 고르기
+          부서 5 · 역할 48 이면 한 장에 안 들어간다. 무엇을 넣을지 고르게 한다
+          (프로그램 인쇄·지출결의서 인쇄와 같은 방식) */}
+      <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="역할분장 인쇄">
+        <div className="space-y-3">
+          <p className="text-[13px] leading-relaxed text-neutral-500">
+            넣을 것을 고르고 <b>인쇄 화면 열기</b> 를 누르세요. 새 창에서 열립니다.
+          </p>
+
+          <ul className="overflow-hidden rounded-xl border border-neutral-200">
+            {ROLE_PRINT_PARTS.map((part, i) => {
+              const on = printParts.includes(part.key);
+              return (
+                <li key={part.key} className={i > 0 ? 'border-t border-neutral-100' : ''}>
+                  <button
+                    onClick={() =>
+                      setPrintParts((v) =>
+                        v.includes(part.key) ? v.filter((x) => x !== part.key) : [...v, part.key],
+                      )
+                    }
+                    aria-pressed={on}
+                    className={`flex min-h-[44px] w-full items-center gap-2.5 px-3 py-2 text-left transition ${
+                      on ? 'bg-brand-50' : ''
+                    }`}
+                  >
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                        on ? 'border-brand bg-brand text-white' : 'border-neutral-300'
+                      }`}
+                    >
+                      {on && <Icon name="check" size={12} strokeWidth={3} />}
+                    </span>
+                    <span className="min-w-0 flex-1 text-[13.5px] font-semibold text-neutral-800">
+                      {part.label}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          <p className="text-[11.5px] leading-relaxed text-neutral-400">
+            <b>사람별</b> 은 한 사람이 한 쪽입니다 — 뽑아서 그대로 건네라고 그렇게 했어요.
+            {totals.unassigned > 0 && ` 지금 담당자 미정이 ${totals.unassigned}건 있습니다.`}
+          </p>
+
+          <a
+            href={`/print/roles?parts=${printParts.join(',')}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setPrintOpen(false)}
+            aria-disabled={printParts.length === 0}
+            className={`btn-primary flex w-full ${printParts.length === 0 ? 'pointer-events-none opacity-40' : ''}`}
+          >
+            <Icon name="printer" size={15} />
+            인쇄 화면 열기
+          </a>
+        </div>
+      </Sheet>
 
       {toast.node}
     </div>
