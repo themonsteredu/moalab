@@ -85,7 +85,17 @@ export function DriveCard() {
     const bad = params.get('driveError');
     if (ok) setNote(ok);
     if (bad) setError(bad);
-    if (ok || bad) void load();
+    if (!ok && !bad) return;
+    void load();
+
+    /* 읽었으면 주소에서 지운다. **안 지우면 같은 화면만 맴돈다** —
+       폰에서 뒤로 가기를 누르면 방금 다녀온 구글 콜백 주소가 히스토리에 남아 있어서
+       이미 쓴 확인값으로 그 자리를 다시 밟고, 같은 오류로 또 돌아온다.
+       원장이 *"이거로만 되돌아옴"* 이라고 한 것이 이것이다 */
+    const url = new URL(window.location.href);
+    url.searchParams.delete('driveOk');
+    url.searchParams.delete('driveError');
+    window.history.replaceState(null, '', url.pathname + url.search);
   }, [params, load]);
 
   const saveKeys = async () => {
