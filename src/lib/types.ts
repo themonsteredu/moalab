@@ -202,6 +202,77 @@ export interface CostItemPhoto {
   photo_url: string;
 }
 
+/* ------------------------------------------------------------- 수익배분
+   직접비를 먼저 빼고, 역할별 성과몫을 뺀 나머지를 참여자 1/N로 나눈다.
+   한 사람이 여러 역할을 맡으면 각 성과몫과 기본 1/N을 모두 받는다. */
+
+export type RevenueFundingType = 'private' | 'public_contract' | 'grant';
+export type RevenueSharePoolKind = 'creator' | 'proposal' | 'sales' | 'custom';
+export type RevenueShareRateMode = 'manual' | 'recommended';
+export type RevenueShareRateStatus = 'undecided' | 'draft' | 'agreed';
+
+export interface RevenueSharePoolRule {
+  id: string;
+  kind: RevenueSharePoolKind;
+  label: string;
+  active: boolean;
+  /** recommended는 사업 규모별 누진 추천액을 자동으로 쓴다. */
+  rate_mode: RevenueShareRateMode;
+  rate_percent: number;
+  member_ids: string[];
+}
+
+/** 학교·기관·지원사업처럼 수익과 비용을 따로 정산하는 사업 단위. */
+export interface RevenueProject {
+  id: string;
+  name: string;
+  /** 창작자·원가표를 가져올 교육 프로그램. 프로젝트와 프로그램은 같은 개념이 아니다. */
+  linked_app_id: string | null;
+  archived: boolean;
+  created_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+/** 프로젝트별 현재 배분 기본안. 실제 지급 내역은 아니다. */
+export interface RevenueProjectPlan {
+  project_id: string;
+  funding_type: RevenueFundingType;
+  gross_amount: number;
+  direct_costs: number;
+  base_member_ids: string[];
+  pools: RevenueSharePoolRule[];
+  note: string | null;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface RevenueShareMemberSnapshot {
+  id: string;
+  name: string;
+}
+
+/** 프로젝트 한 개의 한 달 수익배분 계산 스냅샷. */
+export interface RevenueProjectMonth {
+  id: string;
+  project_id: string;
+  /** 해당 월의 첫날, YYYY-MM-01. DATE라 시간대 영향을 받지 않는다. */
+  settlement_month: string;
+  rate_status: RevenueShareRateStatus;
+  funding_type: RevenueFundingType;
+  gross_amount: number;
+  direct_costs: number;
+  base_member_ids: string[];
+  pools: RevenueSharePoolRule[];
+  member_snapshot: RevenueShareMemberSnapshot[];
+  calculation: import('./revenueShare').RevenueShareCalculation;
+  note: string | null;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
 /* -------------------------------------------------------- 강의계획서
    원장이 준 한글 양식(강의계획서.hwp) 그대로 화면에서 채우고 그대로 인쇄한다.
    양식 한 장 = 프로그램 하나라서 app_id 가 그대로 기본키다. */

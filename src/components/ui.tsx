@@ -231,6 +231,7 @@ export function MultiPicker<T extends { id: string; name: string }>({
             key={o.id}
             type="button"
             onClick={() => toggle(o.id)}
+            aria-pressed={on}
             className={`tap rounded-full border px-3.5 text-[14px] font-semibold transition ${
               on ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
             }`}

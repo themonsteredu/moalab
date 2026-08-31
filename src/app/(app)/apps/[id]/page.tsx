@@ -39,6 +39,7 @@ const SECTIONS = [
   { id: 'plan', icon: 'doc', label: '강의계획서' },
   { id: 'planfile', icon: 'clip', label: '첨부' },
   { id: 'cost', icon: 'won', label: '원가' },
+  { id: 'revenue', icon: 'won', label: '수익배분' },
   { id: 'sample', icon: 'image', label: '샘플' },
   { id: 'photos', icon: 'camera', label: '수업 사진' },
   { id: 'comment', icon: 'comment', label: '댓글' },
@@ -475,6 +476,20 @@ export default function AppDetailPage() {
         {/* -------------------------------------------------------- 원가 */}
         <Section id="cost" icon="won" title="원가">
           <CostInline appId={id} appTitle={app.title_ko} appSlug={app.slug} />
+        </Section>
+
+        {/* ------------------------------------------------ 월별 수익배분 */}
+        <Section id="revenue" icon="won" title="수익배분">
+          <div className="rounded-xl bg-neutral-50 px-3.5 py-3">
+            <p className="text-[13.5px] font-bold text-neutral-800">월별 성과몫 + 남은 이익 1/N</p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-500">
+              달마다 실제 수금액과 직접비를 넣고, 창작·사업계획서·영업 성과몫과 팀 기본 1/N을
+              사람별 예상액으로 계산해요.
+            </p>
+          </div>
+          <Link href="/revenue" className="btn-primary mt-3 w-full">
+            수익 프로젝트에서 계산하기
+          </Link>
         </Section>
 
         {/* -------------------------------------------------- 샘플 이미지 */}

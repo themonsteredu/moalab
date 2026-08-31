@@ -49,6 +49,7 @@ export const WORK_NAV: NavItem[] = [
 
 export const RESOURCE_NAV: NavItem[] = [
   { href: '/cost', label: '원가', icon: 'won' },
+  { href: '/revenue', label: '수익배분', icon: 'won' },
   // 원가(계획) 바로 아래에 지출(실제)을 둔다 — 돈 얘기는 붙어 있어야 비교가 된다
   { href: '/expense', label: '지출결의서', icon: 'receipt' },
   { href: '/gallery', label: '갤러리', icon: 'image', quiet: true },
@@ -66,7 +67,19 @@ const PHONE_TABS: NavItem[] = [
 
 // 폰 하단 탭은 4개를 유지한다 — 5개로 늘리면 375px 에서 라벨이 뭉개진다.
 // 업무는 일단 더보기에 두고, 홈에서 자기 업무가 다 보이게 한다.
-const MORE_HREFS = ['/task', '/collab', '/mock', '/training', '/roles', '/cost', '/expense', '/gallery', '/schedule', '/admin'];
+const MORE_HREFS = [
+  '/task',
+  '/collab',
+  '/mock',
+  '/training',
+  '/roles',
+  '/cost',
+  '/revenue',
+  '/expense',
+  '/gallery',
+  '/schedule',
+  '/admin',
+];
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/');
