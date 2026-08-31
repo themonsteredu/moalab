@@ -27,6 +27,7 @@ export async function POST(req: Request) {
     month?: string | null;
     date?: string | null;
     school?: string | null;
+    deptName?: string | null;
     prefix?: string | null;
   };
 

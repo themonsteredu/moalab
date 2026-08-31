@@ -1162,3 +1162,35 @@ alter table moalab.drive_uploads enable row level security;
 drop policy if exists "internal_all" on moalab.drive_uploads;
 create policy "internal_all" on moalab.drive_uploads for all using (true) with check (true);
 grant all on moalab.drive_uploads to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- 24. 부서 자료함 — 부서가 만든 자료를 부서에 붙여 올린다
+--
+--   지금까지 파일은 전부 **프로그램·공지·지출·앨범**에만 붙었다.
+--   부서에 붙는 자리가 하나도 없어서, 부서에 사람을 배정해놓고 정작 그 부서가
+--   만든 자료를 올릴 데가 없었다.
+--
+--   새 메뉴를 만들지 않는다 — 부서에 사람을 배정하는 화면(/roles)이 이미
+--   부서를 맨 위에 두고 있어서, 거기에 자료 칸만 더한다
+--   (`plan_files.kind` 를 더해 강사교육 문서를 담은 것과 같은 판단).
+--
+--   드라이브로는 `업무분장/{부서명}/` 으로 간다 — 손으로 만들어둔 그 폴더다.
+-- ---------------------------------------------------------------------
+
+create table if not exists moalab.dept_files (
+  id         uuid primary key default gen_random_uuid(),
+  dept_id    uuid not null references moalab.departments(id) on delete cascade,
+  file_url   text not null,
+  file_name  text not null,
+  file_size  int,
+  note       text,                     -- 무엇을 만든 자료인지 한 줄
+  -- 사람을 지워도 자료는 남는다 (plan_files 와 같은 갈래)
+  member_id  uuid references moalab.members(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists dept_files_dept_idx on moalab.dept_files(dept_id, created_at desc);
+
+alter table moalab.dept_files enable row level security;
+drop policy if exists "internal_all" on moalab.dept_files;
+create policy "internal_all" on moalab.dept_files for all using (true) with check (true);
+grant all on moalab.dept_files to anon, authenticated, service_role;
