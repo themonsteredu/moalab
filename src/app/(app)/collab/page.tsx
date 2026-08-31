@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
@@ -52,6 +53,7 @@ type Box = 'received' | 'sent' | 'all';
  */
 export default function CollabPage() {
   const { session, isAdmin } = useSession();
+  const router = useRouter();
   const { members, nameOf } = useMembers();
   const toast = useToast();
 
@@ -304,6 +306,22 @@ export default function CollabPage() {
         fromId: meId || undefined,
       });
     }
+  };
+
+  /** 이 건으로 대화하기 — 1:1 방을 열고 첫 마디를 미리 채운 채로 넘어간다 */
+  const talkTo = async (memberId: string, draft: string) => {
+    const res = await fetch('/api/chat/rooms', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-session-token': session?.token ?? '' },
+      body: JSON.stringify({ memberId }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      const j = await res?.json().catch(() => ({}));
+      setError(j?.error ?? '대화방을 열지 못했어요. 다시 로그인해보세요.');
+      return;
+    }
+    const { roomId } = await res.json();
+    router.push(`/chat/${roomId}?draft=${encodeURIComponent(draft)}`);
   };
 
   const remove = async () => {
@@ -599,6 +617,25 @@ export default function CollabPage() {
                 {open.created_by && <span>보낸 사람 {nameOf(open.created_by)}</span>}
               </div>
             </div>
+
+            {/* ①→③ — 이 건으로 바로 대화하기.
+                상대 부서 **팀장과 1:1** 을 연다. 상대 부서 단톡방은 내가 멤버가 아니라
+                열어도 말을 못 넣는다. 첫 마디는 미리 채워만 두고 보내지 않는다 —
+                자동으로 나가면 잘못 눌렀을 때 되돌릴 수가 없다 */}
+            {(() => {
+              const otherDept = myDeptIds.includes(open.to_dept_id) ? open.from_dept_id : open.to_dept_id;
+              const head = deptList.find((d) => d.id === otherDept)?.head_id;
+              if (!head || head === meId) return null;
+              const draft = `[${open.project || deptName(open.to_dept_id)}] `;
+              return (
+                <button
+                  onClick={() => void talkTo(head, draft)}
+                  className="tap w-full rounded-xl border border-brand bg-brand-50 text-[14px] font-bold text-brand-700"
+                >
+                  {nameOf(head)}님과 이 건으로 대화하기
+                </button>
+              );
+            })()}
 
             {canRespond(open, deptList, meId, isAdmin) ? (
               <div>

@@ -47,5 +47,27 @@ export async function POST(req: Request) {
 
   await admin.from('activity_logs').insert({ member_id: data.id, action: '로그인', target: null });
 
-  return NextResponse.json({ member: { id: data.id, name: data.name, role: data.role } });
+  /* 대화 격리에 쓸 세션 토큰을 발급한다.
+     `x-actor-id` 헤더는 브라우저가 아무 값이나 넣을 수 있어서 남의 1:1 대화를
+     읽는 데 쓸 수 있다 — 그래서 대화만은 이 토큰으로 신원을 확인한다
+     (moalab.sessions 는 PIN 과 똑같이 잠겨 있어 브라우저가 지어낼 수 없다).
+
+     ※ 토큰 발급이 실패해도 **로그인은 그대로 된다.** 대화만 다시 로그인을 요구한다 —
+       알림 발송이 실패해도 공지가 올라가는 것과 같은 판단이다. */
+  let token: string | null = null;
+  try {
+    const { data: sess } = await admin
+      .from('sessions')
+      .insert({
+        member_id: data.id,
+        user_agent: (req.headers.get('user-agent') ?? '').slice(0, 300),
+      })
+      .select('token')
+      .maybeSingle();
+    token = sess?.token ?? null;
+  } catch {
+    /* 표가 아직 없는 DB 여도 로그인은 막지 않는다 */
+  }
+
+  return NextResponse.json({ member: { id: data.id, name: data.name, role: data.role }, token });
 }

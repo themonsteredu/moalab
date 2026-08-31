@@ -71,7 +71,7 @@ export default function LoginPage() {
           setTimeout(() => setShake(false), 450);
           return;
         }
-        signIn(json.member);
+        signIn({ ...json.member, token: json.token ?? null });
         router.replace('/home');
       } catch {
         setError('인터넷 연결이 불안정해요. 잠시 후 다시 눌러주세요.');
