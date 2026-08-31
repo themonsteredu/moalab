@@ -382,7 +382,7 @@ end $$;
 -- ---------------------------------------------------------------------
 create table if not exists moalab.schedules (
   id         uuid primary key default gen_random_uuid(),
-  kind       text not null default 'meeting',      -- meeting | visit
+  kind       text not null default 'meeting',      -- class(출강) | meeting(회의) | etc(기타)
   title      text not null,
   date       date not null,
   start_time time,
@@ -862,6 +862,40 @@ create table if not exists moalab.collab_comments (
   created_at timestamptz not null default now()
 );
 create index if not exists collab_comments_req_idx on moalab.collab_comments(request_id, created_at);
+
+-- ---------------------------------------------------------------------
+-- 21. 출강 일정 — 9번(schedules)에 칸만 더한다
+--
+--   **새 표를 만들지 않았다.** 출강도 "언제·어디서·누가" 라 회의와 축이 같다.
+--   따로 표를 만들면 달력을 두 번 그려야 하고, 한 화면에 섞어 보여줄 방법이
+--   없어진다 (계획안 첨부에 갈래 칸 하나만 더한 것과 같은 판단).
+--
+--   갈래는 셋이다 — class(출강) · meeting(회의) · etc(기타).
+--   **마감은 여기 안 넣는다.** apps.due_date 와 collab_requests.due_date 에서
+--   달력이 스스로 만들어낸다 — 같은 날짜를 두 곳에 적게 하면 반드시 어긋난다.
+--
+--   담당 강사는 이미 있는 schedule_members 를 그대로 쓴다 (참석자와 같은 뜻이다).
+-- ---------------------------------------------------------------------
+
+-- 'visit'(학교 방문 수업)은 뜻이 그대로 '출강' 이라 이름만 옮긴다.
+-- 아직 한 줄도 안 쌓였을 때 옮겨두는 것이다 — 나중에 하면 지난 기록의 뜻이 바뀐다
+update moalab.schedules set kind = 'class' where kind = 'visit';
+
+alter table moalab.schedules add column if not exists end_time  time;
+-- 프로그램 — 자유 입력이 아니라 apps 를 가리킨다. 프로그램을 지워도 일정은 남는다
+alter table moalab.schedules add column if not exists app_id    uuid references moalab.apps(id) on delete set null;
+alter table moalab.schedules add column if not exists school    text;
+alter table moalab.schedules add column if not exists headcount int;
+-- 강의 타임 수 — 정산의 기준이다. 시간이 아니라 '차시' 라 정수다
+alter table moalab.schedules add column if not exists periods   int;
+
+-- 값이 흘러들어 화면이 죽는 걸 막는다 (apps.status 에서 실제로 겪었다).
+-- 제약을 새로 걸기 전에 옛 값을 먼저 정리한다
+update moalab.schedules set kind = 'etc' where kind not in ('class','meeting','etc');
+alter table moalab.schedules drop constraint if exists schedules_kind_chk;
+alter table moalab.schedules add  constraint schedules_kind_chk check (kind in ('class','meeting','etc'));
+
+create index if not exists schedules_app_idx on moalab.schedules(app_id);
 
 -- =====================================================================
 --  권한 + RLS

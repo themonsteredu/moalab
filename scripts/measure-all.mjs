@@ -24,6 +24,7 @@ import { existsSync } from 'node:fs';
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 const PHONE = { width: 375, height: 812 };
 const ROLE = process.env.MEASURE_ROLE ?? 'admin';
+const SHOT_DIR = process.env.MEASURE_SHOT ?? '';
 
 const ME = '00000000-0000-0000-0000-000000000001';
 const M = (n) => `00000000-0000-0000-0000-00000000000${n}`;
@@ -106,11 +107,24 @@ const NOTICES = [{
   pinned: true, author_id: ME, created_at: '2026-08-18T00:00:00Z', updated_at: '2026-08-18T00:00:00Z',
 }];
 
-const SCHEDULES = Array.from({ length: 4 }, (_, i) => ({
-  id: `s${i}`, title: ['팀 회의', 'A초 방문', '재료 입고', '모의수업'][i],
-  date: ['2026-08-25', '2026-08-27', '2026-08-28', '2026-09-01'][i],
-  kind: 'meeting', memo: null, app_id: null, created_at: '2026-08-01T00:00:00Z',
-}));
+/* 일정 — 출강 3 · 회의 1. 출강은 학교·프로그램·인원·타임까지 채워서 카드가 실제 높이로 그려지게 한다 */
+const SCHEDULES = [
+  { id: 's0', kind: 'meeting', title: '팀 회의', date: '2026-08-25', start_time: '10:00:00', end_time: null,
+    place: '사무실', memo: null, app_id: null, school: null, headcount: null, periods: null },
+  { id: 's1', kind: 'class', title: '모아초등학교 · AI 그림 수업 1', date: '2026-08-27', start_time: '09:00:00',
+    end_time: '12:00:00', place: '3층 과학실', memo: null, app_id: 'app0', school: '모아초등학교', headcount: 24, periods: 3 },
+  { id: 's2', kind: 'class', title: '한빛중학교 · 드론 수업 1', date: '2026-08-28', start_time: '13:00:00',
+    end_time: null, place: null, memo: null, app_id: 'app3', school: '한빛중학교', headcount: 18, periods: 2 },
+  { id: 's3', kind: 'class', title: '새샘초등학교 · 코딩 수업 1', date: '2026-09-01', start_time: '10:00:00',
+    end_time: null, place: null, memo: null, app_id: 'app6', school: '새샘초등학교', headcount: 20, periods: null },
+].map((s) => ({ ...s, created_at: '2026-08-01T00:00:00Z' }));
+
+const SCHEDULE_MEMBERS = [
+  { schedule_id: 's0', member_id: ME }, { schedule_id: 's0', member_id: M(2) },
+  { schedule_id: 's1', member_id: M(2) }, { schedule_id: 's1', member_id: M(3) },
+  { schedule_id: 's2', member_id: M(4) },
+  { schedule_id: 's3', member_id: M(2) },
+];
 
 const EXPENSES = [{
   id: 'e1', spent_on: '2026-08-18', amount: 45000, category: '재료비',
@@ -132,6 +146,17 @@ const DUTIES = Array.from({ length: 48 }, (_, i) => ({
   note: '올라온 지출을 확인한다', owner_id: null, sort_order: i, created_at: '2026-08-01T00:00:00Z',
 }));
 
+/* 부서 협업 요청 — 기한이 달력에 마감으로 얹힌다 (①→② 연결) */
+const COLLABS = [
+  { id: 'cr1', from_dept_id: 'd3', to_dept_id: 'd2', project: '○○중 3학년 4차시',
+    body: '계약이 확정됐어요. 9/20까지 교안이 필요합니다.', due_date: '2026-08-30',
+    priority: 'high', status: 'requested' },
+  { id: 'cr2', from_dept_id: 'd2', to_dept_id: 'd4', project: '드론 교구 확인',
+    body: '드론 배터리 수량 확인 부탁드려요.', due_date: '2026-09-03',
+    priority: 'normal', status: 'doing' },
+].map((r) => ({ ...r, created_by: ME, accepted_by: null, done_at: null,
+  created_at: '2026-08-20T00:00:00Z', updated_at: '2026-08-20T00:00:00Z' }));
+
 const COST_SHEETS = Array.from({ length: 10 }, (_, i) => ({
   id: `cs${i}`, title: `${TOPIC_NAMES[i]} 원가표`, app_id: `app${i}`,
   headcount: 20, price: 15000, memo: null,
@@ -145,8 +170,10 @@ function rowsFor(url) {
     members: MEMBERS, members_public: MEMBERS,
     apps: APPS, topics: TOPICS, rounds: ROUNDS, findings: FINDINGS,
     app_reviewers: REVIEWERS, tasks: TASKS, notices: NOTICES,
-    schedules: SCHEDULES, expenses: EXPENSES, cost_sheets: COST_SHEETS,
+    schedules: SCHEDULES, schedule_members: SCHEDULE_MEMBERS,
+    expenses: EXPENSES, cost_sheets: COST_SHEETS,
     departments: DEPTS, duty_groups: DUTY_GROUPS, duties: DUTIES, duty_helpers: [],
+    collab_requests: COLLABS, collab_comments: [],
   };
   return map[table] ?? [];
 }
@@ -157,6 +184,7 @@ const PAGES = [
   ['/home', '홈'],
   ['/notice', '공지사항'],
   ['/task', '업무'],
+  ['/collab', '부서협업'],
   ['/apps', '프로그램계획'],
   ['/verify', '프로그램검증'],
   ['/roles', '역할분장'],
@@ -209,6 +237,12 @@ for (const [path, label] of PAGES) {
   if (new URL(page.url()).pathname.startsWith('/login')) {
     rows.push({ label, err: '로그인 화면으로 튕김' });
     continue;
+  }
+
+  /* MEASURE_SHOT=<폴더> 를 주면 화면을 통째로 찍어둔다 — 숫자만 보면
+     '짧아졌는데 망가진' 경우를 놓친다 */
+  if (SHOT_DIR) {
+    await page.screenshot({ path: `${SHOT_DIR}/${path.replace(/\//g, '') || 'root'}.png`, fullPage: true });
   }
 
   rows.push({

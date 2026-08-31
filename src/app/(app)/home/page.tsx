@@ -147,6 +147,8 @@ export default function HomePage() {
     })();
   }, [items, meId]);
 
+  const collabFromName = useCallback((id: string) => deptNames[id] ?? '다른 부서', [deptNames]);
+
   /* ------------------------------------------------------------ 달력 */
   const entries = useMemo<CalEntry[]>(() => {
     const out: CalEntry[] = [];
@@ -162,6 +164,19 @@ export default function HomePage() {
         who: it.reviewerIds.map((r) => nameOf(r)),
       });
     }
+    /* 우리 부서가 받은 협업 요청의 기한도 마감이다 — 같은 날짜를 두 곳에 적게 하지 않는다
+       (일정 화면과 같은 규칙, src/lib/schedule.ts 참고) */
+    for (const r of myCollab) {
+      if (!r.due_date || r.status === 'done' || r.due_date < range.from || r.due_date > range.to) continue;
+      out.push({
+        id: `due-collab-${r.id}`,
+        kind: 'due',
+        title: `${r.project ? `${r.project} — ` : ''}협업 기한`,
+        date: r.due_date,
+        href: '/collab',
+        who: [collabFromName(r.from_dept_id)],
+      });
+    }
     for (const s of schedules ?? []) {
       out.push({
         id: s.id,
@@ -175,7 +190,7 @@ export default function HomePage() {
       });
     }
     return out;
-  }, [items, schedules, attendees, nameOf, range]);
+  }, [items, schedules, attendees, nameOf, range, myCollab, collabFromName]);
 
   const dayEntries = useMemo(
     () => entries.filter((e) => e.date === picked).sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99')),
@@ -318,7 +333,6 @@ export default function HomePage() {
     }
   };
 
-  const collabFromName = useCallback((id: string) => deptNames[id] ?? '다른 부서', [deptNames]);
 
   const myTasks = useMemo(() => {
     /* href 를 줄마다 들고 다닌다 — 예전엔 카드가 `/apps/${id}` 로 하드코딩돼 있어서
