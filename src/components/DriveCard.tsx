@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useSession } from '@/lib/session';
 import { DRIVE_KINDS, driveKindLabel, type DriveKind } from '@/lib/drivePath';
 import { Icon } from '@/components/Icon';
-import { Collapsible, ConfirmDialog, ErrorBanner } from '@/components/ui';
+import { Collapsible, ConfirmDialog, ErrorBanner, Skeleton } from '@/components/ui';
 
 interface Status {
   connected: boolean;
@@ -70,6 +70,8 @@ export function DriveCard() {
       }
     } catch {
       setError('연결 상태를 못 읽었어요.');
+      // 못 읽어도 카드는 그려야 한다 — 안 그러면 스켈레톤에 갇혀 에러가 안 보인다
+      setStatus((s) => s ?? { connected: false, hasKeys: false, pending: 0, failed: 0 });
     }
   }, [session, headers]);
 
@@ -146,6 +148,19 @@ export function DriveCard() {
   };
 
   if (!session) return null;
+
+  /* 아직 못 읽었을 때 `1. 열쇠 넣기` 빈 칸을 그리면 **저장해둔 열쇠가 사라진 것처럼 보인다.**
+     실제로 원장이 그 화면을 보고 열쇠를 다시 넣으려 했다 (로딩엔 스켈레톤 규칙과 같은 이유) */
+  if (!status) {
+    return (
+      <div className="card p-4">
+        <Skeleton className="mb-3 h-5 w-2/3" />
+        <Skeleton className="mb-3 h-3.5 w-full" />
+        <Skeleton className="h-11 w-full rounded-xl" />
+      </div>
+    );
+  }
+
   const on = status?.kinds ?? DRIVE_KINDS.map((d) => d.value);
 
   /* 이미 연결돼 있으면 한 줄로 접는다 — 다 끝난 설정이 큰 카드로 자리를 먹으면 안 된다

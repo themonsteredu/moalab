@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
-import { DRIVE_KEY, type DriveMeta } from '@/lib/drive';
+import { DRIVE_KEY, OAUTH_KEEP, OAUTH_TTL_MS, type DriveMeta } from '@/lib/drive';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +13,8 @@ export const dynamic = 'force-dynamic';
  *   원장이 이미 손으로 만들어둔 `모아랩` 폴더 안에 못 넣는다
  * · 한 번짜리 `state` 를 만들어 저장해둔다 — 돌아오는 자리에서 이걸로 확인한다
  *   (그 자리는 구글이 브라우저를 직접 보내는 곳이라 우리 헤더가 없다)
+ * · **앞서 만든 것을 덮어쓰지 않고 몇 개를 같이 들고 있는다.** 폰에서 구글 창을
+ *   닫지 않고 여기서 한 번 더 누르면, 앞 창을 끝내도 확인값이 안 맞아 튕긴다
  */
 export async function GET(req: Request) {
   const admin = getAdminClient();
@@ -37,7 +39,20 @@ export async function GET(req: Request) {
   }
 
   const state = crypto.randomUUID();
-  const meta = { ...((data?.meta ?? {}) as DriveMeta), oauthState: state, oauthUntil: Date.now() + 10 * 60_000 };
+  const now = Date.now();
+  const prev = ((data?.meta ?? {}) as DriveMeta).oauthStates ?? [];
+  const meta: DriveMeta = {
+    ...((data?.meta ?? {}) as DriveMeta),
+    oauthStates: [...prev.filter((x) => x?.s && x.until > now), { s: state, until: now + OAUTH_TTL_MS }].slice(
+      -OAUTH_KEEP,
+    ),
+  };
+  // 옛 한 개짜리 칸은 새 목록으로 옮겨 담고 지운다
+  if (meta.oauthState && (meta.oauthUntil ?? 0) > now) {
+    meta.oauthStates = [{ s: meta.oauthState, until: meta.oauthUntil ?? 0 }, ...meta.oauthStates!].slice(-OAUTH_KEEP);
+  }
+  delete meta.oauthState;
+  delete meta.oauthUntil;
   await admin.from('app_secrets').update({ meta }).eq('key', DRIVE_KEY);
 
   const origin = new URL(req.url).origin;

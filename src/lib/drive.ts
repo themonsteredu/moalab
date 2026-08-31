@@ -36,9 +36,33 @@ type Admin = ReturnType<typeof import('./supabaseAdmin').getAdminClient> extends
   ? Exclude<T, null>
   : never;
 
+/** 동의 화면으로 보낼 때 만든 한 번짜리 확인값 */
+export interface OauthState {
+  s: string;
+  until: number;
+}
+
+/**
+ * 한 번에 **하나만** 들고 있으면 안 된다.
+ *
+ * 폰에서는 구글 창이 따로 열리는데, 원장이 그 창을 닫지 않고 관리 화면에서 한 번 더
+ * 누르면 확인값이 새 것으로 바뀐다. 그 뒤 **앞의 창**을 끝까지 진행하면
+ * *"연결 확인값이 안 맞아요"* 로 튕긴다 — 실제로 그렇게 두 번 튕겼다.
+ * 그래서 최근 몇 개를 같이 들고 있다가 그중 하나만 맞으면 받아준다.
+ */
+export const OAUTH_KEEP = 3;
+
+/** 폰에서는 로그인·경고·동의를 거치느라 10분이 모자란다 */
+export const OAUTH_TTL_MS = 30 * 60_000;
+
 export interface DriveMeta {
   /** 최상위 '모아랩' 폴더 id */
   rootId?: string;
+  /** 아직 안 쓴 확인값들 (최근 것부터 최대 OAUTH_KEEP 개) */
+  oauthStates?: OauthState[];
+  /** (구) 한 개짜리 확인값 — 예전에 시작한 연결이 끝날 수 있게 남겨둔다 */
+  oauthState?: string;
+  oauthUntil?: number;
   /** 연결한 구글 계정 (화면에 보여줄 용도) */
   email?: string;
   /** 켜둔 갈래. 없으면 전부 켠 것으로 본다 */
