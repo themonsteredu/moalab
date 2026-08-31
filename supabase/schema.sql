@@ -802,6 +802,67 @@ create table if not exists moalab.duty_helpers (
 );
 create index if not exists duty_helpers_member_idx on moalab.duty_helpers(member_id);
 
+
+-- ---------------------------------------------------------------------
+-- 20. 부서 간 협업 요청 / 업무 지시
+--
+--   업무(tasks)와 **축이 또 다르다.**
+--     tasks           : 1건 × 담당자 **1명** × 기한. 개인의 할 일이다
+--     collab_requests : **부서 → 부서.** 받는 쪽은 사람이 아니라 팀이고,
+--                       받아들일지 말지(요청→진행중→완료)가 상대에게 있다
+--   합치면 '내 할 일' 목록이 남의 부서 요청으로 뒤섞이고,
+--   '받은 요청 / 보낸 요청' 이라는 편지함 축을 만들 수 없다
+--   (원가 vs 지출 · 업무 vs 강사양성 을 나눈 것과 같은 이유).
+--
+--   부서 자체는 19번(departments)을 그대로 쓴다. 팀장도 이미 있는 head_id 다 —
+--   새로 만들지 않는다.
+-- ---------------------------------------------------------------------
+
+-- 업무 흐름을 **데이터로** 둔다. 조직이 바뀔 때 코드를 안 고친다 (topics 와 같은 판단).
+--   흐름: 영업마케팅(1) → 기획개발(2) → 생산운영(3) → 인사관리(4)
+--   경영지원은 흐름 밖에서 전 부서를 지원한다 → is_support
+alter table moalab.departments add column if not exists flow_order int;
+alter table moalab.departments add column if not exists is_support boolean not null default false;
+
+create table if not exists moalab.collab_requests (
+  id           uuid primary key default gen_random_uuid(),
+  -- 보내는 곳 / 받는 곳. 부서를 지우면 그 부서가 주고받은 요청도 같이 사라진다
+  from_dept_id uuid not null references moalab.departments(id) on delete cascade,
+  to_dept_id   uuid not null references moalab.departments(id) on delete cascade,
+  -- 프로젝트명 — "○○중 3학년 4차시" 처럼 자유 입력. 표로 뺄 만큼 반복되지 않는다
+  project      text,
+  body         text not null,
+  due_date     date,
+  -- 'high' | 'normal' | 'low'
+  priority     text not null default 'normal',
+  -- 'requested' | 'doing' | 'done'
+  status       text not null default 'requested',
+  -- 사람을 지워도 요청 기록은 남는다 (tasks 와 같은 갈래)
+  created_by   uuid references moalab.members(id) on delete set null,
+  accepted_by  uuid references moalab.members(id) on delete set null,
+  done_at      timestamptz,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  -- 값이 흘러들어 화면이 죽는 걸 막는다 (apps.status 에서 실제로 겪었다)
+  constraint collab_requests_status_chk   check (status in ('requested','doing','done')),
+  constraint collab_requests_priority_chk check (priority in ('high','normal','low')),
+  -- 자기 부서에 자기가 요청하는 건 뜻이 없다
+  constraint collab_requests_not_self     check (from_dept_id <> to_dept_id)
+);
+create index if not exists collab_to_idx   on moalab.collab_requests(to_dept_id, status, due_date);
+create index if not exists collab_from_idx on moalab.collab_requests(from_dept_id, created_at desc);
+create index if not exists collab_due_idx  on moalab.collab_requests(due_date);
+
+-- 주고받는 말. 지적 답변(finding_replies)과 같은 꼴이다
+create table if not exists moalab.collab_comments (
+  id         uuid primary key default gen_random_uuid(),
+  request_id uuid not null references moalab.collab_requests(id) on delete cascade,
+  member_id  uuid references moalab.members(id) on delete set null,
+  body       text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists collab_comments_req_idx on moalab.collab_comments(request_id, created_at);
+
 -- =====================================================================
 --  권한 + RLS
 --   · members       : RLS on, 정책 없음 → anon 키로는 읽기/쓰기 전부 차단
@@ -849,7 +910,8 @@ begin
     'training_courses','training_records',
     'tasks','task_templates','task_template_items',
     'expenses','expense_files',
-    'departments','duty_groups','duties','duty_helpers'
+    'departments','duty_groups','duties','duty_helpers',
+    'collab_requests','collab_comments'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);
     execute format('drop policy if exists "internal_all" on moalab.%I', t);
