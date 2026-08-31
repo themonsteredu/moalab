@@ -12,13 +12,18 @@ export interface Session {
   role: Role;
   /** epoch ms. 지나면 다시 PIN 을 받는다. */
   expiresAt: number;
+  /**
+   * 대화 전용 신원 확인용. 없어도 나머지 화면은 그대로 돌아간다 —
+   * 이 칸이 생기기 전에 로그인한 사람은 대화만 다시 로그인을 요구받는다.
+   */
+  token?: string | null;
 }
 
 interface Ctx {
   session: Session | null;
   /** localStorage 를 아직 안 읽은 상태 (깜빡임 방지용) */
   loading: boolean;
-  signIn: (m: { id: string; name: string; role: Role }) => void;
+  signIn: (m: { id: string; name: string; role: Role; token?: string | null }) => void;
   signOut: () => void;
   isAdmin: boolean;
 }
@@ -56,7 +61,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }, []);
 
-  const signIn = useCallback((m: { id: string; name: string; role: Role }) => {
+  const signIn = useCallback((m: { id: string; name: string; role: Role; token?: string | null }) => {
     const s: Session = { ...m, expiresAt: Date.now() + THIRTY_DAYS };
     window.localStorage.setItem(KEY, JSON.stringify(s));
     setSession(s);

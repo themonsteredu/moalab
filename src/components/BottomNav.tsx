@@ -38,6 +38,9 @@ export const WORK_NAV: NavItem[] = [
   // 부서협업은 업무 바로 다음이다 — 업무가 '사람에게 나누는 것' 이면
   // 이건 '부서끼리 주고받는 것' 이라 같은 갈래의 한 칸 위다
   { href: '/collab', label: '부서협업', icon: 'users' },
+  // 대화는 부서협업 바로 아래다 — 협업 요청이 '기록으로 남기는 것' 이면
+  // 대화는 '그 자리에서 주고받는 것' 이라 같은 갈래의 짝이다
+  { href: '/chat', label: '대화', icon: 'megaphone' },
   { href: '/apps', label: '프로그램계획', icon: 'doc' },
   { href: '/verify', label: '프로그램검증', icon: 'checkCircle' },
   { href: '/mock', label: '모의수업', icon: 'present', quiet: true },
@@ -70,6 +73,7 @@ const PHONE_TABS: NavItem[] = [
 const MORE_HREFS = [
   '/task',
   '/collab',
+  '/chat',
   '/mock',
   '/training',
   '/roles',
