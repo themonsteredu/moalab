@@ -93,6 +93,7 @@ export interface DriveQueueInput {
   date?: string | null;
   school?: string | null;
   deptName?: string | null;
+  groupName?: string | null;
   /** 파일 이름 앞에 붙일 말 (뜻 없는 `abc123.webp` 를 알아볼 수 있게) */
   prefix?: string | null;
 }

@@ -9,7 +9,6 @@ import { PageHeader } from '@/components/PageHeader';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { DutyForm } from '@/components/DutyForm';
-import { DeptFiles } from '@/components/DeptFiles';
 import { ROLE_PRINT_PARTS, type RolePrintPart } from '@/lib/print';
 import {
   CardSkeleton,
@@ -31,6 +30,7 @@ import {
   type DeptNode,
   type DutyRef,
   type GroupNode,
+  ownerOf,
 } from '@/lib/org';
 import type { Department, Duty, DutyGroup, DutyHelper } from '@/lib/types';
 
@@ -261,8 +261,11 @@ export default function RolesPage() {
 
   /* ------------------------------------------------------------ 화면 */
 
-  const dutyRow = (node: { duty: Duty; helperIds: string[] }, label: string) => {
-    const owner = node.duty.owner_id;
+  const dutyRow = (node: { duty: Duty; helperIds: string[] }, label: string, deptHeadId?: string | null) => {
+    /* 주담당이 없으면 **그 부서 팀장**이 맡는다 — 원장이 부서마다 팀장을 정해뒀으니
+       역할 63개마다 다시 고르게 하지 않는다. 팀장도 없을 때만 '미정' 이다 */
+    const owner = ownerOf(node.duty, deptHeadId);
+    const inherited = !node.duty.owner_id && !!owner;
     return (
       <li key={node.duty.id}>
         {/* 누구나 누를 수 있다 — 담당자를 정하는 건 '내가 이거 할게요' 이기도 하다
@@ -281,6 +284,7 @@ export default function RolesPage() {
             <span className="flex shrink-0 items-center gap-1">
               <Avatar name={nameOf(owner)} size={20} />
               <span className="text-[12px] font-bold text-neutral-600">{nameOf(owner)}</span>
+              {inherited && <span className="chip bg-neutral-100 text-neutral-500">팀장</span>}
               {node.helperIds.length > 0 && (
                 <span className="chip bg-neutral-100 text-neutral-500">+{node.helperIds.length}</span>
               )}
@@ -592,7 +596,7 @@ export default function RolesPage() {
                               }
                             >
                               <ul className="divide-y divide-neutral-100 border-t border-neutral-100">
-                                {g.duties.map((n) => dutyRow(n, `${d.dept.name} › ${g.group.name}`))}
+                                {g.duties.map((n) => dutyRow(n, `${d.dept.name} › ${g.group.name}`, d.dept.head_id))}
                               </ul>
                               {/* 역할 추가는 전원에게 — 자기가 맡을 일은 자기가 적는 게 빠르다 */}
                               <button
@@ -626,9 +630,6 @@ export default function RolesPage() {
                         중분류 추가
                       </button>
 
-                      {/* 부서가 만든 자료 — 부서에 사람을 배정하는 이 화면이 제자리다.
-                          드라이브를 연결해두면 `업무분장/{부서}` 로도 한 벌 올라간다 */}
-                      <DeptFiles deptId={d.dept.id} deptName={d.dept.name} />
                     </Collapsible>
                   </section>
                 ))}

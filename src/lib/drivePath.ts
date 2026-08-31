@@ -36,9 +36,9 @@ export const DRIVE_KINDS: { value: DriveKind; label: string; where: string; hint
   },
   {
     value: 'dept',
-    label: '부서 자료',
-    where: '업무분장 / {부서}',
-    hint: '각 부서가 만든 자료 — 역할분장 화면에서 올려요',
+    label: '역할 자료',
+    where: '업무분장 / {부서} / {중분류}',
+    hint: '역할분장에서 그 일을 열고 올린 결과물',
   },
 ];
 
@@ -95,9 +95,15 @@ export function photoPath(date: string, school: string | null | undefined): stri
   return `${termOf(date)}/${safeSeg(school, '학교 미정')}/수업사진`;
 }
 
-/** 부서 자료 — 손으로 만들어둔 `업무분장/{부서}` 폴더로 그대로 간다 */
-export function deptPath(deptName: string | null | undefined): string {
-  return `업무분장/${safeSeg(deptName, '부서 미정')}`;
+/**
+ * 역할 자료 — 손으로 만들어둔 `업무분장/{부서}/{중분류}` 폴더로 그대로 간다.
+ *
+ * 역할마다 폴더를 또 파지 않는다 — 역할이 63개라 폴더가 63개가 된다.
+ * 대신 파일 이름 앞에 역할명을 붙여 무엇을 하다 나온 자료인지 알아보게 한다.
+ */
+export function deptPath(deptName: string | null | undefined, groupName?: string | null): string {
+  const base = `업무분장/${safeSeg(deptName, '부서 미정')}`;
+  return groupName ? `${base}/${safeSeg(groupName, '기타')}` : base;
 }
 
 /** 갈래에 맞는 폴더 경로. 필요한 값이 없으면 null — 줄을 안 세운다 */
@@ -110,11 +116,12 @@ export function pathFor(
     date?: string | null;
     school?: string | null;
     deptName?: string | null;
+    groupName?: string | null;
   },
 ): string | null {
   if (kind === 'dept') {
     if (!ctx.deptName) return null;
-    return deptPath(ctx.deptName);
+    return deptPath(ctx.deptName, ctx.groupName);
   }
   if (kind === 'plan' || kind === 'lecture') {
     if (!ctx.appTitle) return null;

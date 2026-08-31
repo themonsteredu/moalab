@@ -1164,22 +1164,23 @@ create policy "internal_all" on moalab.drive_uploads for all using (true) with c
 grant all on moalab.drive_uploads to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------
--- 24. 부서 자료함 — 부서가 만든 자료를 부서에 붙여 올린다
+-- 24. 역할 자료함 — 그 역할로 만든 결과물을 역할에 붙인다
 --
---   지금까지 파일은 전부 **프로그램·공지·지출·앨범**에만 붙었다.
---   부서에 붙는 자리가 하나도 없어서, 부서에 사람을 배정해놓고 정작 그 부서가
---   만든 자료를 올릴 데가 없었다.
+--   역할분장의 소분류(duties) 하나가 곧 **해야 할 일**이다.
+--   'SNS·블로그 운영', '브로셔만들기[A4버전]' 처럼.
+--   그 일을 해서 만든 파일은 그 역할 안에 들어가야 한다 — 부서에 뭉뚱그려 붙이면
+--   무엇을 하다 나온 자료인지 다시 알 수 없다.
 --
---   새 메뉴를 만들지 않는다 — 부서에 사람을 배정하는 화면(/roles)이 이미
---   부서를 맨 위에 두고 있어서, 거기에 자료 칸만 더한다
---   (`plan_files.kind` 를 더해 강사교육 문서를 담은 것과 같은 판단).
+--   ⚠️ 처음엔 부서(dept_files)에 붙였는데 원장이 *"해야할일 항목란에 들어가서
+--   올리게"* 라고 바로잡아 역할로 옮겼다. 그 표는 안 쓴다.
 --
---   드라이브로는 `업무분장/{부서명}/` 으로 간다 — 손으로 만들어둔 그 폴더다.
+--   드라이브로는 `업무분장/{부서}/{중분류}` 로 가고 파일 이름 앞에 역할명을 붙인다.
+--   손으로 만들어둔 그 폴더를 그대로 쓴다 (역할마다 폴더를 또 파면 63개가 된다).
 -- ---------------------------------------------------------------------
 
-create table if not exists moalab.dept_files (
+create table if not exists moalab.duty_files (
   id         uuid primary key default gen_random_uuid(),
-  dept_id    uuid not null references moalab.departments(id) on delete cascade,
+  duty_id    uuid not null references moalab.duties(id) on delete cascade,
   file_url   text not null,
   file_name  text not null,
   file_size  int,
@@ -1188,9 +1189,12 @@ create table if not exists moalab.dept_files (
   member_id  uuid references moalab.members(id) on delete set null,
   created_at timestamptz not null default now()
 );
-create index if not exists dept_files_dept_idx on moalab.dept_files(dept_id, created_at desc);
+create index if not exists duty_files_duty_idx on moalab.duty_files(duty_id, created_at desc);
 
-alter table moalab.dept_files enable row level security;
-drop policy if exists "internal_all" on moalab.dept_files;
-create policy "internal_all" on moalab.dept_files for all using (true) with check (true);
-grant all on moalab.dept_files to anon, authenticated, service_role;
+alter table moalab.duty_files enable row level security;
+drop policy if exists "internal_all" on moalab.duty_files;
+create policy "internal_all" on moalab.duty_files for all using (true) with check (true);
+grant all on moalab.duty_files to anon, authenticated, service_role;
+
+-- 부서에 붙이던 표는 안 쓴다 (있으면 지운다 — 아직 아무것도 안 쌓였다)
+drop table if exists moalab.dept_files;

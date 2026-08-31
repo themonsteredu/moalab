@@ -121,7 +121,17 @@ export async function getAccessToken(cfg: DriveConfig): Promise<string | null> {
 /** 드라이브 검색 문법에서 작은따옴표는 반드시 escape 해야 한다 (학교 이름에 들어갈 수 있다) */
 const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-/** 부모 밑에서 이름으로 폴더를 찾고, 없으면 만든다 */
+/** `1_기획개발부` · `01. 홍보` 처럼 앞에 붙은 번호를 떼어낸다 */
+const stripNo = (s: string) => s.replace(/^\s*\d+\s*[._)\-]?\s*/, '').trim();
+
+/**
+ * 부모 밑에서 이름으로 폴더를 찾고, 없으면 만든다.
+ *
+ * ⚠️ **번호가 붙은 폴더도 같은 것으로 본다.** 원장이 손으로 만든 폴더는
+ * `1_기획개발부` 인데 앱이 아는 부서 이름은 `기획개발부` 라, 이름이 정확히 같은
+ * 것만 찾으면 **폴더가 두 개로 갈라진다.** `1_`·`01. ` 같은 앞머리를 떼고 견줘서
+ * 이미 있는 폴더를 그대로 쓴다.
+ */
 async function findOrCreateFolder(access: string, parentId: string, name: string): Promise<string | null> {
   const q = `'${esc(parentId)}' in parents and name = '${esc(name)}' and mimeType = '${FOLDER_MIME}' and trashed = false`;
   try {
@@ -131,6 +141,17 @@ async function findOrCreateFolder(access: string, parentId: string, name: string
     if (found.ok) {
       const j = (await found.json()) as { files?: { id: string }[] };
       if (j.files?.[0]?.id) return j.files[0].id;
+    }
+
+    // 정확히 같은 이름이 없으면 번호 붙은 것을 찾아본다 (`1_기획개발부`)
+    const loose = `'${esc(parentId)}' in parents and name contains '${esc(name)}' and mimeType = '${FOLDER_MIME}' and trashed = false`;
+    const alt = await fetch(`${API}/files?q=${encodeURIComponent(loose)}&fields=files(id,name)&pageSize=20`, {
+      headers: { authorization: `Bearer ${access}` },
+    });
+    if (alt.ok) {
+      const j = (await alt.json()) as { files?: { id: string; name: string }[] };
+      const hit = (j.files ?? []).find((f) => stripNo(f.name) === name);
+      if (hit) return hit.id;
     }
     const made = await fetch(`${API}/files?fields=id`, {
       method: 'POST',
