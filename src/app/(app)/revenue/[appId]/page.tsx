@@ -7,7 +7,9 @@ import { won } from '@/lib/format';
 import { logActivity } from '@/lib/log';
 import {
   calculateRevenueShare,
+  calculateOperatingCostAmount,
   CREATOR_DEFAULT_RATE,
+  DEFAULT_OPERATING_COST_RATE_PERCENT,
   recommendProposalIncentive,
   recommendSalesIncentive,
   validateRevenueShareInput,
@@ -57,8 +59,8 @@ const POOL_META: Record<
   { title: string; short: string; desc: string }
 > = {
   creator: {
-    title: '프로그램 창작',
-    short: '창작',
+    title: '프로그램 개발·기획',
+    short: '개발/기획',
     desc: '교육 설계·교안·활동 원형을 만든 기여',
   },
   proposal: {
@@ -111,7 +113,7 @@ function defaultPools(): RevenueSharePoolRule[] {
     {
       id: 'creator',
       kind: 'creator',
-      label: '프로그램 창작',
+      label: '프로그램 개발·기획',
       active: creatorIds.length > 0,
       rate_mode: 'manual',
       rate_percent: CREATOR_DEFAULT_RATE,
@@ -120,9 +122,9 @@ function defaultPools(): RevenueSharePoolRule[] {
     {
       id: 'proposal',
       kind: 'proposal',
-      label: '사업계획서 채택',
+      label: '사업계획서·제안서',
       active: false,
-      rate_mode: 'recommended',
+      rate_mode: 'manual',
       rate_percent: 10,
       member_ids: [],
     },
@@ -131,7 +133,7 @@ function defaultPools(): RevenueSharePoolRule[] {
       kind: 'sales',
       label: '기관 영업·예산 확보',
       active: false,
-      rate_mode: 'recommended',
+      rate_mode: 'manual',
       rate_percent: 15,
       member_ids: [],
     },
@@ -220,6 +222,9 @@ function RevenueSharePageContent() {
   const [fundingType, setFundingType] = useState<RevenueFundingType>('private');
   const [grossAmount, setGrossAmount] = useState('100000');
   const [directCosts, setDirectCosts] = useState('0');
+  const [operatingCostRatePercent, setOperatingCostRatePercent] = useState(
+    DEFAULT_OPERATING_COST_RATE_PERCENT,
+  );
   const [baseMemberIds, setBaseMemberIds] = useState<string[]>([]);
   const [pools, setPools] = useState<RevenueSharePoolRule[]>([]);
   const [note, setNote] = useState('');
@@ -272,6 +277,11 @@ function RevenueSharePageContent() {
       // 새 달에 과거 예상 매출이 자동으로 복사되면 실제 매출처럼 보이므로 반드시 0원부터 시작한다.
       setGrossAmount(savedMonth ? String(Math.round(Number(savedMonth.gross_amount) || 0)) : '0');
       setDirectCosts(savedMonth ? String(Math.round(Number(savedMonth.direct_costs) || 0)) : '0');
+      setOperatingCostRatePercent(
+        savedMonth
+          ? savedMonth.calculation?.operatingCostRatePercent ?? 0
+          : DEFAULT_OPERATING_COST_RATE_PERCENT,
+      );
       setRateStatus(savedMonth?.rate_status ?? 'undecided');
       setNote(savedMonth?.note ?? '');
       setSavedAt(savedMonth?.updated_at ?? null);
@@ -297,22 +307,32 @@ function RevenueSharePageContent() {
   const amountNumbers = useMemo(() => {
     const gross = Number(grossAmount || 0);
     const costs = Number(directCosts || 0);
+    const contributionProfit =
+      Number.isSafeInteger(gross) && Number.isSafeInteger(costs) ? Math.max(0, gross - costs) : 0;
+    const validOperatingRate =
+      Number.isFinite(operatingCostRatePercent) &&
+      operatingCostRatePercent >= 0 &&
+      operatingCostRatePercent <= 100;
+    const operatingCostAmount = validOperatingRate
+      ? calculateOperatingCostAmount(contributionProfit, operatingCostRatePercent)
+      : 0;
     return {
       gross,
       costs,
-      contributionProfit:
-        Number.isSafeInteger(gross) && Number.isSafeInteger(costs) ? Math.max(0, gross - costs) : 0,
+      contributionProfit,
+      distributableAmount: contributionProfit - operatingCostAmount,
     };
-  }, [directCosts, grossAmount]);
+  }, [directCosts, grossAmount, operatingCostRatePercent]);
 
   const calculationInput = useMemo(
     () => ({
       grossAmount: amountNumbers.gross,
       directCosts: amountNumbers.costs,
+      operatingCostRatePercent,
       baseMemberIds,
-      pools: pools.map((pool) => poolInput(pool, amountNumbers.contributionProfit)),
+      pools: pools.map((pool) => poolInput(pool, amountNumbers.distributableAmount)),
     }),
-    [amountNumbers, baseMemberIds, pools],
+    [amountNumbers, baseMemberIds, operatingCostRatePercent, pools],
   );
 
   const issues = useMemo(() => validateRevenueShareInput(calculationInput), [calculationInput]);
@@ -343,6 +363,9 @@ function RevenueSharePageContent() {
       .sort((a, b) => b.settlement_month.localeCompare(a.settlement_month))[0];
     if (!previous) return;
     setFundingType(previous.funding_type);
+    setOperatingCostRatePercent(
+      previous.calculation?.operatingCostRatePercent ?? 0,
+    );
     setBaseMemberIds(previous.base_member_ids.filter((id) => members.some((member) => member.id === id)));
     setPools(normalizePools(previous.pools, members));
     setRateStatus('undecided');
@@ -569,7 +592,7 @@ function RevenueSharePageContent() {
             <div className="min-w-0">
               <h2 className="text-[15px] font-bold">배분 순서</h2>
               <p className="mt-1 text-[13px] leading-relaxed text-neutral-600">
-                실제 수금액 − 직접비 − 창작·제안서·영업 성과몫 = 남은 금액을 {baseMemberIds.length || 0}명 1/N
+                실제 수금액 − 직접비 − 회사 운영비 − 창작·제안서·영업 성과몫 = 남은 금액을 {baseMemberIds.length || 0}명 1/N
               </p>
               <p className="mt-1 text-[12px] leading-relaxed text-neutral-400">
                 성과 담당자도 자기 성과몫을 받은 뒤 기본 1/N을 똑같이 다시 받아요.
@@ -615,7 +638,7 @@ function RevenueSharePageContent() {
             {funding.hint}
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div>
               <label htmlFor="revenue-gross" className="label">
                 {fundingType === 'grant' ? '정산 후 회사 자체재원' : '실제 수금액'}
@@ -651,9 +674,35 @@ function RevenueSharePageContent() {
               </div>
               <p className="mt-1 text-[11.5px] leading-relaxed text-neutral-400">강사비·재료비·교통비·수수료·세금 등</p>
             </div>
+            <div>
+              <label htmlFor="revenue-operating-rate" className="label">회사 운영비 비율</label>
+              <div className="relative">
+                <input
+                  id="revenue-operating-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={operatingCostRatePercent}
+                  onChange={(event) => {
+                    setOperatingCostRatePercent(Number(event.target.value));
+                    setRateStatus((current) => (current === 'agreed' ? 'draft' : current));
+                    setDirty(true);
+                  }}
+                  className="field pr-9 text-right font-bold tabular-nums"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-neutral-400">%</span>
+              </div>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-neutral-400">직접비를 뺀 순수익에서 먼저 적립 · 엑셀 기본 20%</p>
+            </div>
           </div>
-
-
+          {calculation && (
+            <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-neutral-100 bg-neutral-100">
+              <MiniAmount label="순수익" value={calculation.contributionProfit} />
+              <MiniAmount label="회사 운영비" value={calculation.operatingCostAmount} />
+              <MiniAmount label="배분 대상" value={calculation.distributableAmount} emphasis />
+            </div>
+          )}
         </section>
 
         <section className="card p-4">
@@ -684,12 +733,21 @@ function RevenueSharePageContent() {
               <p className="mt-0.5 text-[12px] text-neutral-400">적용 중 {activePoolCount}개 · 여러 역할을 맡으면 모두 더해져요</p>
             </div>
           </div>
+          <div className="rounded-xl border border-brand-100 bg-brand-50 px-3.5 py-3 text-[12px] leading-relaxed text-brand-800">
+            <p className="font-bold">엑셀 시작안 · 균등 50% · 개발/기획 25% · 영업 15% · 사업계획서 10%</p>
+            <p className="mt-1 text-brand-700">
+              적용하지 않은 역할의 몫은 자동으로 균등 1/N에 합쳐져요. 같은 역할을 여러 명이 맡으면 그 역할 몫을 다시 똑같이 나눠요.
+            </p>
+            {fundingType === 'grant' && (
+              <p className="mt-1 font-semibold text-amber-800">지원금 사업은 사업계획서 몫을 끄고, 승인된 인건비·운영비 기준으로 보상해주세요.</p>
+            )}
+          </div>
           {pools.map((pool) => (
             <PoolCard
               key={pool.id}
               pool={pool}
               members={members.filter((member) => baseMemberIds.includes(member.id))}
-              contributionProfit={amountNumbers.contributionProfit}
+              distributableAmount={amountNumbers.distributableAmount}
               calculation={calculation}
               onChange={(patch) => updatePool(pool.id, patch)}
             />
@@ -772,13 +830,13 @@ function RevenueSharePageContent() {
 function PoolCard({
   pool,
   members,
-  contributionProfit,
+  distributableAmount,
   calculation,
   onChange,
 }: {
   pool: RevenueSharePoolRule;
   members: MemberPublic[];
-  contributionProfit: number;
+  distributableAmount: number;
   calculation: RevenueShareCalculation | null;
   onChange: (patch: Partial<RevenueSharePoolRule>) => void;
 }) {
@@ -786,9 +844,9 @@ function PoolCard({
   const canRecommend = pool.kind === 'proposal' || pool.kind === 'sales';
   const recommendation =
     pool.kind === 'sales'
-      ? recommendSalesIncentive(contributionProfit)
+      ? recommendSalesIncentive(distributableAmount)
       : pool.kind === 'proposal'
-        ? recommendProposalIncentive(contributionProfit)
+        ? recommendProposalIncentive(distributableAmount)
         : null;
   const allocation = calculation?.pools.find((item) => item.id === pool.id);
 
@@ -867,7 +925,7 @@ function PoolCard({
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-neutral-400">%</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5" aria-label="빠른 비율 비교">
-                {[5, 10, 15, 20].map((rate) => (
+                {[5, 10, 15, 20, 25].map((rate) => (
                   <button
                     key={rate}
                     type="button"
@@ -921,7 +979,7 @@ function Results({
   members: MemberPublic[];
   rateStatus: RevenueShareRateStatus;
 }) {
-  const incentiveTotal = calculation.contributionProfit - calculation.baseAmount;
+  const incentiveTotal = calculation.distributableAmount - calculation.baseAmount;
   const poolLabel = new Map(pools.map((pool) => [pool.id, POOL_META[pool.kind].short]));
 
   return (
@@ -944,7 +1002,13 @@ function Results({
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-px bg-neutral-100">
-            <ResultStat label="배분가능이익" value={calculation.contributionProfit} />
+            <ResultStat label="순수익" value={calculation.contributionProfit} />
+            <ResultStat
+              label="회사 운영비"
+              value={calculation.operatingCostAmount}
+              sub={`${calculation.operatingCostRatePercent.toFixed(1)}%`}
+            />
+            <ResultStat label="배분 대상 금액" value={calculation.distributableAmount} />
             <ResultStat label="성과몫 합계" value={incentiveTotal} sub={`${calculation.totalEffectiveRate.toFixed(1)}%`} />
             <ResultStat label="남은 1/N 금액" value={calculation.baseAmount} sub={`${calculation.baseRatePercent.toFixed(1)}%`} />
             <ResultStat label="최종 배분 합계" value={calculation.totalDistributed} />
@@ -958,7 +1022,9 @@ function Results({
           .map((member) => {
             const row = calculation.members.find((item) => item.memberId === member.id)!;
             const extras = Object.entries(row.poolAmounts).filter(([, amount]) => amount > 0);
-            const rate = calculation.contributionProfit > 0 ? (row.totalAmount / calculation.contributionProfit) * 100 : 0;
+            const rate = calculation.distributableAmount > 0
+              ? (row.totalAmount / calculation.distributableAmount) * 100
+              : 0;
             return (
               <article key={member.id} className="card p-3.5">
                 <div className="flex items-center gap-3">
@@ -968,7 +1034,7 @@ function Results({
                       <p className="truncate text-[14.5px] font-bold">{member.name}</p>
                       {extras.length > 0 && <span className="chip bg-brand-50 text-brand-700">성과 {extras.length}개</span>}
                     </div>
-                    <p className="mt-0.5 text-[11.5px] text-neutral-400">전체 이익의 {rate.toFixed(1)}%</p>
+                    <p className="mt-0.5 text-[11.5px] text-neutral-400">배분 대상 금액의 {rate.toFixed(1)}%</p>
                   </div>
                   <p className="shrink-0 text-[19px] font-black tabular-nums">{won(row.totalAmount)}원</p>
                 </div>
@@ -994,6 +1060,23 @@ function ResultStat({ label, value, sub }: { label: string; value: number; sub?:
       <p className="text-[11px] text-neutral-400">{label}</p>
       <p className="mt-0.5 text-[16px] font-black tabular-nums">{won(value)}원</p>
       {sub && <p className="mt-0.5 text-[10.5px] text-neutral-400">{sub}</p>}
+    </div>
+  );
+}
+
+function MiniAmount({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string;
+  value: number;
+  emphasis?: boolean;
+}) {
+  return (
+    <div className={emphasis ? 'bg-brand-50 px-2 py-3 text-brand-800' : 'bg-surface px-2 py-3'}>
+      <p className="truncate text-[10.5px] text-neutral-400">{label}</p>
+      <p className="mt-0.5 break-all text-[13px] font-black tabular-nums">{won(value)}원</p>
     </div>
   );
 }

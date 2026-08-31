@@ -1,7 +1,7 @@
 /**
  * 프로젝트별 수익 배분 계산.
  *
- * 실제 수금액에서 직접비를 먼저 뺀 뒤, 성과 풀(창작·제안·영업·사용자 정의)을
+ * 실제 수금액에서 직접비와 회사 운영비를 먼저 뺀 뒤, 성과 풀(창작·제안·영업·사용자 정의)을
  * 정해진 비율만큼 떼어 해당 참여자에게 똑같이 나눈다. 남은 금액은 기본 멤버
  * 전원에게 1/N로 나눈다. 성과 풀 참여자도 기본 멤버이므로 두 몫을 모두 받는다.
  *
@@ -10,7 +10,8 @@
  * 따라서 입력 배열 순서를 바꿔도 결과가 달라지지 않는다.
  */
 
-export const DEFAULT_CREATOR_RATE_PERCENT = 15;
+export const DEFAULT_OPERATING_COST_RATE_PERCENT = 20;
+export const DEFAULT_CREATOR_RATE_PERCENT = 25;
 /** UI에서 짧게 가져갈 수 있는 같은 기본값 이름. */
 export const CREATOR_DEFAULT_RATE = DEFAULT_CREATOR_RATE_PERCENT;
 
@@ -38,6 +39,8 @@ export interface RevenueShareInput {
   grossAmount: number;
   /** 재료비·강사비 등 먼저 빼는 직접비 */
   directCosts: number;
+  /** 직접비를 뺀 순수익 중 회사 운영비로 남길 비율. 생략한 기존 계산은 0%로 호환한다. */
+  operatingCostRatePercent?: number;
   /** 성과 풀을 떼고 남은 금액을 1/N로 받을 전체 멤버 */
   baseMemberIds: string[];
   pools: RevenuePoolInput[];
@@ -56,7 +59,7 @@ export interface RevenuePoolAllocation {
   ratePercent?: number;
   fixedAmount?: number;
   amount: number;
-  /** 실제 amount / contributionProfit × 100. 이익이 0원이면 0. */
+  /** 실제 amount / distributableAmount × 100. 배분 대상 금액이 0원이면 0. */
   effectiveRate: number;
   memberShares: PoolMemberShare[];
 }
@@ -75,18 +78,24 @@ export interface RevenueShareResult {
   directCosts: number;
   /** max(0, grossAmount - directCosts) */
   contributionProfit: number;
+  /** 순수익에서 회사 운영비로 남기는 비율 */
+  operatingCostRatePercent: number;
+  /** contributionProfit × operatingCostRatePercent, 1원 미만 버림 */
+  operatingCostAmount: number;
+  /** contributionProfit - operatingCostAmount, 실제 팀 배분 대상 금액 */
+  distributableAmount: number;
   /** 직접비가 매출보다 클 때 부족한 금액 */
   deficitAmount: number;
   hasLoss: boolean;
   /** 수동 비율 모드로 켜진 풀의 설정 비율 합 */
   totalRatePercent: number;
-  /** 고정액까지 포함한 전체 성과금 / contributionProfit × 100 */
+  /** 고정액까지 포함한 전체 성과금 / distributableAmount × 100 */
   totalEffectiveRate: number;
   baseRatePercent: number;
   baseAmount: number;
   pools: RevenuePoolAllocation[];
   members: MemberRevenueShare[];
-  /** 항상 contributionProfit과 같아야 한다. */
+  /** 항상 distributableAmount와 같아야 한다. */
   totalDistributed: number;
 }
 
@@ -117,6 +126,8 @@ export interface MonthlyRevenueShareSummary {
   grossAmount: number;
   directCosts: number;
   contributionProfit: number;
+  operatingCostAmount: number;
+  distributableAmount: number;
   deficitAmount: number;
   totalDistributed: number;
   undecidedCount: number;
@@ -153,6 +164,26 @@ function rateUnits(ratePercent: number): number {
   return Math.round(ratePercent * RATE_SCALE);
 }
 
+/** 순수익과 운영비율을 엑셀 계산기와 같은 방식으로 정수 원까지 계산한다. */
+export function calculateOperatingCostAmount(
+  contributionProfit: number,
+  operatingCostRatePercent: number,
+): number {
+  if (!Number.isSafeInteger(contributionProfit) || contributionProfit < 0) {
+    throw new RevenueShareValidationError(['회사 운영비 기준 금액은 0 이상의 정수 원이어야 해요.']);
+  }
+  if (
+    !Number.isFinite(operatingCostRatePercent) ||
+    operatingCostRatePercent < 0 ||
+    operatingCostRatePercent > 100
+  ) {
+    throw new RevenueShareValidationError(['회사 운영비 비율은 0% 이상 100% 이하여야 해요.']);
+  }
+  return Number(
+    (BigInt(contributionProfit) * BigInt(rateUnits(operatingCostRatePercent))) / QUOTA_DENOMINATOR,
+  );
+}
+
 function cleanId(value: string): string {
   return value.trim();
 }
@@ -177,6 +208,14 @@ export function validateRevenueShareInput(input: RevenueShareInput): string[] {
   if (!Number.isSafeInteger(input?.directCosts) || input.directCosts < 0) {
     issues.push('직접비는 0 이상의 정수 원이어야 해요.');
   }
+  const operatingCostRatePercent = input?.operatingCostRatePercent ?? 0;
+  if (
+    !Number.isFinite(operatingCostRatePercent) ||
+    operatingCostRatePercent < 0 ||
+    operatingCostRatePercent > 100
+  ) {
+    issues.push('회사 운영비 비율은 0% 이상 100% 이하여야 해요.');
+  }
 
   const rawBase = Array.isArray(input?.baseMemberIds) ? input.baseMemberIds : [];
   const baseIds = rawBase.map((id) => (typeof id === 'string' ? cleanId(id) : ''));
@@ -194,6 +233,14 @@ export function validateRevenueShareInput(input: RevenueShareInput): string[] {
     Number.isSafeInteger(input?.grossAmount) && input.grossAmount >= 0 &&
     Number.isSafeInteger(input?.directCosts) && input.directCosts >= 0;
   const contributionProfit = amountsValid ? Math.max(0, input.grossAmount - input.directCosts) : 0;
+  const operatingCostUnits = Number.isFinite(operatingCostRatePercent)
+    ? rateUnits(operatingCostRatePercent)
+    : 0;
+  const operatingCostAmount =
+    amountsValid && operatingCostUnits >= 0 && operatingCostUnits <= HUNDRED_RATE_UNITS
+      ? calculateOperatingCostAmount(contributionProfit, operatingCostRatePercent)
+      : 0;
+  const distributableAmount = contributionProfit - operatingCostAmount;
 
   pools.forEach((pool, index) => {
     const where = `${index + 1}번째 성과 풀`;
@@ -218,7 +265,7 @@ export function validateRevenueShareInput(input: RevenueShareInput): string[] {
         const units = rateUnits(pool.ratePercent!);
         totalUnits += units;
         if (amountsValid) {
-          percentTotal += (BigInt(contributionProfit) * BigInt(units)) / QUOTA_DENOMINATOR;
+          percentTotal += (BigInt(distributableAmount) * BigInt(units)) / QUOTA_DENOMINATOR;
         }
       }
       const rawMembers = Array.isArray(pool.memberIds) ? pool.memberIds : [];
@@ -236,7 +283,7 @@ export function validateRevenueShareInput(input: RevenueShareInput): string[] {
 
   if (duplicated(poolIds.filter(Boolean)).length > 0) issues.push('성과 풀 id가 중복되어 있어요.');
   if (totalUnits > HUNDRED_RATE_UNITS) issues.push('활성 성과 풀의 배분율 합은 100%를 넘을 수 없어요.');
-  if (amountsValid && fixedTotal + percentTotal > BigInt(contributionProfit)) {
+  if (amountsValid && fixedTotal + percentTotal > BigInt(distributableAmount)) {
     issues.push('활성 성과 풀의 성과금 합은 배분 가능한 이익을 넘을 수 없어요.');
   }
 
@@ -257,6 +304,12 @@ export function calculateRevenueShare(input: RevenueShareInput): RevenueShareRes
 
   const baseMemberIds = input.baseMemberIds.map(cleanId).sort((a, b) => a.localeCompare(b));
   const contributionProfit = Math.max(0, input.grossAmount - input.directCosts);
+  const operatingCostRatePercent = input.operatingCostRatePercent ?? 0;
+  const operatingCostAmount = calculateOperatingCostAmount(
+    contributionProfit,
+    operatingCostRatePercent,
+  );
+  const distributableAmount = contributionProfit - operatingCostAmount;
   const deficitAmount = Math.max(0, input.directCosts - input.grossAmount);
   const activePools = input.pools
     .filter((pool) => pool.active)
@@ -273,10 +326,10 @@ export function calculateRevenueShare(input: RevenueShareInput): RevenueShareRes
   const poolAmount = (pool: (typeof activePools)[number]): number =>
     pool.mode === 'fixed'
       ? pool.fixedAmount!
-      : Number((BigInt(contributionProfit) * BigInt(pool.units)) / QUOTA_DENOMINATOR);
+      : Number((BigInt(distributableAmount) * BigInt(pool.units)) / QUOTA_DENOMINATOR);
   const actualPoolTotal = activePools.reduce((sum, pool) => sum + poolAmount(pool), 0);
   // 각 성과 풀을 먼저 정수 원으로 확정하고, 비율에서 남은 1원까지 전부 기본 풀로 보낸다.
-  const baseAmount = contributionProfit - actualPoolTotal;
+  const baseAmount = distributableAmount - actualPoolTotal;
   const baseShares = splitEqually(baseAmount, baseMemberIds);
   const memberMap = new Map<string, MemberRevenueShare>(
     baseShares.map((share) => [
@@ -301,7 +354,7 @@ export function calculateRevenueShare(input: RevenueShareInput): RevenueShareRes
       ratePercent: pool.mode === 'rate' ? pool.units / RATE_SCALE : undefined,
       fixedAmount: pool.mode === 'fixed' ? pool.fixedAmount : undefined,
       amount,
-      effectiveRate: contributionProfit > 0 ? (amount / contributionProfit) * 100 : 0,
+      effectiveRate: distributableAmount > 0 ? (amount / distributableAmount) * 100 : 0,
       memberShares,
     };
   });
@@ -313,11 +366,14 @@ export function calculateRevenueShare(input: RevenueShareInput): RevenueShareRes
     grossAmount: input.grossAmount,
     directCosts: input.directCosts,
     contributionProfit,
+    operatingCostRatePercent,
+    operatingCostAmount,
+    distributableAmount,
     deficitAmount,
     hasLoss: deficitAmount > 0,
     totalRatePercent: totalRateUnits / RATE_SCALE,
-    totalEffectiveRate: contributionProfit > 0 ? (actualPoolTotal / contributionProfit) * 100 : 0,
-    baseRatePercent: contributionProfit > 0 ? (baseAmount / contributionProfit) * 100 : 0,
+    totalEffectiveRate: distributableAmount > 0 ? (actualPoolTotal / distributableAmount) * 100 : 0,
+    baseRatePercent: distributableAmount > 0 ? (baseAmount / distributableAmount) * 100 : 0,
     baseAmount,
     pools,
     members,
@@ -340,6 +396,8 @@ export function aggregateMonthlyRevenueShares(
     grossAmount: 0,
     directCosts: 0,
     contributionProfit: 0,
+    operatingCostAmount: 0,
+    distributableAmount: 0,
     deficitAmount: 0,
     totalDistributed: 0,
     undecidedCount: 0,
@@ -350,10 +408,14 @@ export function aggregateMonthlyRevenueShares(
 
   for (const [index, settlement] of settlements.entries()) {
     const calculation = settlement?.calculation;
+    const operatingCostAmount = calculation?.operatingCostAmount ?? 0;
+    const distributableAmount = calculation?.distributableAmount ?? calculation?.contributionProfit;
     const amounts = [
       calculation?.grossAmount,
       calculation?.directCosts,
       calculation?.contributionProfit,
+      operatingCostAmount,
+      distributableAmount,
       calculation?.deficitAmount,
       calculation?.totalDistributed,
     ];
@@ -383,7 +445,8 @@ export function aggregateMonthlyRevenueShares(
     }
     const memberTotal = calculation.members.reduce((sum, member) => sum + member.totalAmount, 0);
     if (
-      calculation.totalDistributed !== calculation.contributionProfit ||
+      operatingCostAmount + distributableAmount !== calculation.contributionProfit ||
+      calculation.totalDistributed !== distributableAmount ||
       memberTotal !== calculation.totalDistributed
     ) {
       throw new RevenueShareValidationError([`${index + 1}번째 월 계산 스냅샷의 배분 합계가 맞지 않아요.`]);
@@ -392,12 +455,16 @@ export function aggregateMonthlyRevenueShares(
     summary.grossAmount += calculation.grossAmount;
     summary.directCosts += calculation.directCosts;
     summary.contributionProfit += calculation.contributionProfit;
+    summary.operatingCostAmount += operatingCostAmount;
+    summary.distributableAmount += distributableAmount;
     summary.deficitAmount += calculation.deficitAmount;
     summary.totalDistributed += calculation.totalDistributed;
     if (
       !Number.isSafeInteger(summary.grossAmount) ||
       !Number.isSafeInteger(summary.directCosts) ||
       !Number.isSafeInteger(summary.contributionProfit) ||
+      !Number.isSafeInteger(summary.operatingCostAmount) ||
+      !Number.isSafeInteger(summary.distributableAmount) ||
       !Number.isSafeInteger(summary.deficitAmount) ||
       !Number.isSafeInteger(summary.totalDistributed)
     ) {

@@ -84,6 +84,49 @@ console.log('--- 기본 1/N + 성과 풀 ---');
   eq('남은 기본 풀 80,000원', r.baseAmount, 80_000);
   eq('총 배분액 = 기여이익', r.totalDistributed, r.contributionProfit);
 }
+
+console.log('\n--- 첨부 엑셀 계산기와 동일한 운영비·비율 ---');
+{
+  const r = R.calculateRevenueShare({
+    grossAmount: 3_000_000,
+    directCosts: 500_000,
+    operatingCostRatePercent: 20,
+    baseMemberIds: BASE,
+    pools: [
+      pool({ id: 'creator', kind: 'creator', ratePercent: 25, memberIds: ['m1'] }),
+      pool({ id: 'sales', kind: 'sales', ratePercent: 15, memberIds: ['m1'] }),
+      pool({ id: 'proposal', kind: 'proposal', ratePercent: 10, memberIds: ['m1'] }),
+    ],
+  });
+  eq('순수익·회사 운영비·배분 대상', [
+    r.contributionProfit,
+    r.operatingCostAmount,
+    r.distributableAmount,
+  ], [2_500_000, 500_000, 2_000_000]);
+  eq('엑셀 예시 참여자별 정산 금액', totals(r), {
+    m1: 1_200_000,
+    m2: 200_000,
+    m3: 200_000,
+    m4: 200_000,
+    m5: 200_000,
+  });
+  eq('균등 50%·개발 25%·영업 15%·사업계획서 10%', [
+    r.baseRatePercent,
+    ...r.pools.map((item) => item.ratePercent),
+  ], [50, 25, 10, 15]);
+  eq('최종 배분 합계 = 운영비 차감 후 금액', r.totalDistributed, r.distributableAmount);
+}
+{
+  const r = R.calculateRevenueShare({
+    grossAmount: 100_000,
+    directCosts: 0,
+    operatingCostRatePercent: 20,
+    baseMemberIds: BASE,
+    pools: [pool({ id: 'creator', ratePercent: 25, memberIds: ['m1'] })],
+  });
+  eq('참여자가 없는 역할의 몫은 균등 몫으로 남음', [r.baseRatePercent, r.baseAmount], [75, 60_000]);
+  eq('10만원 예시 회사 운영비 2만원', r.operatingCostAmount, 20_000);
+}
 {
   const r = calc({ pools: [pool({ memberIds: ['m1'] })] });
   eq('성과 풀 한 명이면 기본몫까지 36,000원', totals(r), {
@@ -133,6 +176,19 @@ console.log('\n--- 월별 여러 프로젝트 합산 ---');
   throwsValidation('깨진 월 스냅샷 합계 차단', () => R.aggregateMonthlyRevenueShares([
     { rateStatus: 'draft', calculation: { ...creatorProgram, totalDistributed: 99_999 } },
   ]));
+
+  const legacyCalculation = { ...creatorProgram };
+  delete legacyCalculation.operatingCostRatePercent;
+  delete legacyCalculation.operatingCostAmount;
+  delete legacyCalculation.distributableAmount;
+  const legacyMonthly = R.aggregateMonthlyRevenueShares([
+    { rateStatus: 'agreed', calculation: legacyCalculation },
+  ]);
+  eq('운영비 필드가 없던 기존 저장 계산도 0%로 호환', [
+    legacyMonthly.operatingCostAmount,
+    legacyMonthly.distributableAmount,
+    legacyMonthly.totalDistributed,
+  ], [0, 100_000, 100_000]);
 }
 
 console.log('\n--- 여러 풀과 남은 비율 ---');
@@ -235,6 +291,20 @@ console.log('\n--- 0원·적자·검증 오류 ---');
 throwsValidation('음수 수금액', () => calc({ grossAmount: -1 }));
 throwsValidation('소수 원 수금액', () => calc({ grossAmount: 10.5 }));
 throwsValidation('음수 직접비', () => calc({ directCosts: -1 }));
+throwsValidation('음수 회사 운영비율', () => R.calculateRevenueShare({
+  grossAmount: 100_000,
+  directCosts: 0,
+  operatingCostRatePercent: -1,
+  baseMemberIds: BASE,
+  pools: [],
+}));
+throwsValidation('100% 초과 회사 운영비율', () => R.calculateRevenueShare({
+  grossAmount: 100_000,
+  directCosts: 0,
+  operatingCostRatePercent: 101,
+  baseMemberIds: BASE,
+  pools: [],
+}));
 throwsValidation('기본 멤버 없음', () => calc({ baseMemberIds: [] }));
 throwsValidation('기본 멤버 중복', () => calc({ baseMemberIds: ['m1', 'm1'] }));
 throwsValidation('활성 풀에 멤버 없음', () => calc({ pools: [pool({ memberIds: [] })] }));
@@ -256,7 +326,8 @@ throwsValidation('풀 id 중복', () => calc({ pools: [pool({ id: 'same' }), poo
   eq('성과 풀 0%면 기본 풀 100%', [none.baseRatePercent, none.baseAmount], [100, 100_000]);
   eq('0% 풀 금액도 유한한 0', none.pools[0].amount, 0);
 }
-eq('창작자 기본 상수', R.DEFAULT_CREATOR_RATE_PERCENT, 15);
+eq('회사 운영비 기본 상수', R.DEFAULT_OPERATING_COST_RATE_PERCENT, 20);
+eq('창작자 기본 상수', R.DEFAULT_CREATOR_RATE_PERCENT, 25);
 
 console.log('\n--- 영업 누진 추천 ---');
 const sales = R.recommendSalesIncentive;

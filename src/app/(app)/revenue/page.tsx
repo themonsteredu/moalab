@@ -205,17 +205,18 @@ function RevenueListContent() {
           <div className="border-b border-brand/10 bg-brand-50 px-4 py-3.5">
             <div className="flex items-center justify-between gap-2">
               <p id="revenue-rule-title" className="text-[12px] font-bold text-brand-700">정산 규칙</p>
-              <span className="chip bg-amber-100 text-amber-800">비율 논의 중</span>
+              <span className="chip bg-amber-100 text-amber-800">엑셀 기본안 · 조정 가능</span>
             </div>
             <p className="mt-1 break-keep text-[15px] font-black leading-relaxed text-neutral-900">
-              프로젝트별 수금액 − 직접비 − 역할 성과몫 = 남은 금액 1/N
+              수금액 − 직접비 − 회사 운영비 = 역할몫 + 균등 1/N
             </p>
           </div>
           <ol className="divide-y divide-neutral-100 px-4">
             <RuleStep number="1" title="실제 수금액 확정" desc="계약금액이 아니라 실제로 정산할 수금액을 적어요." />
             <RuleStep number="2" title="직접 운영비 먼저 차감" desc="강사비·재료비·교통비·세금·수수료 등을 먼저 빼요." />
-            <RuleStep number="3" title="역할 성과몫 계산" desc="창작·사업계획서·영업 기여를 반영하고, 공동기여자는 그 성과몫을 다시 1/N 해요." />
-            <RuleStep number="4" title="남은 순이익 1/N" desc="성과몫을 뺀 나머지는 5명 중 해당 프로젝트의 기본 참여자에게 균등 배분해요." />
+            <RuleStep number="3" title="회사 운영비 적립" desc="직접비를 뺀 순수익에서 운영비를 먼저 적립해요. 엑셀 시작값은 20%예요." />
+            <RuleStep number="4" title="역할 성과몫 계산" desc="배분 대상 금액의 개발·기획 25% · 영업 15% · 사업계획서 10%를 역할 참여자끼리 나눠요." />
+            <RuleStep number="5" title="균등 몫 1/N" desc="기본 50%와 참여자가 없는 역할의 몫을 해당 프로젝트 참여자에게 균등 배분해요." />
           </ol>
           <p className="break-keep border-t border-neutral-100 px-4 py-3 text-[12.5px] font-semibold leading-relaxed text-neutral-600">
             광주중학교·모두의창업처럼 프로젝트를 각각 계산한 뒤 같은 사람의 {monthLabel(month)} 예상액을 합쳐요.
@@ -283,8 +284,10 @@ function RevenueListContent() {
               </div>
               <div className="grid grid-cols-2 gap-px bg-neutral-100">
                 <SummaryStat label="실제 수금액" value={summary.grossAmount} />
-                <SummaryStat label="직접 운영비" value={summary.directCosts} />
-                <SummaryStat label="배분가능이익" value={summary.contributionProfit} />
+                <SummaryStat label="직접비" value={summary.directCosts} />
+                <SummaryStat label="순수익" value={summary.contributionProfit} />
+                <SummaryStat label="회사 운영비" value={summary.operatingCostAmount} />
+                <SummaryStat label="배분 대상 금액" value={summary.distributableAmount} />
                 <SummaryStat label="예상 배분 합계" value={summary.totalDistributed} />
               </div>
             </section>
@@ -346,7 +349,14 @@ function RevenueCard({
   const rules = Array.isArray(month?.pools) ? month.pools : [];
   const activePools = rules.filter((pool) => pool.active);
   const contributionProfit = Number(month?.calculation?.contributionProfit);
-  const validCalculation = Number.isSafeInteger(contributionProfit) && contributionProfit >= 0;
+  const distributableAmount = Number(
+    month?.calculation?.distributableAmount ?? month?.calculation?.contributionProfit,
+  );
+  const operatingCostAmount = Number(month?.calculation?.operatingCostAmount ?? 0);
+  const validCalculation =
+    Number.isSafeInteger(contributionProfit) && contributionProfit >= 0 &&
+    Number.isSafeInteger(distributableAmount) && distributableAmount >= 0 &&
+    Number.isSafeInteger(operatingCostAmount) && operatingCostAmount >= 0;
   const status = month
     ? RATE_STATUS_META[month.rate_status] ?? { label: '데이터 확인', cls: 'bg-red-100 text-red-800' }
     : null;
@@ -370,10 +380,11 @@ function RevenueCard({
       {month && validCalculation ? (
         <>
           <p className="mt-3 text-[12px] font-bold text-brand-700">{FUNDING_LABEL[month.funding_type]}</p>
-          <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Amount label="수금" value={Number(month.gross_amount)} />
             <Amount label="직접비" value={Number(month.direct_costs)} />
-            <Amount label="배분이익" value={contributionProfit} />
+            <Amount label="회사 운영비" value={operatingCostAmount} />
+            <Amount label="배분 대상" value={distributableAmount} />
           </dl>
         </>
       ) : month ? (
