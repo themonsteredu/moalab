@@ -44,13 +44,23 @@ export async function GET(req: Request) {
   } catch {
     return back(origin, '저장된 값이 깨졌어요. 클라이언트 ID 를 다시 저장해주세요.');
   }
-  const meta = (data.meta ?? {}) as DriveMeta & { oauthState?: string; oauthUntil?: number };
+  const meta = (data.meta ?? {}) as DriveMeta;
 
-  if (!meta.oauthState || meta.oauthState !== state) {
-    return back(origin, '연결 확인값이 안 맞아요. 관리 화면에서 다시 시작해주세요.');
+  /* 확인값은 **여러 개를 같이 본다.** 폰에서 구글 창을 닫지 않고 관리 화면에서 한 번 더
+     누르면 확인값이 새로 생기는데, 그래도 앞 창을 끝까지 진행할 수 있어야 한다 */
+  const known = [
+    ...(meta.oauthStates ?? []),
+    ...(meta.oauthState ? [{ s: meta.oauthState, until: meta.oauthUntil ?? 0 }] : []),
+  ];
+  const hit = known.find((x) => x?.s === state);
+  if (!hit) {
+    return back(
+      origin,
+      '이 연결 창은 이미 만료됐어요. 열려 있는 구글 창을 모두 닫고, 관리 화면에서 한 번만 다시 눌러주세요.',
+    );
   }
-  if (!meta.oauthUntil || meta.oauthUntil < Date.now()) {
-    return back(origin, '연결 시간이 지났어요. 다시 눌러주세요.');
+  if (hit.until < Date.now()) {
+    return back(origin, '연결 시간이 지났어요. 관리 화면에서 다시 눌러주세요.');
   }
 
   /* 코드를 리프레시 토큰으로 바꾼다 */
@@ -95,6 +105,8 @@ export async function GET(req: Request) {
   }
 
   value.refreshToken = refreshToken;
+  // 다 쓴 확인값은 하나도 남기지 않는다 (같은 것으로 두 번 들어올 수 없게)
+  delete meta.oauthStates;
   delete meta.oauthState;
   delete meta.oauthUntil;
   if (email) meta.email = email;
