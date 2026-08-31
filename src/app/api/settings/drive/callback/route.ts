@@ -33,7 +33,10 @@ export async function GET(req: Request) {
 
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
-  if (!code || !state) return back(origin, '구글이 보낸 값이 모자라요. 다시 눌러주세요.');
+  if (!code || !state) {
+    console.error('[drive/callback] E1 값 모자람', { hasCode: Boolean(code), hasState: Boolean(state) });
+    return back(origin, '구글이 보낸 값이 모자라요. 다시 눌러주세요. (E1)');
+  }
 
   const { data } = await admin.from('app_secrets').select('value, meta').eq('key', DRIVE_KEY).maybeSingle();
   if (!data?.value) return back(origin, '먼저 클라이언트 ID·시크릿을 저장해주세요.');
@@ -54,13 +57,20 @@ export async function GET(req: Request) {
   ];
   const hit = known.find((x) => x?.s === state);
   if (!hit) {
+    /* 어느 값이 왔고 우리가 뭘 들고 있었는지 남긴다 — 확인값 자체는 비밀이 아니지만
+       앞 8자만 적는다 (로그로 그대로 쓰이지 않게) */
+    console.error('[drive/callback] E2 확인값 없음', {
+      got: state.slice(0, 8),
+      known: known.map((x) => x?.s?.slice(0, 8)),
+    });
     return back(
       origin,
-      '이 연결 창은 이미 만료됐어요. 열려 있는 구글 창을 모두 닫고, 관리 화면에서 한 번만 다시 눌러주세요.',
+      '이 연결 창은 이미 만료됐어요. 열려 있는 구글 창을 모두 닫고, 관리 화면에서 한 번만 다시 눌러주세요. (E2)',
     );
   }
   if (hit.until < Date.now()) {
-    return back(origin, '연결 시간이 지났어요. 관리 화면에서 다시 눌러주세요.');
+    console.error('[drive/callback] E3 시간 지남', { got: state.slice(0, 8), late: Date.now() - hit.until });
+    return back(origin, '연결 시간이 지났어요. 관리 화면에서 다시 눌러주세요. (E3)');
   }
 
   /* 코드를 리프레시 토큰으로 바꾼다 */
@@ -78,12 +88,29 @@ export async function GET(req: Request) {
         grant_type: 'authorization_code',
       }),
     });
-    const j = (await res.json()) as { refresh_token?: string; access_token?: string; error_description?: string };
-    if (!res.ok) return back(origin, `구글이 거절했어요 — ${j.error_description ?? res.status}`);
+    const j = (await res.json()) as {
+      refresh_token?: string;
+      access_token?: string;
+      error?: string;
+      error_description?: string;
+    };
+    if (!res.ok) {
+      console.error('[drive/callback] E4 토큰 교환 거절', {
+        status: res.status,
+        error: j.error,
+        detail: j.error_description,
+        redirect: `${origin}/api/settings/drive/callback`,
+      });
+      return back(origin, `구글이 거절했어요 — ${j.error_description ?? j.error ?? res.status} (E4)`);
+    }
     if (!j.refresh_token) {
       /* 이미 동의한 계정이면 구글이 리프레시 토큰을 다시 안 준다.
          start 라우트가 prompt=consent 를 붙이므로 보통은 안 생기는 일이다 */
-      return back(origin, '구글이 갱신 토큰을 안 줬어요. 구글 계정 > 보안 > 타사 앱에서 모아랩을 지우고 다시 해주세요.');
+      console.error('[drive/callback] E5 갱신 토큰 없음', { hasAccess: Boolean(j.access_token) });
+      return back(
+        origin,
+        '구글이 갱신 토큰을 안 줬어요. 구글 계정 > 보안 > 타사 앱에서 모아랩을 지우고 다시 해주세요. (E5)',
+      );
     }
     refreshToken = j.refresh_token;
     accessToken = j.access_token ?? '';
@@ -118,7 +145,11 @@ export async function GET(req: Request) {
     .from('app_secrets')
     .update({ value: JSON.stringify(value), meta, updated_at: new Date().toISOString() })
     .eq('key', DRIVE_KEY);
-  if (error) return back(origin, '토큰을 저장하지 못했어요. ' + error.message);
+  if (error) {
+    console.error('[drive/callback] E6 저장 실패', error.message);
+    return back(origin, '토큰을 저장하지 못했어요. ' + error.message + ' (E6)');
+  }
+  console.log('[drive/callback] 연결 성공', { email });
 
   return back(origin, email ? `${email} 계정으로 연결됐어요.` : '연결됐어요.', true);
 }

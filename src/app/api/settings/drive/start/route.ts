@@ -53,7 +53,12 @@ export async function GET(req: Request) {
   }
   delete meta.oauthState;
   delete meta.oauthUntil;
-  await admin.from('app_secrets').update({ meta }).eq('key', DRIVE_KEY);
+  const { error: saveErr } = await admin.from('app_secrets').update({ meta }).eq('key', DRIVE_KEY);
+  console.log('[drive/start] 확인값 발급', {
+    made: state.slice(0, 8),
+    keeping: meta.oauthStates?.map((x) => x.s.slice(0, 8)),
+    saveErr: saveErr?.message ?? null,
+  });
 
   const origin = new URL(req.url).origin;
   const go = new URL('https://accounts.google.com/o/oauth2/v2/auth');
