@@ -43,6 +43,9 @@ const store = {
   messages: [],
   read: { [A]: '1970-01-01T00:00:00.000Z', [B]: '1970-01-01T00:00:00.000Z' },
   seq: 0,
+  polls: 0,        // 폴링이 몇 번 돌았나
+  pollBytes: 0,    // 그때 오간 바이트 (예전엔 폴링마다 60줄을 통째로 보냈다)
+  sendDelayMs: 700, // 보내기가 느린 망을 흉내낸다 — 낙관적 표시가 진짜 먹히는지 보려고
 };
 const whoOf = (token) => ({ 'tok-A': A, 'tok-B': B, 'tok-C': C })[token] ?? null;
 const nameOf = (id) => MEMBERS.find((m) => m.id === id)?.name ?? '-';
@@ -73,7 +76,17 @@ function handle(url, method, token, body) {
   if (path === '/api/chat/messages') {
     // ★ 여기서 막는다 — 방 id 를 알아도 멤버가 아니면 403
     if (!isMember(who)) return [403, { error: '볼 수 없는 대화방이에요.' }];
-    if (method === 'GET') return [200, { messages: store.messages, memberIds: store.members, hasMore: false }];
+    if (method === 'GET') {
+      // 폴링은 '그 뒤로 새로 온 것만' 받는다 — 진짜 라우트와 같은 규칙
+      const after = new URL(url).searchParams.get('after');
+      if (after) {
+        store.polls += 1;
+        const fresh = store.messages.filter((m) => m.created_at > after);
+        store.pollBytes += JSON.stringify({ messages: fresh, hasMore: false }).length;
+        return [200, { messages: fresh, hasMore: false }];
+      }
+      return [200, { messages: store.messages, memberIds: store.members, hasMore: false }];
+    }
     const at = new Date(2026, 8, 1, 10, 0, ++store.seq).toISOString();
     const msg = { id: `m${store.seq}`, room_id: ROOM, member_id: who, body: body.body ?? '', image_path: null, created_at: at };
     store.messages.push(msg);
@@ -112,6 +125,10 @@ async function openAs(id, name, token) {
     const req = route.request();
     let body = {};
     try { body = JSON.parse(req.postData() || '{}'); } catch { /* GET */ }
+    // 폰에서 실제로 겪는 왕복 지연을 흉내낸다
+    if (req.method() === 'POST' && req.url().includes('/messages')) {
+      await new Promise((r) => setTimeout(r, store.sendDelayMs));
+    }
     const [status, json] = handle(req.url(), req.method(), req.headers()['x-session-token'], body);
     await route.fulfill({ status, headers: { 'content-type': 'application/json' }, body: JSON.stringify(json) });
   });
@@ -139,10 +156,22 @@ ok('A 가 대화방에 들어간다', new URL(a.page.url()).pathname === `/chat/
 ok('B 도 같은 방에 들어간다', await b.page.getByText('아직 아무 말도 없어요').isVisible());
 
 // A 가 한 마디 — B 는 **아무것도 안 누른다**
+// ★ 서버는 일부러 700ms 걸리게 해뒀다. 그런데도 말풍선은 **바로** 떠야 한다
+//   (예전엔 보낸 뒤 60줄을 통째로 다시 받을 때까지 화면이 멈춰 있었다)
 await a.page.getByPlaceholder('할 말을 적어주세요').fill('교안 올렸어요');
+const t0 = Date.now();
 await a.page.getByRole('button', { name: '보내기', exact: true }).click();
-await a.page.waitForTimeout(1200);
-ok('A 화면에 내 말이 보인다', await a.page.getByText('교안 올렸어요').isVisible());
+await a.page.getByText('교안 올렸어요').waitFor({ state: 'visible', timeout: 5000 });
+const shownMs = Date.now() - t0;
+ok('★ 누르자마자 말풍선이 뜬다 (서버 700ms 인데도)', shownMs < 400, `${shownMs}ms`);
+
+// 서버 응답이 온 뒤에도 같은 말이 두 번 보이면 안 된다
+await a.page.waitForTimeout(2000);
+const dupe = await a.page.getByText('교안 올렸어요').count();
+ok('★ 서버 응답 뒤에도 한 번만 보인다 (중복 없음)', dupe === 1, `${dupe}개`);
+
+// 입력칸은 곧바로 비워져 다음 말을 칠 수 있어야 한다
+ok('입력칸이 비워진다', (await a.page.getByPlaceholder('할 말을 적어주세요').inputValue()) === '');
 
 // 폴링이 도는 시간(5초)을 준다 — 새로고침은 하지 않는다
 await b.page.waitForTimeout(7000);
@@ -191,6 +220,11 @@ ok('★ C 화면에 남의 대화 내용이 한 글자도 없다', !(await c.pag
 
 const h = await c.page.evaluate(() => document.documentElement.scrollWidth);
 ok('375px 에서 가로 스크롤이 없다', h <= 375, `${h}px`);
+
+/* 폴링이 얼마나 무거운가 — 예전엔 몇 초마다 60줄을 통째로 다시 받았다.
+   지금은 '그 뒤로 새로 온 것' 만 받으므로 대개 빈 응답이다 */
+const perPoll = store.polls ? Math.round(store.pollBytes / store.polls) : 0;
+ok('★ 폴링 한 번이 가볍다 (새 줄만 받는다)', perPoll < 400, `${store.polls}번 · 평균 ${perPoll}바이트`);
 
 await browser.close();
 console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`);

@@ -30,20 +30,15 @@ export async function POST(req: Request) {
   }
 
   const at = body.at ?? new Date().toISOString();
-  // 뒤로 되돌리지 않는다 — 늦게 도착한 요청이 읽음을 과거로 밀면 안 읽음이 되살아난다
-  const { data: cur } = await admin
-    .from('room_members')
-    .select('last_read_at')
-    .eq('room_id', roomId)
-    .eq('member_id', me.memberId)
-    .maybeSingle();
-  if (cur && cur.last_read_at >= at) return NextResponse.json({ ok: true, at: cur.last_read_at });
-
+  /* 뒤로 되돌리지 않는다 — 늦게 도착한 요청이 읽음을 과거로 밀면 안 읽음이 되살아난다.
+     '읽어보고 → 더 최신이면 쓴다' 를 **조건부 update 한 번**으로 합쳤다.
+     쿼리가 절반이 되고, 두 요청이 겹쳐도 DB 가 알아서 걸러준다 (읽고 쓰는 사이의 틈이 없다) */
   await admin
     .from('room_members')
     .update({ last_read_at: at })
     .eq('room_id', roomId)
-    .eq('member_id', me.memberId);
+    .eq('member_id', me.memberId)
+    .lt('last_read_at', at);
 
   return NextResponse.json({ ok: true, at });
 }
