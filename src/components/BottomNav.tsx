@@ -35,6 +35,9 @@ export const WORK_NAV: NavItem[] = [
   { href: '/notice', label: '공지사항', icon: 'megaphone' },
   // 업무는 공지 바로 다음이다 — 알린 다음에 누가 무엇을 언제까지 할지가 정해진다
   { href: '/task', label: '업무', icon: 'list' },
+  // 부서협업은 업무 바로 다음이다 — 업무가 '사람에게 나누는 것' 이면
+  // 이건 '부서끼리 주고받는 것' 이라 같은 갈래의 한 칸 위다
+  { href: '/collab', label: '부서협업', icon: 'users' },
   { href: '/apps', label: '프로그램계획', icon: 'doc' },
   { href: '/verify', label: '프로그램검증', icon: 'checkCircle' },
   { href: '/mock', label: '모의수업', icon: 'present', quiet: true },
@@ -63,7 +66,7 @@ const PHONE_TABS: NavItem[] = [
 
 // 폰 하단 탭은 4개를 유지한다 — 5개로 늘리면 375px 에서 라벨이 뭉개진다.
 // 업무는 일단 더보기에 두고, 홈에서 자기 업무가 다 보이게 한다.
-const MORE_HREFS = ['/task', '/mock', '/training', '/roles', '/cost', '/expense', '/gallery', '/schedule', '/admin'];
+const MORE_HREFS = ['/task', '/collab', '/mock', '/training', '/roles', '/cost', '/expense', '/gallery', '/schedule', '/admin'];
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/');

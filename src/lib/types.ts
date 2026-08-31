@@ -559,9 +559,16 @@ export const TASK_STATES: { value: TaskState; label: string; cls: string; on: st
 export interface Department {
   id: string;
   name: string;
-  /** 부서장 */
+  /** 부서장 = 팀장 */
   head_id: string | null;
   sort_order: number;
+  /**
+   * 업무 흐름에서 몇 번째인가 (영업마케팅 1 → 기획개발 2 → 생산운영 3 → 인사관리 4).
+   * 협업 요청에서 **다음 단계 부서를 먼저 보여주는 데만** 쓴다 — 막지는 않는다.
+   */
+  flow_order: number | null;
+  /** 흐름 밖에서 전 부서를 지원하는 부서 (경영지원) */
+  is_support: boolean;
   created_at: string;
 }
 
@@ -591,4 +598,55 @@ export interface Duty {
 export interface DutyHelper {
   duty_id: string;
   member_id: string;
+}
+
+/* ------------------------------------------------- 부서 간 협업 요청 / 지시
+   업무(tasks)와 축이 다르다 — 저쪽은 1건 × 담당자 1명이고,
+   이쪽은 **부서 → 부서**라 받아들일지 말지가 상대에게 있다. */
+
+export type CollabStatus = 'requested' | 'doing' | 'done';
+export type CollabPriority = 'high' | 'normal' | 'low';
+
+/** 상태 3단 — 업무(TASK_STATES)와 같은 꼴이라 화면도 같은 버튼을 쓴다 */
+export const COLLAB_STATES: { value: CollabStatus; label: string; on: string }[] = [
+  { value: 'requested', label: '요청', on: 'bg-neutral-500 text-white' },
+  { value: 'doing', label: '진행중', on: 'bg-amber-500 text-white' },
+  { value: 'done', label: '완료', on: 'bg-green-600 text-white' },
+];
+
+/** 중요도 — 셋에서 멈춘다. 늘리면 고를 때마다 고민이 늘고 뜻이 흐려진다 */
+export const COLLAB_PRIORITIES: {
+  value: CollabPriority;
+  label: string;
+  chip: string;
+}[] = [
+  { value: 'high', label: '급함', chip: 'bg-red-100 text-red-700' },
+  { value: 'normal', label: '보통', chip: 'bg-neutral-100 text-neutral-500' },
+  { value: 'low', label: '나중에', chip: 'bg-neutral-100 text-neutral-400' },
+];
+
+export interface CollabRequest {
+  id: string;
+  from_dept_id: string;
+  to_dept_id: string;
+  /** "○○중 3학년 4차시" 처럼 자유 입력 */
+  project: string | null;
+  body: string;
+  due_date: string | null;
+  priority: CollabPriority;
+  status: CollabStatus;
+  created_by: string | null;
+  /** 받아서 '진행중' 을 누른 사람 */
+  accepted_by: string | null;
+  done_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollabComment {
+  id: string;
+  request_id: string;
+  member_id: string | null;
+  body: string;
+  created_at: string;
 }

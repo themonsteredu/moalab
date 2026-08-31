@@ -7,7 +7,15 @@ import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { PIECES, useAppsOverview } from '@/lib/useAppsOverview';
-import type { ActivityLog, CommentRow, Notice, NoticeRead, Schedule, Task } from '@/lib/types';
+import type {
+  ActivityLog,
+  CollabRequest,
+  CommentRow,
+  Notice,
+  NoticeRead,
+  Schedule,
+  Task,
+} from '@/lib/types';
 import { CardSkeleton, Collapsible, ErrorBanner, ProgressBar, Skeleton } from '@/components/ui';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
@@ -42,6 +50,9 @@ export default function HomePage() {
   const [noticeReads, setNoticeReads] = useState<NoticeRead[]>([]);
   /** 내가 맡은 안 끝난 업무 — '내 할 일' 에 합류한다 */
   const [myOpen, setMyOpen] = useState<Task[]>([]);
+  /** 우리 부서가 받은 협업 요청 — 같은 자리에 합류한다 (부서협업 화면까지 가야만 보이면 놓친다) */
+  const [myCollab, setMyCollab] = useState<CollabRequest[]>([]);
+  const [deptNames, setDeptNames] = useState<Record<string, string>>({});
   /** 완료 표시가 실패했을 때만 쓰는 자리 (화면 전체 에러와 섞지 않는다) */
   const [actionErr, setActionErr] = useState('');
 
@@ -56,7 +67,8 @@ export default function HomePage() {
   }, [cursor]);
 
   const loadExtras = useCallback(async () => {
-    const [schedRes, smRes, logRes, noticeRes, readRes, taskRes] = await Promise.all([
+    const [schedRes, smRes, logRes, noticeRes, readRes, taskRes, collabRes, deptRes, grpRes, dutyRes, helperRes] =
+      await Promise.all([
       supabase.from('schedules').select('*').gte('date', range.from).lte('date', range.to).order('date').order('start_time'),
       supabase.from('schedule_members').select('*'),
       supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(200),
@@ -71,6 +83,12 @@ export default function HomePage() {
       meId
         ? supabase.from('tasks').select('*').eq('assignee_id', meId).neq('state', 'done')
         : Promise.resolve({ data: [] }),
+      // 협업 요청은 아직 안 끝난 것만. 내 부서 것인지는 아래에서 가른다
+      supabase.from('collab_requests').select('*').neq('status', 'done'),
+      supabase.from('departments').select('id,name,head_id'),
+      supabase.from('duty_groups').select('id,dept_id'),
+      supabase.from('duties').select('id,group_id,owner_id'),
+      supabase.from('duty_helpers').select('*'),
     ]);
     setSchedules((schedRes.data ?? []) as Schedule[]);
     const map: Record<string, string[]> = {};
@@ -80,6 +98,29 @@ export default function HomePage() {
     setNotices((noticeRes.data ?? []) as Notice[]);
     setNoticeReads((readRes.data ?? []) as NoticeRead[]);
     setMyOpen((taskRes.data ?? []) as Task[]);
+
+    /* 내 부서를 역할분장에서 파생한다 — 팀장이거나 그 부서 역할의 주담당·부담당이면
+       그 부서 사람이다 (부서협업 화면과 같은 규칙). 새 소속 표를 만들지 않는다 */
+    const deps = (deptRes.data ?? []) as { id: string; name: string; head_id: string | null }[];
+    const grps = (grpRes.data ?? []) as { id: string; dept_id: string }[];
+    const dts = (dutyRes.data ?? []) as { id: string; group_id: string; owner_id: string | null }[];
+    const hlp = (helperRes.data ?? []) as { duty_id: string; member_id: string }[];
+
+    setDeptNames(Object.fromEntries(deps.map((d) => [d.id, d.name])));
+
+    const groupOf = new Map(grps.map((g) => [g.id, g.dept_id]));
+    const myGroups = new Set(dts.filter((d) => d.owner_id === meId).map((d) => d.group_id));
+    for (const h of hlp) {
+      if (h.member_id !== meId) continue;
+      const duty = dts.find((d) => d.id === h.duty_id);
+      if (duty) myGroups.add(duty.group_id);
+    }
+    const myDepts = new Set<string>(deps.filter((d) => d.head_id === meId).map((d) => d.id));
+    for (const g of myGroups) {
+      const dep = groupOf.get(g);
+      if (dep) myDepts.add(dep);
+    }
+    setMyCollab(((collabRes.data ?? []) as CollabRequest[]).filter((r) => myDepts.has(r.to_dept_id)));
   }, [range.from, range.to, meId]);
 
   useEffect(() => {
@@ -277,6 +318,8 @@ export default function HomePage() {
     }
   };
 
+  const collabFromName = useCallback((id: string) => deptNames[id] ?? '다른 부서', [deptNames]);
+
   const myTasks = useMemo(() => {
     /* href 를 줄마다 들고 다닌다 — 예전엔 카드가 `/apps/${id}` 로 하드코딩돼 있어서
        프로그램이 아닌 할 일(업무)을 여기 못 얹었다 */
@@ -285,7 +328,7 @@ export default function HomePage() {
       title: string;
       sub: string;
       due: string | null;
-      kind: 'review' | 'fix' | 'task';
+      kind: 'review' | 'fix' | 'task' | 'collab';
       href: string;
       done?: boolean;
     }[] = [];
@@ -301,6 +344,19 @@ export default function HomePage() {
         kind: 'task',
         href: '/task',
         done: t.state === 'done',
+      });
+    }
+
+    /* 우리 부서가 받은 협업 요청 — 업무 다음이다. 남이 우리 팀에 맡긴 일이라
+       내 할 일과 같은 무게로 봐야 한다 (부서협업 화면까지 들어가야만 보이면 놓친다) */
+    for (const r of myCollab) {
+      out.push({
+        id: `collab-${r.id}`,
+        title: r.project || r.body.slice(0, 40),
+        sub: [collabFromName(r.from_dept_id), r.status === 'doing' ? '진행중' : ''].filter(Boolean).join(' · '),
+        due: r.due_date,
+        kind: 'collab',
+        href: '/collab',
       });
     }
 
@@ -333,7 +389,7 @@ export default function HomePage() {
       }
     }
     return out.sort((a, b) => (!a.due ? 1 : !b.due ? -1 : a.due < b.due ? -1 : 1));
-  }, [items, meId, myOpen]);
+  }, [items, meId, myOpen, myCollab, collabFromName]);
 
   /** 히어로 칩과 섹션 배지가 같은 걸 세게 한다 — 나란히 놓고 숫자가 다르면 버그로 보인다 */
   const openTaskCount = myTasks.filter((t) => !t.done).length;
@@ -679,9 +735,15 @@ export default function HomePage() {
                     ) : (
                       <span className="flex w-9 shrink-0 justify-center">
                         <Icon
-                          name={t.kind === 'fix' ? 'wrench' : 'search'}
+                          name={t.kind === 'fix' ? 'wrench' : t.kind === 'collab' ? 'users' : 'search'}
                           size={16}
-                          className={t.kind === 'fix' ? 'text-red-500' : 'text-neutral-400'}
+                          className={
+                            t.kind === 'fix'
+                              ? 'text-red-500'
+                              : t.kind === 'collab'
+                                ? 'text-brand'
+                                : 'text-neutral-400'
+                          }
                         />
                       </span>
                     )}
