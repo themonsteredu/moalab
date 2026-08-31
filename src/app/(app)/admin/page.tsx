@@ -12,6 +12,7 @@ import { ddayClass, ddayLabel, logTime } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
 import { PushToggle } from '@/components/PushToggle';
 import { AiKeyCard } from '@/components/AiKeyCard';
+import { DriveCard } from '@/components/DriveCard';
 import { AppForm } from '@/components/AppForm';
 import { CardSkeleton, ConfirmDialog, ErrorBanner, ProgressBar, Sheet, Skeleton, useToast } from '@/components/ui';
 import type { ActivityLog, MemberPublic, Role } from '@/lib/types';
@@ -48,6 +49,7 @@ function AdminInner() {
         <div className="mb-3 space-y-2">
           <PushToggle />
           <AiKeyCard />
+          <DriveCard />
         </div>
         <div className="mb-4 flex gap-1.5 rounded-xl bg-neutral-200/60 p-1">
           {(

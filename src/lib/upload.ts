@@ -40,6 +40,27 @@ export async function uploadFile(
   return { url: data.publicUrl, name: file.name, size: blob.size };
 }
 
+/**
+ * 이미 만들어진 blob 을 **리사이즈 없이** 그대로 올린다 (한글 파일·PDF 처럼
+ * 이미지가 아닌 것). `uploadFile` 은 사진 전용이라 여기 섞지 않는다.
+ */
+export async function uploadBlob(
+  bucket: BucketName,
+  blob: Blob,
+  fileName: string,
+  prefix = 'misc',
+): Promise<UploadedFile> {
+  const ext = fileName.includes('.') ? fileName.split('.').pop()! : 'bin';
+  const path = storagePath(prefix, ext);
+  const { error } = await supabase.storage.from(bucket).upload(path, blob, {
+    contentType: blob.type || 'application/octet-stream',
+    upsert: false,
+  });
+  if (error) throw new Error(`${error.message} (${bucket})`);
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return { url: data.publicUrl, name: fileName, size: blob.size };
+}
+
 export async function uploadMany(
   bucket: BucketName,
   files: File[],
@@ -52,4 +73,35 @@ export async function uploadMany(
     onProgress?.(i + 1, files.length);
   }
   return out;
+}
+
+/* ------------------------------------------------------ 구글 드라이브 복사
+
+   앱에 올린 파일을 드라이브에도 한 벌 넣는다. **줄만 세우고 곧바로 돌아온다** —
+   드라이브가 느리거나 꺼져 있어도 강사의 파일 올리기는 이미 끝나 있어야 한다
+   (알림이 실패해도 공지가 올라가는 것과 같은 규칙).
+
+   연결 안 됨 / 그 갈래를 꺼둠 / 어느 폴더로 갈지 모름 → 서버가 조용히 넘긴다. */
+
+export interface DriveQueueInput {
+  kind: 'plan' | 'receipt' | 'photo' | 'lecture';
+  files: { url: string; name: string; mime?: string }[];
+  /** 갈래에 따라 필요한 것만 채우면 된다 */
+  topic?: string | null;
+  appTitle?: string | null;
+  month?: string | null;
+  date?: string | null;
+  school?: string | null;
+  /** 파일 이름 앞에 붙일 말 (뜻 없는 `abc123.webp` 를 알아볼 수 있게) */
+  prefix?: string | null;
+}
+
+/** 절대 await 하지 않아도 된다. 실패해도 아무 일도 일어나지 않는다 */
+export function queueDrive(actorId: string | null | undefined, input: DriveQueueInput): void {
+  if (!actorId || input.files.length === 0) return;
+  void fetch('/api/drive/queue', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-actor-id': actorId },
+    body: JSON.stringify(input),
+  }).catch(() => null);
 }

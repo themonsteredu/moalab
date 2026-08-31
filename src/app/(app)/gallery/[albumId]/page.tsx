@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
-import { uploadFile } from '@/lib/upload';
+import { queueDrive, uploadFile } from '@/lib/upload';
 import { logActivity } from '@/lib/log';
 import { downloadPhotosAsZip, safeFileName } from '@/lib/zip';
 import { korDateFull } from '@/lib/format';
@@ -76,6 +76,7 @@ export default function AlbumPage() {
     if (files.length === 0) return;
     setError('');
     let ok = 0;
+    const copied: { url: string; name: string }[] = [];
     for (let i = 0; i < files.length; i++) {
       setUploading(`올리는 중… ${i + 1}/${files.length}`);
       try {
@@ -84,6 +85,7 @@ export default function AlbumPage() {
           .from('photos')
           .insert({ album_id: albumId, url: up.url, tag: 'work', has_face: false });
         if (e) throw e;
+        copied.push({ url: up.url, name: up.name });
         ok++;
       } catch (e) {
         setError(friendlyError(e, `${i + 1}번째 사진을 올리지 못했어요. 나머지는 계속 올릴게요.`));
@@ -93,6 +95,14 @@ export default function AlbumPage() {
     if (fileRef.current) fileRef.current.value = '';
     if (ok > 0) {
       logActivity(session?.id, `${album?.school ?? ''} 앨범에 사진 ${ok}장 추가`, `album:${albumId}`);
+      /* 구글 드라이브에도 — 앨범에 학교·날짜가 이미 있어서 사람이 폴더를 안 고른다 */
+      queueDrive(session?.id, {
+        kind: 'photo',
+        files: copied,
+        date: album?.class_date ?? null,
+        school: album?.school ?? null,
+        prefix: album?.school ?? null,
+      });
       toast.show(`${ok}장 올렸어요.`);
       await load();
     }
