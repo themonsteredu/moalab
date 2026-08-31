@@ -29,6 +29,22 @@ export interface DeptNode {
   unassigned: number;
 }
 
+/**
+ * **이 역할을 실제로 맡는 사람.**
+ *
+ * 주담당(`duties.owner_id`)이 비어 있으면 **그 부서의 팀장**(`departments.head_id`)이
+ * 맡는다 — 원장이 부서마다 팀장을 정해뒀으니 역할마다 다시 고르지 않아도 된다.
+ * 팀장도 없을 때만 진짜 '미정' 이다.
+ */
+export function ownerOf(duty: { owner_id: string | null }, deptHeadId: string | null | undefined): string | null {
+  return duty.owner_id ?? deptHeadId ?? null;
+}
+
+/** 주담당이 따로 지정됐나 (팀장이 자동으로 맡은 것과 구분해서 보여주려고) */
+export function isOwnPick(duty: { owner_id: string | null }): boolean {
+  return Boolean(duty.owner_id);
+}
+
 /** 순서: sort_order → 이름. 원장이 정한 순서를 따르되, 같으면 이름순으로 흔들리지 않게 */
 function byOrder<T extends { sort_order: number; name: string }>(a: T, b: T): number {
   return a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ko');
@@ -76,7 +92,8 @@ export function buildOrg(
       return {
         group,
         duties: ds,
-        unassigned: ds.filter((d) => !d.duty.owner_id).length,
+        // 팀장이 있으면 미정이 아니다 — 그 부서 팀장이 맡는 것으로 본다
+        unassigned: ds.filter((d) => !ownerOf(d.duty, dept.head_id)).length,
       };
     });
     return {
@@ -131,10 +148,12 @@ export function groupByPerson(tree: DeptNode[], members: MemberPublic[]): Person
     for (const g of d.groups) {
       for (const node of g.duties) {
         const ref: DutyRef = { duty: node.duty, deptName: d.dept.name, groupName: g.group.name };
-        if (node.duty.owner_id) {
-          const list = own.get(node.duty.owner_id) ?? [];
+        // 주담당이 없으면 그 부서 팀장이 맡는다 (ownerOf 와 같은 규칙)
+        const holder = ownerOf(node.duty, d.dept.head_id);
+        if (holder) {
+          const list = own.get(holder) ?? [];
           list.push(ref);
-          own.set(node.duty.owner_id, list);
+          own.set(holder, list);
         } else {
           unassigned.push(ref);
         }

@@ -10,9 +10,9 @@ import { relTime } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { Collapsible, ConfirmDialog, ErrorBanner } from '@/components/ui';
 
-interface DeptFile {
+interface DutyFile {
   id: string;
-  dept_id: string;
+  duty_id: string;
   file_url: string;
   file_name: string;
   file_size: number | null;
@@ -22,41 +22,52 @@ interface DeptFile {
 }
 
 /**
- * 부서 자료함 — 그 부서가 만든 자료를 부서에 붙여 올린다.
+ * 역할 자료함 — 그 역할로 만든 결과물을 **역할 안에** 올린다.
  *
- * **없던 자리다.** 지금까지 파일은 프로그램·공지·지출·앨범에만 붙었고,
- * 부서에 붙는 곳이 하나도 없어서 부서에 사람을 배정해놓고도 그 부서가 만든
- * 자료를 올릴 데가 없었다.
+ * 역할분장의 소분류 하나가 곧 **해야 할 일**이다 ('브로셔만들기[A4버전]' 처럼).
+ * 그 일을 해서 나온 파일은 그 일 안에 있어야 나중에 무엇을 하다 나온 자료인지 안다.
  *
- * **새 메뉴를 만들지 않는다** — 부서에 사람을 배정하는 화면이 이미 부서를 맨 위에
- * 두고 있어서 여기에 칸만 더한다 (`plan_files.kind` 로 강사교육 문서를 담은 것과
- * 같은 판단). 드라이브로는 `업무분장/{부서명}` 으로 간다.
+ * ⚠️ 처음엔 부서에 뭉뚱그려 붙였는데 원장이 *"해야할일 항목란에 들어가서 올리게"*
+ * 라고 바로잡아 여기로 옮겼다.
+ *
+ * 드라이브로는 `업무분장/{부서}/{중분류}` — 손으로 만들어둔 그 폴더로 간다.
+ * 역할마다 폴더를 또 파지 않는다(63개가 된다). 대신 **파일 이름 앞에 역할명**을 붙인다.
  */
-export function DeptFiles({ deptId, deptName }: { deptId: string; deptName: string }) {
+export function DutyFiles({
+  dutyId,
+  dutyName,
+  deptName,
+  groupName,
+}: {
+  dutyId: string;
+  dutyName: string;
+  deptName: string;
+  groupName: string;
+}) {
   const { session } = useSession();
   const { nameOf } = useMembers();
-  const [files, setFiles] = useState<DeptFile[] | null>(null);
+  const [files, setFiles] = useState<DutyFile[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
   const [pending, setPending] = useState<File[]>([]);
-  const [killing, setKilling] = useState<DeptFile | null>(null);
+  const [killing, setKilling] = useState<DutyFile | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     const { data, error: e } = await supabase
-      .from('dept_files')
+      .from('duty_files')
       .select('*')
-      .eq('dept_id', deptId)
+      .eq('duty_id', dutyId)
       .order('created_at', { ascending: false });
     if (e) {
       setFiles([]);
       setError(friendlyError(e, '자료를 불러오지 못했어요.'));
       return;
     }
-    setFiles((data ?? []) as DeptFile[]);
+    setFiles((data ?? []) as DutyFile[]);
     setError('');
-  }, [deptId]);
+  }, [dutyId]);
 
   useEffect(() => {
     void load();
@@ -73,9 +84,9 @@ export function DeptFiles({ deptId, deptName }: { deptId: string; deptName: stri
     for (let i = 0; i < pending.length; i++) {
       setBusy(`올리는 중… ${i + 1}/${pending.length}`);
       try {
-        const up = await uploadFile('moalab-plans', pending[i], `dept-${deptId}`);
-        const { error: e } = await supabase.from('dept_files').insert({
-          dept_id: deptId,
+        const up = await uploadFile('moalab-plans', pending[i], `duty-${dutyId}`);
+        const { error: e } = await supabase.from('duty_files').insert({
+          duty_id: dutyId,
           file_url: up.url,
           file_name: up.name,
           file_size: up.size,
@@ -96,18 +107,20 @@ export function DeptFiles({ deptId, deptName }: { deptId: string; deptName: stri
     if (inputRef.current && left.length === 0) inputRef.current.value = '';
     if (ok > 0) {
       setNote('');
-      logActivity(session?.id, `${deptName} 자료 ${ok}개 올림`, `dept:${deptId}`);
-      // 구글 드라이브에도 한 벌 — 업무분장/{부서} 폴더로 (연결 안 돼 있으면 서버가 조용히 넘긴다)
-      queueDrive(session?.id, { kind: 'dept', files: copied, deptName, prefix: deptName });
+      logActivity(session?.id, `${dutyName} 자료 ${ok}개 올림`, `duty:${dutyId}`);
+      /* 구글 드라이브에도 한 벌 — 업무분장/{부서}/{중분류} 폴더로.
+         파일 이름 앞에 **역할명**을 붙여 무엇을 하다 나온 자료인지 알아보게 한다
+         (연결 안 돼 있으면 서버가 조용히 넘긴다) */
+      queueDrive(session?.id, { kind: 'dept', files: copied, deptName, groupName, prefix: dutyName });
       await load();
     }
   };
 
-  const remove = async (f: DeptFile) => {
+  const remove = async (f: DutyFile) => {
     setKilling(null);
-    const { error: e } = await supabase.from('dept_files').delete().eq('id', f.id);
+    const { error: e } = await supabase.from('duty_files').delete().eq('id', f.id);
     if (e) return setError(friendlyError(e, '지우지 못했어요.'));
-    logActivity(session?.id, `${deptName} 자료 삭제 — ${f.file_name}`, `dept:${deptId}`);
+    logActivity(session?.id, `${dutyName} 자료 삭제 — ${f.file_name}`, `duty:${dutyId}`);
     await load();
   };
 
@@ -116,9 +129,9 @@ export function DeptFiles({ deptId, deptName }: { deptId: string; deptName: stri
   return (
     <div className="mt-2">
       <Collapsible
-        id={`dept-files-${deptId}`}
+        id={`duty-files-${dutyId}`}
         dense
-        title="자료"
+        title="만든 자료"
         badge={
           n > 0 ? (
             <span className="chip bg-neutral-100 text-neutral-600">{n}개</span>

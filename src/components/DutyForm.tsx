@@ -6,6 +6,7 @@ import { useSession } from '@/lib/session';
 import { logActivity } from '@/lib/log';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
+import { DutyFiles } from '@/components/DutyFiles';
 import { ConfirmDialog, ErrorBanner, MultiPicker, Sheet } from '@/components/ui';
 import type { Duty, MemberPublic } from '@/lib/types';
 
@@ -26,6 +27,8 @@ export function DutyForm({
   onClose,
   groupId,
   groupLabel,
+  deptName,
+  groupName,
   duty,
   members,
   canDelete,
@@ -37,6 +40,9 @@ export function DutyForm({
   groupId: string;
   /** '기획개발부 › 프로그램 기획' — 어디에 넣는지 보여준다 */
   groupLabel: string;
+  /** 드라이브 폴더(`업무분장/{부서}/{중분류}`)를 정하는 데 쓴다 */
+  deptName?: string;
+  groupName?: string;
   /** null 이면 새로 만들기 */
   duty: Duty | null;
   members: MemberPublic[];
@@ -235,6 +241,19 @@ export function DutyForm({
               onChange={setHelperIds}
             />
           </div>
+
+          {/* 이 일을 해서 만든 결과물 — **이미 만들어진 역할일 때만.**
+              새로 만드는 중에는 붙일 id 가 없다 (저장하면 그때 칸이 생긴다) */}
+          {duty && (
+            <div className="border-t border-neutral-200 pt-3">
+              <DutyFiles
+                dutyId={duty.id}
+                dutyName={duty.name}
+                deptName={deptName ?? groupLabel.split('›')[0].trim()}
+                groupName={groupName ?? groupLabel.split('›').pop()!.trim()}
+              />
+            </div>
+          )}
 
           {error && <ErrorBanner message={error} />}
 
