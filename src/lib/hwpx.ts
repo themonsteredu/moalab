@@ -799,7 +799,7 @@ export async function downloadPlanHwpx(
   plan: LessonPlan,
   items: LessonPlanItem[],
   title: string,
-): Promise<{ skipped: number }> {
+): Promise<{ skipped: number; blob: Blob; fileName: string }> {
   const withUrl = items.filter((i) => i.url);
   const jobs: Promise<HwpxPic | null>[] = withUrl.map((i, idx) =>
     loadPic(i.url as string, i.id, idx),
@@ -841,5 +841,7 @@ export async function downloadPlanHwpx(
   // 파일 이름이 'download' 로 떨어진다 (zip.ts 와 같은 이유로 미룬다)
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 
-  return { skipped: jobs.length - pics.length };
+  /* 만든 파일을 그대로 돌려준다 — 부르는 쪽이 구글 드라이브에도 한 벌 넣는다.
+     여기서 직접 올리지 않는 이유: 이 파일은 순수 계산이고 서버·저장소를 모른다 */
+  return { skipped: jobs.length - pics.length, blob, fileName: `${name}.hwpx` };
 }

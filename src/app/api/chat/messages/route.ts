@@ -24,29 +24,35 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const roomId = url.searchParams.get('roomId') ?? '';
-  const before = url.searchParams.get('before');
+  const before = url.searchParams.get('before'); // 위로 올려 지난 말 더 보기
+  const after = url.searchParams.get('after');   // 폴링 — 그 뒤로 새로 온 것만
 
   if (!(await isMember(admin, roomId, me.memberId))) {
     return NextResponse.json({ error: '볼 수 없는 대화방이에요.' }, { status: 403 });
   }
 
-  let q = admin
-    .from('messages')
-    .select('*')
-    .eq('room_id', roomId)
-    .order('created_at', { ascending: false })
-    .limit(PAGE);
+  /* `after` 가 오면 **새 줄만** 돌려준다 (보통 0건이라 응답이 거의 비어 있다).
+     예전엔 폴링마다 60줄을 통째로 보내서 화면이 말풍선을 전부 다시 그렸다. */
+  let q = admin.from('messages').select('*').eq('room_id', roomId).limit(PAGE);
+  q = after
+    ? q.gt('created_at', after).order('created_at', { ascending: true })
+    : q.order('created_at', { ascending: false });
   if (before) q = q.lt('created_at', before);
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: '대화를 불러오지 못했어요.' }, { status: 500 });
 
-  const list = ((data ?? []) as Message[]).reverse(); // 화면은 오래된 것부터 그린다
+  const rows = (data ?? []) as Message[];
+  const list = after ? rows : [...rows].reverse(); // 화면은 오래된 것부터 그린다
+
+  /* 방 사람 목록은 폴링마다 다시 읽을 이유가 없다 — 처음 받을 때만 싣는다 */
+  if (after) return NextResponse.json({ messages: list, hasMore: false });
+
   const mRes = await admin.from('room_members').select('member_id').eq('room_id', roomId);
   return NextResponse.json({
     messages: list,
     memberIds: (mRes.data ?? []).map((r) => r.member_id),
-    hasMore: (data ?? []).length === PAGE,
+    hasMore: rows.length === PAGE,
   });
 }
 
@@ -81,8 +87,9 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (error || !data) return NextResponse.json({ error: '말을 못 보냈어요. 다시 눌러주세요.' }, { status: 500 });
 
-  // 보낸 사람은 그 줄까지 읽은 것이다 — 내 글이 내 안 읽음으로 잡히면 안 된다
-  await admin
+  /* 보낸 사람은 그 줄까지 읽은 것이다 — 내 글이 내 안 읽음으로 잡히면 안 된다.
+     **기다리지 않는다** — 이걸 기다리면 말이 화면에 뜨는 게 그만큼 늦는다 */
+  void admin
     .from('room_members')
     .update({ last_read_at: data.created_at })
     .eq('room_id', roomId)

@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
+import { useTopics } from '@/lib/useTopics';
 import { logActivity } from '@/lib/log';
 import { openNextRound, recomputeAppStatus } from '@/lib/verify';
 import { computeStatus, openFindings, roundProgress, STATUS_META } from '@/lib/status';
@@ -50,6 +51,7 @@ export default function AppDetailPage() {
   const router = useRouter();
   const { session, isAdmin } = useSession();
   const { nameOf, members } = useMembers(true);
+  const { topics } = useTopics(); // 드라이브 폴더를 `프로그램/{주제}/{이름}` 으로 묶는다
   const toast = useToast();
 
   const [app, setApp] = useState<AppRow | null>(null);
@@ -466,11 +468,23 @@ export default function AppDetailPage() {
                   '계획안 첨부파일' 이던 이름을 '문서 첨부' 로 넓혔다 —
                   이제 계획안뿐 아니라 교육안·양식도 여기로 올라온다 */}
         <Section id="plan" icon="doc" title="강의계획서">
-          <PlanForm appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
+          <PlanForm
+            appId={id}
+            appSlug={app.slug}
+            appTitle={app.title_ko}
+            topic={topics.find((t) => t.id === app.topic_id)?.name ?? null}
+            nameOf={nameOf}
+          />
         </Section>
 
         <Section id="planfile" icon="clip" title="문서 첨부">
-          <LessonPlan appId={id} appSlug={app.slug} appTitle={app.title_ko} nameOf={nameOf} />
+          <LessonPlan
+            appId={id}
+            appSlug={app.slug}
+            appTitle={app.title_ko}
+            topic={topics.find((t) => t.id === app.topic_id)?.name ?? null}
+            nameOf={nameOf}
+          />
         </Section>
 
         {/* -------------------------------------------------------- 원가 */}

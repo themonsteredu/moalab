@@ -315,7 +315,7 @@ export default function SchedulePage() {
                       onClick={() => setDeptPick(d.id)}
                       aria-pressed={on}
                       className={`tap shrink-0 rounded-full border px-3.5 text-[13px] font-semibold transition ${
-                        on ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
+                        on ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-600'
                       }`}
                     >
                       {d.name}
@@ -701,7 +701,7 @@ function ScheduleForm({
                 aria-pressed={kind === k.value}
                 className={`tap flex-1 rounded-xl border text-[14px] font-semibold transition ${
                   kind === k.value
-                    ? 'border-brand bg-brand text-white'
+                    ? 'pick-on'
                     : 'border-neutral-300 bg-surface text-neutral-600'
                 }`}
               >

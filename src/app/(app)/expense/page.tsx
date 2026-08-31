@@ -6,7 +6,7 @@ import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { logActivity } from '@/lib/log';
-import { uploadMany } from '@/lib/upload';
+import { queueDrive, uploadMany } from '@/lib/upload';
 import { won, korDate, today } from '@/lib/format';
 import {
   EXPENSE_PRINT_PARTS,
@@ -665,6 +665,14 @@ function ExpenseForm({
             sort_order: base + i,
           })),
         );
+        /* 구글 드라이브에도 한 벌 — 달마다 정산자료 폴더에 쌓인다.
+           연말에 폴더째로 회계에 넘기려고 만든 자리다 */
+        queueDrive(session?.id, {
+          kind: 'receipt',
+          files: uploaded.map((u) => ({ url: u.url, name: u.name })),
+          month: (spentOn || '').slice(0, 7),
+          prefix: (purpose || '').trim() || null,
+        });
         // 파일은 올라갔으니 목록에서 빼서 두 번 올라가지 않게 한다
         setPicked([]);
         if (fErr) {

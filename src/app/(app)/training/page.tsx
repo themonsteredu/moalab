@@ -211,7 +211,7 @@ export default function TrainingPage() {
                 onClick={() => setView(v)}
                 aria-pressed={view === v}
                 className={`tap flex-1 rounded-xl border text-[13px] font-bold transition ${
-                  view === v ? 'border-brand bg-brand text-white' : 'border-neutral-200 bg-surface text-neutral-500'
+                  view === v ? 'pick-on' : 'border-neutral-200 bg-surface text-neutral-500'
                 }`}
               >
                 {v === 'team' ? '전체 현황' : '내 과정'}
@@ -249,7 +249,7 @@ export default function TrainingPage() {
                           onClick={() => session && void setState(c.id, session.id, s.value)}
                           aria-pressed={on}
                           className={`tap flex-1 rounded-lg border text-[13.5px] font-bold transition ${
-                            on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-500'
+                            on ? s.on : 'border-neutral-200 bg-surface text-neutral-500'
                           }`}
                         >
                           {s.label}
@@ -322,7 +322,7 @@ export default function TrainingPage() {
                                 aria-pressed={on}
                                 aria-label={`${m.name} ${c.title} ${s.label}`}
                                 className={`h-9 flex-1 rounded-lg border text-[12px] font-bold transition ${
-                                  on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-400'
+                                  on ? s.on : 'border-neutral-200 bg-surface text-neutral-400'
                                 }`}
                               >
                                 {s.label}

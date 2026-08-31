@@ -124,9 +124,9 @@ export const FINDING_META: Record<
 
 /** 답변 버튼 3개 — 이 순서 그대로 화면에 나온다 */
 export const REPLY_STATES: { value: ReplyState; label: string; on: string; hint: string }[] = [
-  { value: 'fixed', label: '수정완료', on: 'bg-blue-600 text-white', hint: '무엇을 어떻게 고쳤는지 적어주세요.' },
-  { value: 'wontfix', label: '수정불가', on: 'bg-neutral-600 text-white', hint: '왜 이대로 두는지 적어주세요.' },
-  { value: 'recheck', label: '다시확인', on: 'bg-amber-500 text-white', hint: '무엇을 더 봐야 하는지 적어주세요.' },
+  { value: 'fixed', label: '수정완료', on: 'border-blue-600 bg-blue-100 text-blue-800', hint: '무엇을 어떻게 고쳤는지 적어주세요.' },
+  { value: 'wontfix', label: '수정불가', on: 'border-neutral-500 bg-neutral-100 text-neutral-700', hint: '왜 이대로 두는지 적어주세요.' },
+  { value: 'recheck', label: '다시확인', on: 'border-amber-500 bg-amber-100 text-amber-800', hint: '무엇을 더 봐야 하는지 적어주세요.' },
 ];
 
 /** 아직 살아있는 지적인가 (프로그램을 '수정 필요' 로 만드는 것) */
@@ -486,9 +486,9 @@ export interface TrainingRecord {
 }
 
 export const TRAINING_STATES: { value: TrainingState; label: string; cls: string; on: string }[] = [
-  { value: 'todo', label: '미이수', cls: 'bg-neutral-100 text-neutral-500', on: 'bg-neutral-500 text-white' },
-  { value: 'doing', label: '진행 중', cls: 'bg-amber-100 text-amber-800', on: 'bg-amber-500 text-white' },
-  { value: 'done', label: '이수', cls: 'bg-green-100 text-green-800', on: 'bg-green-600 text-white' },
+  { value: 'todo', label: '미이수', cls: 'bg-neutral-100 text-neutral-500', on: 'border-neutral-400 bg-neutral-100 text-neutral-700' },
+  { value: 'doing', label: '진행 중', cls: 'bg-amber-100 text-amber-800', on: 'border-amber-500 bg-amber-100 text-amber-800' },
+  { value: 'done', label: '이수', cls: 'bg-green-100 text-green-800', on: 'border-green-600 bg-green-100 text-green-800' },
 ];
 
 /* ------------------------------------------------------------- 지출결의서
@@ -619,9 +619,9 @@ export interface TaskTemplateItem {
 }
 
 export const TASK_STATES: { value: TaskState; label: string; cls: string; on: string }[] = [
-  { value: 'todo', label: '할 일', cls: 'bg-neutral-100 text-neutral-500', on: 'bg-neutral-500 text-white' },
-  { value: 'doing', label: '하는 중', cls: 'bg-amber-100 text-amber-800', on: 'bg-amber-500 text-white' },
-  { value: 'done', label: '완료', cls: 'bg-green-100 text-green-800', on: 'bg-green-600 text-white' },
+  { value: 'todo', label: '할 일', cls: 'bg-neutral-100 text-neutral-500', on: 'border-neutral-400 bg-neutral-100 text-neutral-700' },
+  { value: 'doing', label: '하는 중', cls: 'bg-amber-100 text-amber-800', on: 'border-amber-500 bg-amber-100 text-amber-800' },
+  { value: 'done', label: '완료', cls: 'bg-green-100 text-green-800', on: 'border-green-600 bg-green-100 text-green-800' },
 ];
 
 /* ------------------------------------------------------------ 역할분장
@@ -688,9 +688,9 @@ export type CollabPriority = 'high' | 'normal' | 'low';
 
 /** 상태 3단 — 업무(TASK_STATES)와 같은 꼴이라 화면도 같은 버튼을 쓴다 */
 export const COLLAB_STATES: { value: CollabStatus; label: string; on: string }[] = [
-  { value: 'requested', label: '요청', on: 'bg-neutral-500 text-white' },
-  { value: 'doing', label: '진행중', on: 'bg-amber-500 text-white' },
-  { value: 'done', label: '완료', on: 'bg-green-600 text-white' },
+  { value: 'requested', label: '요청', on: 'border-neutral-400 bg-neutral-100 text-neutral-700' },
+  { value: 'doing', label: '진행중', on: 'border-amber-500 bg-amber-100 text-amber-800' },
+  { value: 'done', label: '완료', on: 'border-green-600 bg-green-100 text-green-800' },
 ];
 
 /** 중요도 — 셋에서 멈춘다. 늘리면 고를 때마다 고민이 늘고 뜻이 흐려진다 */

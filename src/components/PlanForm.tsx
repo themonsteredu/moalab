@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
-import { uploadFile } from '@/lib/upload';
+import { queueDrive, uploadBlob, uploadFile } from '@/lib/upload';
 import { logActivity } from '@/lib/log';
 import { ConfirmDialog, ErrorBanner } from '@/components/ui';
 import { Icon } from '@/components/Icon';
@@ -45,11 +45,14 @@ export function PlanForm({
   appId,
   appSlug,
   appTitle,
+  topic,
   nameOf,
 }: {
   appId: string;
   appSlug: string;
   appTitle: string;
+  /** 구글 드라이브에 넣을 때 `프로그램/{주제}/{이름}` 으로 묶는다 */
+  topic?: string | null;
   nameOf: (id: string | null) => string;
 }) {
   const { session } = useSession();
@@ -291,13 +294,29 @@ export function PlanForm({
     setHwpBusy(true);
     setHwpNote('');
     try {
-      const { skipped } = await downloadPlanHwpx(plan, items, appTitle);
+      const { skipped, blob, fileName } = await downloadPlanHwpx(plan, items, appTitle);
       setHwpNote(
         skipped > 0
           ? `받았어요. 사진 ${skipped}장은 못 넣었어요 — 다시 눌러보세요.`
           : '받았어요. 한글에서 열어 [다른 이름으로 저장 → hwp] 하면 hwp 가 돼요.',
       );
       logActivity(session?.id, `${appSlug} 강의계획서 한글파일 받기`, `app:${appId}`);
+
+      /* 구글 드라이브에도 한 벌 — 학교에 낼 파일이라 원장이 PC 에서 바로 꺼내 쓴다.
+         **받는 것은 이미 끝났다.** 여기서 실패해도 화면에는 아무 일도 안 일어난다 */
+      void (async () => {
+        try {
+          const up = await uploadBlob('moalab-plans', blob, fileName, `app-${appId}`);
+          queueDrive(session?.id, {
+            kind: 'lecture',
+            files: [{ url: up.url, name: fileName, mime: 'application/hwp+zip' }],
+            topic,
+            appTitle,
+          });
+        } catch {
+          /* 드라이브 복사는 덤이다 — 실패해도 원장은 이미 파일을 받았다 */
+        }
+      })();
     } catch (e) {
       setHwpNote('');
       setError(friendlyError(e, '한글 파일을 만들지 못했어요.'));

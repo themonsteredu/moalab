@@ -346,7 +346,7 @@ export function AppForm({ open, onClose, onSaved, editing }: Props) {
                 onClick={() => setCreatorId(m.id === creatorId ? '' : m.id)}
                 className={`tap rounded-full border px-3.5 text-[14px] font-semibold transition ${
                   creatorId === m.id
-                    ? 'border-brand bg-brand text-white'
+                    ? 'pick-on'
                     : 'border-neutral-300 bg-surface text-neutral-600'
                 }`}
               >

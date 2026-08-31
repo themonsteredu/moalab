@@ -337,7 +337,7 @@ export default function NoticePage() {
               aria-pressed={onlyUnread}
               className={`tap shrink-0 rounded-xl border px-3 text-[13px] font-bold transition ${
                 onlyUnread
-                  ? 'border-brand bg-brand text-white'
+                  ? 'pick-on'
                   : 'border-neutral-200 bg-surface text-neutral-500'
               }`}
             >

@@ -376,7 +376,7 @@ export default function RolesPage() {
               onClick={() => pickView(v.key)}
               aria-pressed={view === v.key}
               className={`tap flex-1 rounded-xl border text-[13px] font-bold transition ${
-                view === v.key ? 'border-brand bg-brand text-white' : 'border-neutral-200 bg-surface text-neutral-500'
+                view === v.key ? 'pick-on' : 'border-neutral-200 bg-surface text-neutral-500'
               }`}
             >
               {v.label}
@@ -693,7 +693,7 @@ export default function RolesPage() {
                   aria-pressed={headDraft === m.id}
                   className={`tap gap-1.5 rounded-full border px-3 text-[14px] font-semibold transition ${
                     headDraft === m.id
-                      ? 'border-brand bg-brand text-white'
+                      ? 'pick-on'
                       : 'border-neutral-300 bg-surface text-neutral-600'
                   }`}
                 >

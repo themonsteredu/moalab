@@ -544,7 +544,7 @@ function RevenueSharePageContent() {
                     type="button"
                     onClick={() => changeMonth(savedMonth)}
                     aria-pressed={savedMonth === month}
-                    className={`chip ${savedMonth === month ? 'bg-brand text-white' : 'bg-neutral-100 text-neutral-600'}`}
+                    className={`chip ${savedMonth === month ? 'bg-brand-100 text-brand-700' : 'bg-neutral-100 text-neutral-600'}`}
                   >
                     {monthLabel(savedMonth)}
                   </button>
@@ -570,7 +570,7 @@ function RevenueSharePageContent() {
                   }}
                   className={`min-h-[42px] rounded-xl border px-2 text-[12.5px] font-bold ${
                     rateStatus === status
-                      ? 'border-brand bg-brand text-white'
+                      ? 'pick-on'
                       : 'border-neutral-200 bg-surface text-neutral-500'
                   }`}
                 >
@@ -626,7 +626,7 @@ function RevenueSharePageContent() {
                 }}
                 className={`min-h-[48px] rounded-xl border px-1.5 text-[12px] font-bold transition ${
                   fundingType === type
-                    ? 'border-brand bg-brand text-white'
+                    ? 'pick-on'
                     : 'border-neutral-300 bg-surface text-neutral-500'
                 }`}
               >
@@ -933,7 +933,7 @@ function PoolCard({
                     onClick={() => onChange({ rate_percent: rate })}
                     className={`chip min-h-[32px] px-3 ${
                       pool.rate_percent === rate
-                        ? 'bg-brand text-white'
+                        ? 'bg-brand-100 text-brand-700'
                         : 'bg-neutral-100 text-neutral-600'
                     }`}
                   >

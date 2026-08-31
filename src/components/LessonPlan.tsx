@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
-import { uploadFile } from '@/lib/upload';
+import { queueDrive, uploadFile } from '@/lib/upload';
 import { logActivity } from '@/lib/log';
 import { downloadFilesAsZip, safeFileName } from '@/lib/zip';
 import { ConfirmDialog, ErrorBanner, Sheet } from '@/components/ui';
@@ -57,7 +57,7 @@ function KindChip({
       aria-pressed={on}
       className={`tap shrink-0 rounded-full border px-3 text-[12.5px] font-bold transition ${
         on
-          ? 'border-brand bg-brand text-white'
+          ? 'pick-on'
           : dim
             ? 'border-neutral-200 bg-surface text-neutral-300'
             : 'border-neutral-300 bg-surface text-neutral-600'
@@ -134,11 +134,14 @@ export function LessonPlan({
   appId,
   appSlug,
   appTitle,
+  topic,
   nameOf,
 }: {
   appId: string;
   appSlug: string;
   appTitle: string;
+  /** 구글 드라이브에 넣을 때 `프로그램/{주제}/{이름}` 으로 묶는다 */
+  topic?: string | null;
   /** 누가 올렸는지 이름으로 보여주려면 필요하다 */
   nameOf: (id: string | null) => string;
 }) {
@@ -196,6 +199,8 @@ export function LessonPlan({
     let ok = 0;
     /** 실패한 것만 남긴다 — 다시 눌렀을 때 성공한 것이 두 번 올라가면 안 된다 */
     const left: File[] = [];
+    /** 드라이브에도 넣을 것 (성공한 것만) */
+    const copied: { url: string; name: string }[] = [];
     for (let i = 0; i < pending.length; i++) {
       setUploading(`올리는 중… ${i + 1}/${pending.length}`);
       try {
@@ -216,6 +221,7 @@ export function LessonPlan({
         if (e) throw e;
         // 새 문서는 자기 id 를 group_id 로 삼는다 (판을 쌓을 기준점)
         await supabase.from('plan_files').update({ group_id: data.id }).eq('id', data.id);
+        copied.push({ url: up.url, name: up.name });
         ok++;
       } catch (e) {
         left.push(pending[i]);
@@ -228,6 +234,8 @@ export function LessonPlan({
       logActivity(session?.id, `${appSlug} ${planKindMeta(pendingKind).label} ${ok}개 추가`, `app:${appId}`);
       // 방금 올린 것이 안 보이면 안 된다 — 다른 갈래로 걸러져 있으면 전체로 되돌린다
       if (filter !== 'all' && filter !== pendingKind) setFilter('all');
+      // 구글 드라이브에도 한 벌 (기다리지 않는다 — 연결 안 돼 있으면 서버가 조용히 넘긴다)
+      queueDrive(session?.id, { kind: 'plan', files: copied, topic, appTitle, prefix: appTitle });
       await load();
     }
   };
@@ -261,6 +269,15 @@ export function LessonPlan({
         `${appSlug} ${planKindMeta(kindOf(newVerFor)).label} ${nextV}판 올림`,
         `app:${appId}`,
       );
+      /* 드라이브에도 한 벌. **판 번호를 이름에 넣는다** — 안 넣으면 같은 이름이라
+         드라이브에서 1판을 덮어쓰거나(같은 이름은 안 올린다) 뭐가 최신인지 모른다 */
+      queueDrive(session?.id, {
+        kind: 'plan',
+        files: [{ url: up.url, name: `${nextV}판_${up.name}` }],
+        topic,
+        appTitle,
+        prefix: appTitle,
+      });
       setNewVerFor(null);
       setVerFile(null);
       setVerNote('');

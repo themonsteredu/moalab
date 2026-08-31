@@ -176,7 +176,7 @@ function Bubble({
       <div className={`flex max-w-[85%] items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
         <div
           className={`min-w-0 rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
-            mine ? 'bg-brand text-white' : 'bg-neutral-100 text-neutral-900'
+            mine ? 'bg-brand-200 text-brand-900' : 'bg-neutral-100 text-neutral-900'
           }`}
         >
           {msg.image_path && <Photo path={msg.image_path} />}

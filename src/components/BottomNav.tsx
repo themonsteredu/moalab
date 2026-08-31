@@ -203,7 +203,7 @@ export function SideNav() {
         aria-current={active ? 'page' : undefined}
         className={`flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] font-bold transition ${
           active
-            ? 'bg-brand text-white shadow-[0_8px_20px_-10px_rgba(242,101,34,.9)]'
+            ? 'bg-brand text-white shadow-[0_4px_12px_-8px_rgba(242,101,34,.45)]'
             : 'text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-bright'
         }`}
       >

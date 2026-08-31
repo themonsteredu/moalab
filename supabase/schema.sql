@@ -1117,3 +1117,48 @@ where not exists (select 1 from moalab.members);
 
 -- PostgREST 스키마 캐시 갱신
 notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------
+-- 23. 구글 드라이브 자동 업로드
+--
+--   앱에 올린 파일(문서첨부·영수증·수업사진·강의계획서)을 원장님 구글
+--   드라이브에도 한 벌 복사한다.
+--
+--   ⚠️ **이 앱은 구글 계정 개념이 없다** (PIN 로그인). 그래서 서비스 계정이
+--   아니라 **원장 계정의 OAuth 리프레시 토큰**으로 대신 올린다. 개인 지메일에서는
+--   서비스 계정이 저장 용량 0이라 아예 못 올린다 (구글 제약).
+--
+--   토큰은 app_secrets 에 넣는다 — PIN·API키와 똑같이 잠긴 표다.
+--   **internal_all 배열에 절대 넣지 않는다.**
+--
+--   올릴 것은 바로 보내지 않고 **줄을 세운다**(drive_uploads).
+--   그래야 (1) 앱 저장이 드라이브 때문에 느려지거나 막히지 않고
+--        (2) 실패한 것을 안 잃고 나중에 한 번에 다시 시도할 수 있다.
+-- ---------------------------------------------------------------------
+
+-- 폴더 id 캐시·켜둔 갈래 등 비밀이 아닌 부속 정보
+alter table moalab.app_secrets add column if not exists meta jsonb;
+
+create table if not exists moalab.drive_uploads (
+  id          uuid primary key default gen_random_uuid(),
+  kind        text not null,          -- plan | receipt | photo | lecture
+  source_url  text not null,          -- 수파베이스 공개 URL (여기서 받아 드라이브로 넘긴다)
+  folder_path text not null,          -- '프로그램/미술/제과제빵' — 없으면 만들면서 내려간다
+  file_name   text not null,
+  mime_type   text,
+  status      text not null default 'pending' check (status in ('pending','done','failed')),
+  drive_id    text,                   -- 올라간 뒤 드라이브 파일 id
+  error       text,                   -- 실패 사유 (화면에 한글로 보여준다)
+  tries       int  not null default 0,
+  member_id   uuid references moalab.members(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  done_at     timestamptz
+);
+create index if not exists drive_uploads_status_idx on moalab.drive_uploads(status, created_at);
+-- 같은 파일을 두 번 줄 세우지 않는다 (다시 눌러도 하나만 올라간다)
+create unique index if not exists drive_uploads_src_idx on moalab.drive_uploads(source_url);
+
+alter table moalab.drive_uploads enable row level security;
+drop policy if exists "internal_all" on moalab.drive_uploads;
+create policy "internal_all" on moalab.drive_uploads for all using (true) with check (true);
+grant all on moalab.drive_uploads to anon, authenticated, service_role;
