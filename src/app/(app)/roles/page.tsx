@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { DutyForm } from '@/components/DutyForm';
+import { DeptFiles } from '@/components/DeptFiles';
 import { ROLE_PRINT_PARTS, type RolePrintPart } from '@/lib/print';
 import {
   CardSkeleton,
@@ -624,6 +625,10 @@ export default function RolesPage() {
                         <Icon name="plus" size={13} />
                         중분류 추가
                       </button>
+
+                      {/* 부서가 만든 자료 — 부서에 사람을 배정하는 이 화면이 제자리다.
+                          드라이브를 연결해두면 `업무분장/{부서}` 로도 한 벌 올라간다 */}
+                      <DeptFiles deptId={d.dept.id} deptName={d.dept.name} />
                     </Collapsible>
                   </section>
                 ))}

@@ -7,7 +7,7 @@
  * (출강 제목을 `학교 · 프로그램` 으로 만든 것과 같은 판단).
  */
 
-export type DriveKind = 'plan' | 'receipt' | 'photo' | 'lecture';
+export type DriveKind = 'plan' | 'receipt' | 'photo' | 'lecture' | 'dept';
 
 export const DRIVE_KINDS: { value: DriveKind; label: string; where: string; hint: string }[] = [
   {
@@ -33,6 +33,12 @@ export const DRIVE_KINDS: { value: DriveKind; label: string; where: string; hint
     label: '강의계획서',
     where: '프로그램 / {주제} / {프로그램명}',
     hint: '한글(.hwpx) 파일',
+  },
+  {
+    value: 'dept',
+    label: '부서 자료',
+    where: '업무분장 / {부서}',
+    hint: '각 부서가 만든 자료 — 역할분장 화면에서 올려요',
   },
 ];
 
@@ -89,11 +95,27 @@ export function photoPath(date: string, school: string | null | undefined): stri
   return `${termOf(date)}/${safeSeg(school, '학교 미정')}/수업사진`;
 }
 
+/** 부서 자료 — 손으로 만들어둔 `업무분장/{부서}` 폴더로 그대로 간다 */
+export function deptPath(deptName: string | null | undefined): string {
+  return `업무분장/${safeSeg(deptName, '부서 미정')}`;
+}
+
 /** 갈래에 맞는 폴더 경로. 필요한 값이 없으면 null — 줄을 안 세운다 */
 export function pathFor(
   kind: DriveKind,
-  ctx: { topic?: string | null; appTitle?: string | null; month?: string | null; date?: string | null; school?: string | null },
+  ctx: {
+    topic?: string | null;
+    appTitle?: string | null;
+    month?: string | null;
+    date?: string | null;
+    school?: string | null;
+    deptName?: string | null;
+  },
 ): string | null {
+  if (kind === 'dept') {
+    if (!ctx.deptName) return null;
+    return deptPath(ctx.deptName);
+  }
   if (kind === 'plan' || kind === 'lecture') {
     if (!ctx.appTitle) return null;
     return planPath(ctx.topic, ctx.appTitle);

@@ -84,7 +84,7 @@ export async function uploadMany(
    연결 안 됨 / 그 갈래를 꺼둠 / 어느 폴더로 갈지 모름 → 서버가 조용히 넘긴다. */
 
 export interface DriveQueueInput {
-  kind: 'plan' | 'receipt' | 'photo' | 'lecture';
+  kind: 'plan' | 'receipt' | 'photo' | 'lecture' | 'dept';
   files: { url: string; name: string; mime?: string }[];
   /** 갈래에 따라 필요한 것만 채우면 된다 */
   topic?: string | null;
@@ -92,6 +92,7 @@ export interface DriveQueueInput {
   month?: string | null;
   date?: string | null;
   school?: string | null;
+  deptName?: string | null;
   /** 파일 이름 앞에 붙일 말 (뜻 없는 `abc123.webp` 를 알아볼 수 있게) */
   prefix?: string | null;
 }

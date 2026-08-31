@@ -321,8 +321,10 @@ export function Collapsible({
           onClick={toggle}
           aria-expanded={shown}
           /* 패딩으로 탭 면을 44px 로 키우고 마진으로 되돌린다 —
-             줄 높이는 그대로라 화면이 길어지지 않는다 (CLAUDE.md 의 방식) */
-          className="-my-3 flex min-w-0 flex-1 items-center gap-1.5 py-3 text-left"
+             줄 높이는 그대로라 화면이 길어지지 않는다 (CLAUDE.md 의 방식).
+             ⚠️ `min-h-[44px]` 을 빼면 **dense 머리글이 40px 이 된다** — 글자가 작아
+             패딩만으로는 모자란다. 실제로 관리 화면 측정에서 잡혔다 */
+          className="tap -my-3 flex min-w-0 flex-1 justify-start gap-1.5 py-3 text-left"
         >
           <Icon
             name="chevronDown"
