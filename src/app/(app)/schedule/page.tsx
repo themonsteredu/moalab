@@ -6,69 +6,125 @@ import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { logActivity } from '@/lib/log';
-import { hhmm, korDateFull, toISODate, today } from '@/lib/format';
+import { sendPush } from '@/lib/push';
+import { hhmm, korDate, korDateFull, toISODate, today } from '@/lib/format';
+import {
+  SCHEDULE_KINDS,
+  buildEntries,
+  classLine,
+  classLoad,
+  classTitle,
+  filterEntries,
+  inMonth,
+  scheduleKindLabel,
+  type CalendarEntry,
+  type ScopeMode,
+} from '@/lib/schedule';
 import { PageHeader } from '@/components/PageHeader';
-import { ConfirmDialog, ErrorBanner, MultiPicker, Sheet, Skeleton, useToast } from '@/components/ui';
-import type { AppRow, Schedule, ScheduleKind } from '@/lib/types';
+import { CalendarLegend, KIND_META, MonthCalendar } from '@/components/MonthCalendar';
+import { Collapsible, ConfirmDialog, ErrorBanner, MultiPicker, Sheet, Skeleton, useToast } from '@/components/ui';
+import type {
+  AppRow,
+  CollabRequest,
+  Department,
+  Duty,
+  DutyHelper,
+  Schedule,
+  ScheduleKind,
+} from '@/lib/types';
 
-type View = 'month' | 'week';
+/**
+ * 일정 — 출강·회의·기타 + **저절로 생기는 마감**.
+ *
+ * 마감은 여기서 넣지 않는다. 프로그램 제출 기한(`apps.due_date`)과
+ * 부서 협업 요청 기한(`collab_requests.due_date`)에서 달력이 스스로 만들어낸다.
+ * 계산은 전부 `src/lib/schedule.ts` 에 있고 `scripts/schedule.test.mjs` 가 지킨다.
+ */
 
-interface Entry {
-  id: string;
-  kind: 'due' | ScheduleKind;
-  title: string;
-  date: string;
-  time?: string | null;
-  place?: string | null;
-  memo?: string | null;
-  appId?: string;
-}
-
-const KIND_STYLE: Record<Entry['kind'], { dot: string; chip: string; label: string }> = {
-  due: { dot: 'bg-red-500', chip: 'bg-red-100 text-red-700', label: '제출 마감' },
-  meeting: { dot: 'bg-blue-500', chip: 'bg-blue-100 text-blue-700', label: '회의' },
-  visit: { dot: 'bg-green-500', chip: 'bg-green-100 text-green-700', label: '학교 방문' },
-};
-
-const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+const SCOPES: { value: ScopeMode; label: string }[] = [
+  { value: 'mine', label: '내 일정' },
+  { value: 'dept', label: '부서별' },
+  { value: 'all', label: '전체' },
+];
 
 export default function SchedulePage() {
   const { session } = useSession();
   const { members, nameOf } = useMembers();
   const toast = useToast();
+  const meId = session?.id ?? '';
 
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
-  const [view, setView] = useState<View>('month');
   const [picked, setPicked] = useState<string>(today());
 
   const [apps, setApps] = useState<AppRow[]>([]);
+  const [reviewers, setReviewers] = useState<Record<string, string[]>>({});
+  const [collabs, setCollabs] = useState<CollabRequest[]>([]);
+  const [depts, setDepts] = useState<Department[]>([]);
+  const [groups, setGroups] = useState<{ id: string; dept_id: string }[]>([]);
+  const [duties, setDuties] = useState<Duty[]>([]);
+  const [helpers, setHelpers] = useState<DutyHelper[]>([]);
   const [schedules, setSchedules] = useState<Schedule[] | null>(null);
   const [attendees, setAttendees] = useState<Record<string, string[]>>({});
   const [error, setError] = useState('');
+
+  /** 내 일정 / 부서별 / 전체 — 고른 것은 기기에 기억한다 */
+  const [scope, setScope] = useState<ScopeMode>('mine');
+  const [deptPick, setDeptPick] = useState('');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Schedule | null>(null);
   const [deleting, setDeleting] = useState<Schedule | null>(null);
 
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem('moalab.schedule.scope');
+      if (v === 'mine' || v === 'dept' || v === 'all') setScope(v);
+    } catch {
+      /* 무시 */
+    }
+  }, []);
+
+  const pickScope = (v: ScopeMode) => {
+    setScope(v);
+    try {
+      window.localStorage.setItem('moalab.schedule.scope', v);
+    } catch {
+      /* 무시 */
+    }
+  };
+
   const load = useCallback(async () => {
     setError('');
     try {
-      const [aRes, sRes, smRes] = await Promise.all([
-        supabase.from('apps').select('*').eq('archived', false).not('due_date', 'is', null),
+      const [aRes, arRes, sRes, smRes, cRes, dRes, gRes, uRes, hRes] = await Promise.all([
+        supabase.from('apps').select('*').eq('archived', false),
+        supabase.from('app_reviewers').select('*'),
         supabase.from('schedules').select('*').order('date').order('start_time'),
         supabase.from('schedule_members').select('*'),
+        supabase.from('collab_requests').select('*'),
+        supabase.from('departments').select('*').order('sort_order').order('name'),
+        supabase.from('duty_groups').select('id,dept_id'),
+        supabase.from('duties').select('*'),
+        supabase.from('duty_helpers').select('*'),
       ]);
       if (sRes.error) throw sRes.error;
       setApps((aRes.data ?? []) as AppRow[]);
       setSchedules((sRes.data ?? []) as Schedule[]);
+      setCollabs((cRes.data ?? []) as CollabRequest[]);
+      setDepts((dRes.data ?? []) as Department[]);
+      setGroups((gRes.data ?? []) as { id: string; dept_id: string }[]);
+      setDuties((uRes.data ?? []) as Duty[]);
+      setHelpers((hRes.data ?? []) as DutyHelper[]);
+
+      const rv: Record<string, string[]> = {};
+      for (const r of arRes.data ?? []) (rv[r.app_id] ??= []).push(r.member_id);
+      setReviewers(rv);
 
       const map: Record<string, string[]> = {};
-      for (const r of smRes.data ?? []) {
-        (map[r.schedule_id] ??= []).push(r.member_id);
-      }
+      for (const r of smRes.data ?? []) (map[r.schedule_id] ??= []).push(r.member_id);
       setAttendees(map);
     } catch (e) {
       setSchedules([]);
@@ -80,78 +136,93 @@ export default function SchedulePage() {
     void load();
   }, [load]);
 
-  /** 앱 마감일은 따로 입력하지 않는다 — apps.due_date 에서 자동으로 만들어진다. */
-  const entries = useMemo<Entry[]>(() => {
-    const out: Entry[] = [];
-    for (const a of apps) {
-      if (!a.due_date) continue;
-      out.push({ id: `due-${a.id}`, kind: 'due', title: `${a.title_ko} 제출 마감`, date: a.due_date, appId: a.id });
-    }
-    for (const s of schedules ?? []) {
-      out.push({
-        id: s.id,
-        kind: s.kind,
-        title: s.title,
-        date: s.date,
-        time: s.start_time,
-        place: s.place,
-        memo: s.memo,
-      });
-    }
-    return out;
-  }, [apps, schedules]);
+  /* -------------------------------------------------------- 부서 · 소속 */
 
-  const byDate = useMemo(() => {
-    const m = new Map<string, Entry[]>();
-    for (const e of entries) {
-      const list = m.get(e.date) ?? [];
-      list.push(e);
-      m.set(e.date, list);
-    }
-    for (const list of m.values()) {
-      list.sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'));
+  const deptOfGroup = useMemo(() => new Map(groups.map((g) => [g.id, g.dept_id])), [groups]);
+
+  /** 부서 → 그 부서 사람들. 팀장이거나 그 부서 역할의 주담당·부담당이면 그 부서 사람이다
+      (부서협업·홈과 같은 규칙 — 새 소속 표를 만들지 않는다) */
+  const membersOfDept = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    const add = (dept: string, who: string) => {
+      const s = m.get(dept) ?? new Set<string>();
+      s.add(who);
+      m.set(dept, s);
+    };
+    for (const d of depts) if (d.head_id) add(d.id, d.head_id);
+    for (const u of duties) {
+      const dep = deptOfGroup.get(u.group_id);
+      if (!dep) continue;
+      if (u.owner_id) add(dep, u.owner_id);
+      for (const h of helpers) if (h.duty_id === u.id) add(dep, h.member_id);
     }
     return m;
-  }, [entries]);
+  }, [depts, duties, helpers, deptOfGroup]);
 
-  /** 달력 격자 (월요일 시작 아님 — 한국 달력은 일요일 시작) */
-  const grid = useMemo(() => {
-    if (view === 'week') {
-      const base = new Date(picked + 'T00:00:00');
-      const start = new Date(base);
-      start.setDate(base.getDate() - base.getDay());
-      return Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
-        return d;
-      });
-    }
-    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-    const start = new Date(first);
-    start.setDate(first.getDate() - first.getDay());
-    const cells: Date[] = [];
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      cells.push(d);
-      // 마지막 주가 전부 다음 달이면 그만
-      if (i >= 34 && d.getMonth() !== cursor.getMonth() && d.getDay() === 6) break;
-    }
-    return cells;
-  }, [cursor, view, picked]);
+  const myDeptIds = useMemo(
+    () => depts.filter((d) => membersOfDept.get(d.id)?.has(meId)).map((d) => d.id),
+    [depts, membersOfDept, meId],
+  );
 
-  const dayEntries = byDate.get(picked) ?? [];
+  const deptName = useCallback(
+    (id: string) => depts.find((d) => d.id === id)?.name ?? '',
+    [depts],
+  );
+  const appTitle = useCallback(
+    (id: string) => apps.find((a) => a.id === id)?.title_ko ?? '',
+    [apps],
+  );
+
+  /* ------------------------------------------------------------ 항목 */
+
+  const all = useMemo(
+    () =>
+      buildEntries({
+        apps,
+        reviewers,
+        collabs,
+        deptName,
+        schedules: schedules ?? [],
+        attendees,
+        appTitle,
+      }),
+    [apps, reviewers, collabs, deptName, schedules, attendees, appTitle],
+  );
+
+  const entries = useMemo(() => {
+    if (scope === 'all') return all;
+    if (scope === 'mine') return filterEntries(all, 'mine', { memberIds: [meId], deptIds: myDeptIds });
+    const chosen = deptPick || depts[0]?.id || '';
+    return filterEntries(all, 'dept', {
+      memberIds: [...(membersOfDept.get(chosen) ?? [])],
+      deptIds: chosen ? [chosen] : [],
+    });
+  }, [all, scope, meId, myDeptIds, deptPick, depts, membersOfDept]);
+
+  const dayEntries = useMemo(() => entries.filter((e) => e.date === picked), [entries, picked]);
+  const month = useMemo(
+    () => `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
+    [cursor],
+  );
+
+  /** 이번 달 출강 정산 — 강사별 회 / 타임 */
+  const load1 = useMemo(
+    () => classLoad(schedules ?? [], attendees, month),
+    [schedules, attendees, month],
+  );
+  const monthClasses = useMemo(
+    () => (schedules ?? []).filter((s) => s.kind === 'class' && inMonth(s.date, month)).length,
+    [schedules, month],
+  );
+
   const todayStr = today();
+  const moveMonth = (delta: number) =>
+    setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
 
-  const move = (delta: number) => {
-    if (view === 'month') {
-      setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
-    } else {
-      const d = new Date(picked + 'T00:00:00');
-      d.setDate(d.getDate() + delta * 7);
-      setPicked(toISODate(d));
-      setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
-    }
+  const goToday = () => {
+    const d = new Date();
+    setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
+    setPicked(toISODate(d));
   };
 
   const removeSchedule = async () => {
@@ -159,14 +230,14 @@ export default function SchedulePage() {
     const t = deleting;
     setDeleting(null);
     const { error: e } = await supabase.from('schedules').delete().eq('id', t.id);
-    if (e) {
-      setError(friendlyError(e));
-      return;
-    }
+    if (e) return setError(friendlyError(e));
     logActivity(session?.id, `일정 삭제 — ${t.title}`, null);
     toast.show('지웠어요.');
     await load();
   };
+
+  const scheduleOf = (e: CalendarEntry) =>
+    e.scheduleId ? ((schedules ?? []).find((s) => s.id === e.scheduleId) ?? null) : null;
 
   return (
     <>
@@ -185,187 +256,166 @@ export default function SchedulePage() {
         }
       />
 
-      <div className="px-4 pb-8 pt-3">
+      <div className="px-4 pb-8 pt-3 lg:max-w-3xl">
         {error && (
           <div className="mb-3">
             <ErrorBanner message={error} onRetry={() => void load()} />
           </div>
         )}
 
-        {/* 월/주 전환 + 이동 */}
-        <div className="mb-3 flex items-center gap-2">
-          <button onClick={() => move(-1)} aria-label="이전" className="tap w-11 rounded-xl border border-neutral-300 bg-surface text-neutral-500">
+        {/* 달 이동 */}
+        <div className="mb-2.5 flex items-center gap-2">
+          <button onClick={() => moveMonth(-1)} aria-label="이전 달" className="tap w-11 rounded-xl border border-neutral-300 bg-surface text-neutral-500">
             ‹
           </button>
           <p className="flex-1 text-center text-[16px] font-black">
-            {view === 'month'
-              ? `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`
-              : `${new Date(picked + 'T00:00:00').getMonth() + 1}월 ${Math.ceil(new Date(picked + 'T00:00:00').getDate() / 7)}주차`}
+            {cursor.getFullYear()}년 {cursor.getMonth() + 1}월
           </p>
-          <button onClick={() => move(1)} aria-label="다음" className="tap w-11 rounded-xl border border-neutral-300 bg-surface text-neutral-500">
+          <button onClick={() => moveMonth(1)} aria-label="다음 달" className="tap w-11 rounded-xl border border-neutral-300 bg-surface text-neutral-500">
             ›
+          </button>
+          <button onClick={goToday} className="tap rounded-xl border border-neutral-300 bg-surface px-3 text-[13px] font-bold text-neutral-600">
+            오늘
           </button>
         </div>
 
-        <div className="mb-3 flex gap-1.5 rounded-xl bg-neutral-200/60 p-1">
-          {(
-            [
-              ['month', '월간'],
-              ['week', '주간'],
-            ] as [View, string][]
-          ).map(([v, label]) => (
+        {/* 누구 일정을 볼까 */}
+        <div className="mb-2.5 flex gap-1.5 rounded-xl bg-neutral-200/60 p-1">
+          {SCOPES.map((s) => (
             <button
-              key={v}
-              onClick={() => setView(v)}
+              key={s.value}
+              onClick={() => pickScope(s.value)}
+              aria-pressed={scope === s.value}
               className={`tap flex-1 rounded-lg text-[14px] font-bold transition ${
-                view === v ? 'bg-surface text-neutral-900 shadow-sm' : 'text-neutral-500'
+                scope === s.value ? 'bg-surface text-neutral-900 shadow-sm' : 'text-neutral-500'
               }`}
             >
-              {label}
+              {s.label}
             </button>
           ))}
         </div>
 
-        {/* 범례 */}
-        <div className="mb-3 flex flex-wrap gap-3 px-1">
-          {(['due', 'meeting', 'visit'] as const).map((k) => (
-            <span key={k} className="flex items-center gap-1.5 text-[12px] text-neutral-600">
-              <span className={`h-2.5 w-2.5 rounded-full ${KIND_STYLE[k].dot}`} />
-              {KIND_STYLE[k].label}
-            </span>
-          ))}
+        {/* 부서 고르기 — 부서별일 때만. 한 줄 가로 스크롤 (여러 줄로 깔면 달력이 밀린다) */}
+        {scope === 'dept' && (
+          <div className="-mx-4 mb-2.5 overflow-x-auto px-4">
+            <div className="flex gap-1.5">
+              {depts.length === 0 ? (
+                <Link
+                  href="/roles"
+                  className="tap flex shrink-0 items-center rounded-full border border-neutral-300 bg-surface px-3.5 text-[13px] font-semibold text-neutral-500"
+                >
+                  부서가 아직 없어요 — 역할분장에서 만들기 ›
+                </Link>
+              ) : (
+                depts.map((d) => {
+                  const on = (deptPick || depts[0]?.id) === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => setDeptPick(d.id)}
+                      aria-pressed={on}
+                      className={`tap shrink-0 rounded-full border px-3.5 text-[13px] font-semibold transition ${
+                        on ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
+                      }`}
+                    >
+                      {d.name}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {scope === 'mine' && myDeptIds.length === 0 && (
+          <div className="mb-2.5 flex items-center gap-2">
+            <p className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-neutral-400">
+              아직 어느 부서에도 안 묶여 있어요. 역할을 맡으면 그 부서의 협업 기한도 여기 같이 보여요.
+            </p>
+            <Link
+              href="/roles"
+              className="-my-3 flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
+            >
+              역할분장 ›
+            </Link>
+          </div>
+        )}
+
+        <div className="mb-2.5">
+          <CalendarLegend />
         </div>
 
         {/* 달력 */}
         {schedules === null ? (
           <Skeleton className="h-72 w-full rounded-2xl" />
         ) : (
-          <div className="card overflow-hidden p-2">
-            <div className="grid grid-cols-7">
-              {WEEK.map((w, i) => (
-                <div
-                  key={w}
-                  className={`pb-1.5 text-center text-[11.5px] font-bold ${
-                    i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-neutral-400'
-                  }`}
-                >
-                  {w}
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7 gap-0.5">
-              {grid.map((d) => {
-                const iso = toISODate(d);
-                const inMonth = view === 'week' || d.getMonth() === cursor.getMonth();
-                const list = byDate.get(iso) ?? [];
-                const isToday = iso === todayStr;
-                const isPicked = iso === picked;
-                return (
-                  <button
-                    key={iso}
-                    onClick={() => setPicked(iso)}
-                    className={`flex min-h-[52px] flex-col items-center rounded-lg py-1 transition ${
-                      isPicked ? 'bg-brand text-white' : isToday ? 'bg-brand-50' : ''
-                    }`}
-                  >
-                    <span
-                      className={`text-[13px] font-bold ${
-                        isPicked
-                          ? 'text-white'
-                          : !inMonth
-                            ? 'text-neutral-300'
-                            : d.getDay() === 0
-                              ? 'text-red-500'
-                              : d.getDay() === 6
-                                ? 'text-blue-500'
-                                : 'text-neutral-700'
-                      }`}
-                    >
-                      {d.getDate()}
-                    </span>
-                    <span className="mt-1 flex h-2 gap-0.5">
-                      {[...new Set(list.map((e) => e.kind))].slice(0, 3).map((k) => (
-                        <span
-                          key={k}
-                          className={`h-1.5 w-1.5 rounded-full ${isPicked ? 'bg-surface/90' : KIND_STYLE[k].dot}`}
-                        />
-                      ))}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <MonthCalendar month={cursor} entries={entries} selected={picked} onSelect={setPicked} />
         )}
 
-        {/* 선택한 날짜의 항목 */}
+        {/* 고른 날 */}
         <div className="mt-4">
-          <p className="mb-2.5 text-[15px] font-bold">{korDateFull(picked)}</p>
+          <p className="mb-2.5 text-[15px] font-bold">
+            {korDateFull(picked)}
+            {picked === todayStr && <span className="ml-1.5 text-[12px] font-bold text-brand">오늘</span>}
+          </p>
 
           {dayEntries.length === 0 ? (
             <p className="card px-4 py-8 text-center text-[13px] text-neutral-400">이 날은 일정이 없어요.</p>
           ) : (
             <div className="space-y-2.5">
-              {dayEntries.map((e) => {
-                const st = KIND_STYLE[e.kind];
-                const body = (
-                  <>
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="min-w-0 flex-1 text-[15px] font-bold leading-snug">{e.title}</p>
-                      <span className={`chip shrink-0 ${st.chip}`}>{st.label}</span>
-                    </div>
-                    {(e.time || e.place) && (
-                      <p className="mt-1 text-[12.5px] text-neutral-500">
-                        {hhmm(e.time)} {e.place ? `· ${e.place}` : ''}
-                      </p>
-                    )}
-                    {e.kind !== 'due' && (attendees[e.id]?.length ?? 0) > 0 && (
-                      <p className="mt-1 text-[12.5px] text-neutral-500">
-                        참석 {attendees[e.id].map((m) => nameOf(m)).join(', ')}
-                      </p>
-                    )}
-                    {e.memo && (
-                      <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-neutral-600">{e.memo}</p>
-                    )}
-                  </>
-                );
-
-                if (e.kind === 'due') {
-                  return (
-                    <Link key={e.id} href={`/apps/${e.appId}`} className="card block p-3.5 active:bg-neutral-50">
-                      {body}
-                    </Link>
-                  );
-                }
-
-                const sched = (schedules ?? []).find((s) => s.id === e.id)!;
-                return (
-                  <div key={e.id} className="card p-3.5">
-                    {body}
-                    <div className="mt-2.5 flex gap-2">
-                      <button
-                        onClick={() => {
-                          setEditing(sched);
-                          setFormOpen(true);
-                        }}
-                        className="h-9 flex-1 rounded-lg border border-neutral-300 text-[13px] font-semibold text-neutral-600"
-                      >
-                        수정
-                      </button>
-                      <button
-                        onClick={() => setDeleting(sched)}
-                        className="h-9 rounded-lg border border-neutral-300 px-3 text-[13px] text-neutral-500"
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {dayEntries.map((e) => (
+                <EntryCard
+                  key={e.id}
+                  entry={e}
+                  nameOf={nameOf}
+                  onEdit={() => {
+                    const s = scheduleOf(e);
+                    if (!s) return;
+                    setEditing(s);
+                    setFormOpen(true);
+                  }}
+                  onDelete={() => {
+                    const s = scheduleOf(e);
+                    if (s) setDeleting(s);
+                  }}
+                />
+              ))}
             </div>
           )}
         </div>
+
+        {/* 이번 달 출강 — 정산의 기준이라 강사별로 모아준다.
+            접어두는 게 기본이다 (달력이 이 화면의 주인공이다) */}
+        {monthClasses > 0 && (
+          <Collapsible
+            id="schedule-load"
+            className="mt-4"
+            title={`${cursor.getMonth() + 1}월 출강 정산`}
+            badge={
+              <span className="text-[11.5px] font-bold text-neutral-400">
+                출강 {monthClasses}건 · 강사 {load1.length}명
+              </span>
+            }
+          >
+            <div className="card divide-y divide-neutral-200 p-0">
+              {load1.map((l) => (
+                <div key={l.memberId} className="flex items-center gap-2 px-3.5 py-2.5">
+                  <span className="min-w-0 flex-1 truncate text-[14px] font-bold">{nameOf(l.memberId)}</span>
+                  {l.missing > 0 && (
+                    <span className="chip bg-red-100 text-red-700">타임 수 없음 {l.missing}</span>
+                  )}
+                  <span className="text-[13px] text-neutral-500">{l.classes}회</span>
+                  <span className="w-16 text-right text-[15px] font-black text-neutral-900">{l.periods}타임</span>
+                </div>
+              ))}
+            </div>
+            {load1.some((l) => l.missing > 0) && (
+              <p className="mt-2 px-1 text-[11.5px] leading-relaxed text-neutral-400">
+                타임 수를 안 적은 출강은 합계에서 빠져 있어요. 그 일정을 열어 <b>강의 타임 수</b>를 채우면 반영됩니다.
+              </p>
+            )}
+          </Collapsible>
+        )}
       </div>
 
       <ScheduleForm
@@ -377,9 +427,10 @@ export default function SchedulePage() {
         defaultDate={picked}
         editing={editing}
         members={members}
+        apps={apps}
         attendees={editing ? (attendees[editing.id] ?? []) : []}
-        onSaved={() => {
-          toast.show('저장했어요.');
+        onSaved={(msg) => {
+          toast.show(msg);
           void load();
         }}
       />
@@ -396,6 +447,74 @@ export default function SchedulePage() {
   );
 }
 
+/* ------------------------------------------------------------------- 한 건 */
+
+function EntryCard({
+  entry: e,
+  nameOf,
+  onEdit,
+  onDelete,
+}: {
+  entry: CalendarEntry;
+  nameOf: (id: string) => string;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const meta = KIND_META[e.kind];
+  const timeLine = [
+    e.time ? `${hhmm(e.time)}${e.endTime ? `–${hhmm(e.endTime)}` : ''}` : '',
+    e.place ?? '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const detail = e.kind === 'class' ? classLine({ school: e.school ?? null, headcount: e.headcount ?? null, periods: e.periods ?? null }, e.program) : '';
+
+  const body = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 text-[15px] font-bold leading-snug">{e.title}</p>
+        <span className={`chip shrink-0 ${meta.chip}`}>{meta.label}</span>
+      </div>
+      {detail && <p className="mt-1 text-[12.5px] text-neutral-600">{detail}</p>}
+      {timeLine && <p className="mt-1 text-[12.5px] text-neutral-500">{timeLine}</p>}
+      {e.who.length > 0 && (
+        <p className="mt-1 text-[12.5px] text-neutral-500">
+          {e.kind === 'class' ? '담당' : '참석'} {e.who.map((m) => nameOf(m)).join(', ')}
+        </p>
+      )}
+      {e.memo && (
+        <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-neutral-600">{e.memo}</p>
+      )}
+    </>
+  );
+
+  // 마감은 여기서 못 고친다 — 원래 자리(프로그램·부서협업)에서 고쳐야 한 곳만 남는다
+  if (e.kind === 'due') {
+    return (
+      <Link href={e.href ?? '/'} className="card block p-3.5 active:bg-neutral-50">
+        {body}
+        <p className="mt-1.5 text-[11.5px] text-neutral-400">
+          {e.href?.startsWith('/apps') ? '프로그램에서 고칠 수 있어요 ›' : '부서협업에서 고칠 수 있어요 ›'}
+        </p>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="card p-3.5">
+      {body}
+      <div className="mt-2.5 flex gap-2">
+        <button onClick={onEdit} className="tap flex-1 rounded-lg border border-neutral-300 text-[13px] font-semibold text-neutral-600">
+          수정
+        </button>
+        <button onClick={onDelete} className="tap rounded-lg border border-neutral-300 px-3 text-[13px] text-neutral-500">
+          삭제
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------------------------------------------- 일정 추가/수정 */
 
 function ScheduleForm({
@@ -405,24 +524,31 @@ function ScheduleForm({
   defaultDate,
   editing,
   members,
+  apps,
   attendees,
 }: {
   open: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (msg: string) => void;
   defaultDate: string;
   editing: Schedule | null;
   members: { id: string; name: string }[];
+  apps: AppRow[];
   attendees: string[];
 }) {
   const { session } = useSession();
-  const [kind, setKind] = useState<ScheduleKind>('meeting');
+  const [kind, setKind] = useState<ScheduleKind>('class');
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [place, setPlace] = useState('');
   const [memo, setMemo] = useState('');
   const [people, setPeople] = useState<string[]>([]);
+  const [school, setSchool] = useState('');
+  const [appId, setAppId] = useState('');
+  const [headcount, setHeadcount] = useState('');
+  const [periods, setPeriods] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -434,35 +560,62 @@ function ScheduleForm({
       setTitle(editing.title);
       setDate(editing.date);
       setTime(hhmm(editing.start_time));
+      setEndTime(hhmm(editing.end_time));
       setPlace(editing.place ?? '');
       setMemo(editing.memo ?? '');
       setPeople(attendees);
+      setSchool(editing.school ?? '');
+      setAppId(editing.app_id ?? '');
+      setHeadcount(editing.headcount == null ? '' : String(editing.headcount));
+      setPeriods(editing.periods == null ? '' : String(editing.periods));
     } else {
-      setKind('meeting');
+      setKind('class');
       setTitle('');
       setDate(defaultDate);
       setTime('');
+      setEndTime('');
       setPlace('');
       setMemo('');
       setPeople(session?.id ? [session.id] : []);
+      setSchool('');
+      setAppId('');
+      setHeadcount('');
+      setPeriods('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing, defaultDate]);
 
+  const isClass = kind === 'class';
+  const programName = apps.find((a) => a.id === appId)?.title_ko ?? '';
+  /** 출강 제목은 사람이 짓지 않는다 — 학교 · 프로그램으로 만든다 */
+  const finalTitle = isClass ? classTitle(school, programName) : title.trim();
+
+  const num = (v: string): number | null => {
+    const n = Number(v.replace(/[^0-9]/g, ''));
+    return v.trim() === '' || !isFinite(n) ? null : n;
+  };
+
   const save = async () => {
     setError('');
-    if (!title.trim()) return setError('제목을 입력해주세요.');
+    if (isClass && !school.trim()) return setError('학교(기관) 이름을 입력해주세요.');
+    if (!isClass && !title.trim()) return setError('제목을 입력해주세요.');
     if (!date) return setError('날짜를 골라주세요.');
+    if (time && endTime && endTime < time) return setError('끝나는 시간이 시작 시간보다 빨라요.');
 
     setBusy(true);
     try {
       const payload = {
         kind,
-        title: title.trim(),
+        title: finalTitle,
         date,
         start_time: time || null,
+        end_time: endTime || null,
         place: place.trim() || null,
         memo: memo.trim() || null,
+        app_id: isClass ? appId || null : null,
+        school: isClass ? school.trim() || null : null,
+        headcount: isClass ? num(headcount) : null,
+        periods: isClass ? num(periods) : null,
       };
 
       let id: string;
@@ -484,8 +637,37 @@ function ScheduleForm({
         if (e) throw e;
       }
 
-      logActivity(session?.id, `${editing ? '일정 수정' : '일정 추가'} — ${title.trim()}`, `schedule:${id}`);
-      onSaved();
+      logActivity(
+        session?.id,
+        `${editing ? '일정 수정' : '일정 추가'} — ${scheduleKindLabel(kind)} ${finalTitle}`,
+        `schedule:${id}`,
+      );
+
+      /* 출강은 **담당 강사에게만** 알린다. 고칠 때는 이번에 새로 들어온 사람에게만 —
+         시간 하나 고쳤다고 전원에게 다시 울리면 그날로 알림을 꺼버린다
+         (업무 배정이 '담당자가 바뀌었을 때만' 울리는 것과 같은 규칙) */
+      let sent = 0;
+      if (isClass) {
+        const fresh = editing ? people.filter((p) => !attendees.includes(p)) : people;
+        const targets = fresh.filter((p) => p !== session?.id);
+        if (targets.length > 0) {
+          const line = classLine(
+            { school: school.trim() || null, headcount: num(headcount), periods: num(periods) },
+            programName,
+          );
+          const res = await sendPush({
+            title: '출강 일정이 잡혔어요',
+            body: `${korDate(date)}${time ? ` ${time}` : ''} · ${line}`,
+            url: '/schedule',
+            tag: `schedule-${id}`,
+            memberIds: targets,
+            fromId: session?.id ?? null,
+          });
+          sent = res?.sent ?? 0;
+        }
+      }
+
+      onSaved(sent > 0 ? `저장했어요. ${sent}명에게 알림도 갔어요.` : '저장했어요.');
       onClose();
     } catch (e) {
       setError(friendlyError(e));
@@ -511,43 +693,74 @@ function ScheduleForm({
         <div>
           <span className="label">종류</span>
           <div className="flex gap-2">
-            {(
-              [
-                ['meeting', '회의'],
-                ['visit', '학교 방문 수업'],
-              ] as [ScheduleKind, string][]
-            ).map(([v, label]) => (
+            {SCHEDULE_KINDS.map((k) => (
               <button
-                key={v}
+                key={k.value}
                 type="button"
-                onClick={() => setKind(v)}
+                onClick={() => setKind(k.value)}
+                aria-pressed={kind === k.value}
                 className={`tap flex-1 rounded-xl border text-[14px] font-semibold transition ${
-                  kind === v ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
+                  kind === k.value
+                    ? 'border-brand bg-brand text-white'
+                    : 'border-neutral-300 bg-surface text-neutral-600'
                 }`}
               >
-                {label}
+                {k.label}
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11.5px] text-neutral-400">
-            제출 마감은 앱 마감일에서 자동으로 달력에 표시돼요. 여기서 넣지 않아도 됩니다.
+          <p className="mt-2 text-[11.5px] leading-relaxed text-neutral-400">
+            마감은 여기서 안 넣어요. 프로그램 제출 기한과 부서협업 요청 기한이 달력에 저절로 표시돼요.
           </p>
         </div>
 
-        <div>
-          <label className="label" htmlFor="sc-title">
-            제목
-          </label>
-          <input
-            id="sc-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="모아초 4학년 방문 수업"
-            className="field"
-          />
-        </div>
+        {isClass ? (
+          <>
+            <div>
+              <label className="label" htmlFor="sc-school">
+                학교 · 기관
+              </label>
+              <input
+                id="sc-school"
+                value={school}
+                onChange={(e) => setSchool(e.target.value)}
+                placeholder="모아초등학교"
+                className="field"
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="sc-app">
+                프로그램
+              </label>
+              <select id="sc-app" value={appId} onChange={(e) => setAppId(e.target.value)} className="field">
+                <option value="">— 안 고름 —</option>
+                {apps.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.title_ko}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[11.5px] text-neutral-400">
+                제목은 <b>{classTitle(school, programName)}</b> 로 저장돼요.
+              </p>
+            </div>
+          </>
+        ) : (
+          <div>
+            <label className="label" htmlFor="sc-title">
+              제목
+            </label>
+            <input
+              id="sc-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={kind === 'meeting' ? '주간 회의' : '재료 주문'}
+              className="field"
+            />
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="label" htmlFor="sc-date">
               날짜
@@ -556,11 +769,49 @@ function ScheduleForm({
           </div>
           <div>
             <label className="label" htmlFor="sc-time">
-              시간
+              시작
             </label>
             <input id="sc-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
           </div>
+          <div>
+            <label className="label" htmlFor="sc-end">
+              종료
+            </label>
+            <input id="sc-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="field" />
+          </div>
         </div>
+
+        {isClass && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor="sc-head">
+                인원수
+              </label>
+              <input
+                id="sc-head"
+                inputMode="numeric"
+                value={headcount}
+                onChange={(e) => setHeadcount(e.target.value)}
+                placeholder="24"
+                className="field"
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="sc-periods">
+                강의 타임 수
+              </label>
+              <input
+                id="sc-periods"
+                inputMode="numeric"
+                value={periods}
+                onChange={(e) => setPeriods(e.target.value)}
+                placeholder="2"
+                className="field"
+              />
+              <p className="mt-1.5 text-[11.5px] text-neutral-400">정산 기준이에요.</p>
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="label" htmlFor="sc-place">
@@ -570,14 +821,19 @@ function ScheduleForm({
             id="sc-place"
             value={place}
             onChange={(e) => setPlace(e.target.value)}
-            placeholder="모아초등학교 3층 과학실"
+            placeholder={isClass ? '3층 과학실' : '사무실'}
             className="field"
           />
         </div>
 
         <div>
-          <span className="label">참석자</span>
+          <span className="label">{isClass ? '담당 강사' : '참석자'}</span>
           <MultiPicker options={members} selected={people} onChange={setPeople} />
+          {isClass && (
+            <p className="mt-2 text-[11.5px] text-neutral-400">
+              고른 강사에게 알림이 가요. (나 자신에게는 안 갑니다)
+            </p>
+          )}
         </div>
 
         <div>

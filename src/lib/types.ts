@@ -8,7 +8,8 @@ export type Role = 'admin' | 'teacher';
 export type AppStatus = 'pending' | 'fixing' | 'recheck' | 'done';
 export type CostCategory = 'material' | 'api' | 'instructor' | 'transport' | 'etc';
 export type PhotoTag = 'work' | 'activity' | 'board' | 'group';
-export type ScheduleKind = 'meeting' | 'visit';
+/** 일정 갈래 — 셋에서 멈춘다. 마감은 여기 없다(apps·collab 에서 저절로 만들어진다) */
+export type ScheduleKind = 'class' | 'meeting' | 'etc';
 
 /** 로그인 이름 목록/멤버 표시에 쓰는 공개 정보 (PIN 없음) */
 export interface MemberPublic {
@@ -396,8 +397,15 @@ export interface Schedule {
   title: string;
   date: string;
   start_time: string | null;
+  end_time: string | null;
   place: string | null;
   memo: string | null;
+  /** 아래 넷은 출강(class)에서만 쓴다 */
+  app_id: string | null;
+  school: string | null;
+  headcount: number | null;
+  /** 강의 타임 수 — 정산의 기준 */
+  periods: number | null;
   created_at: string;
 }
 

@@ -2,8 +2,9 @@
 
 import { useMemo } from 'react';
 import { toISODate, today, hhmm } from '@/lib/format';
+import type { EntryKind } from '@/lib/schedule';
 
-export type EntryKind = 'due' | 'meeting' | 'visit';
+export type { EntryKind };
 
 export interface CalEntry {
   id: string;
@@ -27,17 +28,23 @@ export const KIND_META: Record<
     pill: 'bg-red-50 text-red-700 border-red-200',
     label: '마감',
   },
+  class: {
+    dot: 'bg-green-500',
+    chip: 'bg-green-100 text-green-800',
+    pill: 'bg-green-50 text-green-800 border-green-200',
+    label: '출강',
+  },
   meeting: {
     dot: 'bg-blue-500',
     chip: 'bg-blue-100 text-blue-700',
     pill: 'bg-blue-50 text-blue-700 border-blue-200',
     label: '회의',
   },
-  visit: {
-    dot: 'bg-green-500',
-    chip: 'bg-green-100 text-green-800',
-    pill: 'bg-green-50 text-green-800 border-green-200',
-    label: '방문',
+  etc: {
+    dot: 'bg-neutral-400',
+    chip: 'bg-neutral-100 text-neutral-700',
+    pill: 'bg-neutral-50 text-neutral-700 border-neutral-200',
+    label: '기타',
   },
 };
 
@@ -166,7 +173,7 @@ export function MonthCalendar({
 export function CalendarLegend() {
   return (
     <div className="flex flex-wrap gap-3 px-1">
-      {(['due', 'meeting', 'visit'] as EntryKind[]).map((k) => (
+      {(['due', 'class', 'meeting', 'etc'] as EntryKind[]).map((k) => (
         <span key={k} className="flex items-center gap-1.5 text-[11.5px] text-neutral-500">
           <span className={`h-2 w-2 rounded-full ${KIND_META[k].dot}`} />
           {KIND_META[k].label}
