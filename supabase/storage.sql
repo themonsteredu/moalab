@@ -46,6 +46,23 @@ begin
   end loop;
 end $$;
 
+-- 대화 사진만 **비공개 버킷**이다. 다른 버킷과 판단이 다른 이유:
+-- 1:1 대화를 남이 못 보게 하는 게 대화 기능의 전제라, 사진 URL 만 알면
+-- 누구나 열리는 공개 버킷을 쓰면 표를 잠근 의미가 없다.
+-- 정책을 하나도 안 만든다 = anon/authenticated 는 아예 못 붙는다.
+-- 올리기는 /api/chat/upload, 보기는 방 멤버에게만 내주는 서명 URL (둘 다 service_role).
+insert into storage.buckets (id, name, public)
+values ('moalab-chat','moalab-chat', false)
+on conflict (id) do update set public = false;
+
+do $$
+begin
+  execute 'drop policy if exists "read_moalab-chat"   on storage.objects';
+  execute 'drop policy if exists "write_moalab-chat"  on storage.objects';
+  execute 'drop policy if exists "update_moalab-chat" on storage.objects';
+  execute 'drop policy if exists "delete_moalab-chat" on storage.objects';
+end $$;
+
 -- 3) 확인 — 버킷 6 · 정책 24 가 나와야 정상
 select 'moalab- 버킷' as 항목, count(*)::text as 값
   from storage.buckets where id like 'moalab-%'

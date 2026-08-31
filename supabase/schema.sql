@@ -897,6 +897,80 @@ alter table moalab.schedules add  constraint schedules_kind_chk check (kind in (
 
 create index if not exists schedules_app_idx on moalab.schedules(app_id);
 
+-- ---------------------------------------------------------------------
+-- 22. 대화 (실시간 채팅)
+--
+--   ⚠️ **이 표들은 members(PIN) · app_secrets(API 키) 와 같은 취급이다.**
+--   `internal_all` 배열에 **절대 넣지 않는다.** 넣는 순간 브라우저의 anon 키로
+--   남의 1:1 대화가 통째로 읽힌다.
+--
+--   왜 RLS 정책으로 "자기 방만" 을 못 쓰나 —
+--   이 앱은 Supabase Auth 를 안 쓴다. 브라우저는 anon 키로 붙으므로 DB 는
+--   `auth.uid()` 를 모른다. 그래서 "이 사람이 이 방 멤버인가" 를 SQL 로 물을 수가 없다.
+--   → 표는 통째로 잠그고(정책 없음), 읽기·쓰기는 전부 `/api/chat/*` 서버 라우트가
+--     service_role 로 대신한다. 멤버 확인은 거기서 한다.
+--     (CLAUDE.md: "권한을 진짜로 강제해야 할 일이 생기면 RLS 가 아니라 서버 라우트로")
+--
+--   신원은 **세션 토큰**으로 확인한다. `x-actor-id` 헤더는 브라우저가 아무 값이나
+--   넣을 수 있어서 대화 격리에는 쓸 수 없다.
+-- ---------------------------------------------------------------------
+
+-- 로그인 세션 — /api/login 이 발급하고 /api/chat/* 이 확인한다.
+-- 기기마다 한 줄 (폰과 PC 를 따로 로그아웃할 수 있다).
+create table if not exists moalab.sessions (
+  token        uuid primary key default gen_random_uuid(),
+  member_id    uuid not null references moalab.members(id) on delete cascade,
+  user_agent   text,
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  expires_at   timestamptz not null default now() + interval '30 days'
+);
+create index if not exists sessions_member_idx on moalab.sessions(member_id);
+
+-- 대화방 — 갈래 셋. 늘리지 않는다
+--   dm   1:1        · 두 사람. dm_key 로 같은 짝이 두 번 안 생기게 한다
+--   dept 부서 단톡  · 부서마다 하나 (dept_id 가 고유)
+--   all  전체 공지방 · 딱 하나
+create table if not exists moalab.rooms (
+  id         uuid primary key default gen_random_uuid(),
+  kind       text not null,
+  dept_id    uuid references moalab.departments(id) on delete cascade,
+  -- 1:1 은 두 사람 id 를 정렬해 이어붙인 값. 누가 먼저 열든 같은 방이 나온다
+  dm_key     text,
+  title      text,
+  created_at timestamptz not null default now(),
+  constraint rooms_kind_chk check (kind in ('dm','dept','all'))
+);
+create unique index if not exists rooms_dm_key_idx  on moalab.rooms(dm_key) where dm_key is not null;
+create unique index if not exists rooms_dept_idx    on moalab.rooms(dept_id) where dept_id is not null;
+create unique index if not exists rooms_all_idx     on moalab.rooms((kind)) where kind = 'all';
+
+-- 누가 이 방에 있나 + 어디까지 읽었나.
+-- **읽음 표시는 메시지마다가 아니라 사람마다 한 줄**이다 — 메시지 × 사람으로 두면
+-- 5명이 100줄만 주고받아도 500줄이 쌓인다 (안 읽은 개수는 시각 비교로 충분하다)
+create table if not exists moalab.room_members (
+  room_id      uuid not null references moalab.rooms(id) on delete cascade,
+  member_id    uuid not null references moalab.members(id) on delete cascade,
+  last_read_at timestamptz not null default 'epoch',
+  joined_at    timestamptz not null default now(),
+  primary key (room_id, member_id)
+);
+create index if not exists room_members_member_idx on moalab.room_members(member_id);
+
+-- 한 마디. 사진만 보낼 수도 있어서 body 가 비어도 된다 (둘 다 비면 제약이 막는다).
+-- 사람을 지워도 대화 기록은 남는다 (지적사항·업무와 같은 갈래)
+create table if not exists moalab.messages (
+  id         uuid primary key default gen_random_uuid(),
+  room_id    uuid not null references moalab.rooms(id) on delete cascade,
+  member_id  uuid references moalab.members(id) on delete set null,
+  body       text,
+  -- 비공개 버킷 안의 경로. 공개 URL 이 아니다 — 방 멤버에게만 서명 URL 을 내준다
+  image_path text,
+  created_at timestamptz not null default now(),
+  constraint messages_not_empty check (coalesce(body,'') <> '' or image_path is not null)
+);
+create index if not exists messages_room_idx on moalab.messages(room_id, created_at desc);
+
 -- =====================================================================
 --  권한 + RLS
 --   · members       : RLS on, 정책 없음 → anon 키로는 읽기/쓰기 전부 차단
@@ -924,6 +998,19 @@ grant all on moalab.members to service_role;
 alter table moalab.app_secrets enable row level security;
 revoke all on moalab.app_secrets from anon, authenticated;
 grant all on moalab.app_secrets to service_role;
+
+-- 대화 표 넷도 같은 취급이다. 정책을 만들지 않으니 anon/authenticated 는 아예 못 붙는다.
+-- 읽기·쓰기는 전부 /api/chat/* 이 service_role 로 대신하고, 거기서 방 멤버인지 확인한다.
+do $$
+declare t text;
+begin
+  foreach t in array array['sessions','rooms','room_members','messages'] loop
+    execute format('alter table moalab.%I enable row level security', t);
+    execute format('drop policy if exists "internal_all" on moalab.%I', t);
+    execute format('revoke all on moalab.%I from anon, authenticated', t);
+    execute format('grant all on moalab.%I to service_role', t);
+  end loop;
+end $$;
 
 create or replace view moalab.members_public as
   select id, name, role, active, sort_order, created_at
@@ -993,6 +1080,23 @@ begin
     execute format($f$create policy "delete_%s" on storage.objects
       for delete to anon, authenticated using (bucket_id = %L)$f$, b, b);
   end loop;
+end $$;
+
+-- 대화 사진만 **비공개 버킷**이다. 다른 버킷과 판단이 다른 이유:
+-- 1:1 대화를 남이 못 보게 하는 게 대화 기능의 전제라, 사진 URL 만 알면
+-- 누구나 열리는 공개 버킷을 쓰면 표를 잠근 의미가 없다.
+-- 정책을 하나도 안 만든다 = anon/authenticated 는 아예 못 붙는다.
+-- 올리기는 /api/chat/upload, 보기는 방 멤버에게만 내주는 서명 URL (둘 다 service_role).
+insert into storage.buckets (id, name, public)
+values ('moalab-chat','moalab-chat', false)
+on conflict (id) do update set public = false;
+
+do $$
+begin
+  execute 'drop policy if exists "read_moalab-chat"   on storage.objects';
+  execute 'drop policy if exists "write_moalab-chat"  on storage.objects';
+  execute 'drop policy if exists "update_moalab-chat" on storage.objects';
+  execute 'drop policy if exists "delete_moalab-chat" on storage.objects';
 end $$;
 
 -- =====================================================================

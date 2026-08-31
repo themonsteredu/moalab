@@ -729,3 +729,50 @@ export interface CollabComment {
   body: string;
   created_at: string;
 }
+
+/* ------------------------------------------------------------------ 대화
+   ⚠️ 이 표들은 members(PIN)·app_secrets(API 키) 와 같은 취급이다.
+   브라우저는 아예 못 붙고, 읽기·쓰기는 전부 /api/chat/* 서버 라우트를 거친다. */
+
+/** 방 갈래 — 셋에서 멈춘다 */
+export type ChatRoomKind = 'dm' | 'dept' | 'all';
+
+export interface Room {
+  id: string;
+  kind: ChatRoomKind;
+  dept_id: string | null;
+  /** 1:1 은 두 사람 id 를 정렬해 이어붙인 값 — 같은 짝이 두 방이 되지 않게 */
+  dm_key: string | null;
+  title: string | null;
+  created_at: string;
+}
+
+export interface RoomMemberRow {
+  room_id: string;
+  member_id: string;
+  last_read_at: string;
+  joined_at: string;
+}
+
+export interface Message {
+  id: string;
+  room_id: string;
+  member_id: string | null;
+  body: string | null;
+  /** 비공개 버킷 안의 경로. 공개 URL 이 아니다 */
+  image_path: string | null;
+  created_at: string;
+}
+
+/** 목록 화면이 받는 모양 — 서버가 만들어서 내려준다 */
+export interface RoomSummary {
+  id: string;
+  kind: ChatRoomKind;
+  /** 화면에 그대로 쓰는 이름 (1:1 은 상대 이름) */
+  title: string;
+  memberIds: string[];
+  unread: number;
+  lastBody: string | null;
+  lastAt: string | null;
+  lastFrom: string | null;
+}
