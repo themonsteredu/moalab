@@ -312,7 +312,7 @@ function MemberForm({
                 type="button"
                 onClick={() => setRole(v)}
                 className={`tap flex-1 rounded-xl border text-[14px] font-semibold transition ${
-                  role === v ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
+                  role === v ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-600'
                 }`}
               >
                 {label}

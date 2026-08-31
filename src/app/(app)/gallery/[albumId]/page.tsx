@@ -414,7 +414,7 @@ function PhotoEditor({
                   key={t.value}
                   onClick={() => setTag(t.value)}
                   className={`tap rounded-full border px-3.5 text-[14px] font-semibold ${
-                    tag === t.value ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
+                    tag === t.value ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-600'
                   }`}
                 >
                   {t.label}

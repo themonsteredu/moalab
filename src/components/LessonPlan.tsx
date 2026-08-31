@@ -57,7 +57,7 @@ function KindChip({
       aria-pressed={on}
       className={`tap shrink-0 rounded-full border px-3 text-[12.5px] font-bold transition ${
         on
-          ? 'border-brand bg-brand text-white'
+          ? 'pick-on'
           : dim
             ? 'border-neutral-200 bg-surface text-neutral-300'
             : 'border-neutral-300 bg-surface text-neutral-600'

@@ -397,7 +397,7 @@ export default function CollabPage() {
               onClick={() => setBox(v)}
               aria-pressed={box === v}
               className={`tap flex-1 rounded-xl border text-[13px] font-bold transition ${
-                box === v ? 'border-brand bg-brand text-white' : 'border-neutral-200 bg-surface text-neutral-500'
+                box === v ? 'pick-on' : 'border-neutral-200 bg-surface text-neutral-500'
               }`}
             >
               {label}
@@ -479,7 +479,7 @@ export default function CollabPage() {
                   }}
                   className={`tap rounded-full border px-3.5 text-[13.5px] font-semibold transition ${
                     fromDept === d.id
-                      ? 'border-brand bg-brand text-white'
+                      ? 'pick-on'
                       : 'border-neutral-300 bg-surface text-neutral-600'
                   }`}
                 >
@@ -499,7 +499,7 @@ export default function CollabPage() {
                   onClick={() => setToDept(d.id)}
                   className={`tap rounded-full border px-3.5 text-[13.5px] font-semibold transition ${
                     toDept === d.id
-                      ? 'border-brand bg-brand text-white'
+                      ? 'pick-on'
                       : 'border-neutral-300 bg-surface text-neutral-600'
                   }`}
                 >
@@ -578,7 +578,7 @@ export default function CollabPage() {
                   onClick={() => setPriority(p.value)}
                   className={`tap flex-1 rounded-xl border text-[13.5px] font-semibold transition ${
                     priority === p.value
-                      ? 'border-brand bg-brand text-white'
+                      ? 'pick-on'
                       : 'border-neutral-300 bg-surface text-neutral-600'
                   }`}
                 >
@@ -649,7 +649,7 @@ export default function CollabPage() {
                         onClick={() => void setStatus(open, s.value)}
                         aria-pressed={on}
                         className={`h-11 flex-1 rounded-lg border text-[12.5px] font-bold transition ${
-                          on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-400'
+                          on ? s.on : 'border-neutral-200 bg-surface text-neutral-400'
                         }`}
                       >
                         {s.label}
@@ -755,7 +755,7 @@ function Chip({
       onClick={onClick}
       aria-pressed={on}
       className={`tap shrink-0 rounded-full border px-3.5 text-[12.5px] font-bold transition ${
-        on ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-500'
+        on ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-500'
       }`}
     >
       {children}
@@ -825,7 +825,7 @@ function RequestCard({
               aria-pressed={on}
               aria-label={`${r.project || '요청'} ${s.label}`}
               className={`h-11 flex-1 rounded-lg border text-[12.5px] font-bold transition disabled:opacity-40 ${
-                on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-400'
+                on ? s.on : 'border-neutral-200 bg-surface text-neutral-400'
               }`}
             >
               {s.label}

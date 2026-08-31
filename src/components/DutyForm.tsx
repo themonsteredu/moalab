@@ -213,7 +213,7 @@ export function DutyForm({
                     onClick={() => pickOwner(m.id)}
                     aria-pressed={on}
                     className={`tap gap-1.5 rounded-full border px-3 text-[14px] font-semibold transition ${
-                      on ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
+                      on ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-600'
                     }`}
                   >
                     <Avatar name={m.name} size={20} />

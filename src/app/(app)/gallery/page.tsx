@@ -253,7 +253,7 @@ function GalleryInner() {
                     key={t.value}
                     onClick={() => setFTag(fTag === t.value ? '' : t.value)}
                     className={`tap rounded-full border px-3.5 text-[13.5px] font-semibold ${
-                      fTag === t.value ? 'border-brand bg-brand text-white' : 'border-neutral-300 bg-surface text-neutral-600'
+                      fTag === t.value ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-600'
                     }`}
                   >
                     {t.label}

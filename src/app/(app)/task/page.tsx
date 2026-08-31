@@ -369,7 +369,7 @@ export default function TaskPage() {
                 onClick={() => setView(v)}
                 aria-pressed={view === v}
                 className={`tap flex-1 rounded-xl border text-[13px] font-bold transition ${
-                  view === v ? 'border-brand bg-brand text-white' : 'border-neutral-200 bg-surface text-neutral-500'
+                  view === v ? 'pick-on' : 'border-neutral-200 bg-surface text-neutral-500'
                 }`}
               >
                 {v === 'me' ? '내 업무' : '전체'}
@@ -667,7 +667,7 @@ export default function TaskPage() {
                   onClick={() => setAssignee(m.id === assignee ? '' : m.id)}
                   className={`tap rounded-full border px-3.5 text-[14px] font-semibold transition ${
                     assignee === m.id
-                      ? 'border-brand bg-brand text-white'
+                      ? 'pick-on'
                       : 'border-neutral-300 bg-surface text-neutral-600'
                   }`}
                 >
@@ -901,7 +901,7 @@ function TaskCard({
             aria-label={`${task.title} ${s.label}`}
             /* 44px — 세 개가 나란히 있어서 잘못 누르기 쉽고, 잘못 누르면 바로 저장된다 */
             className={`h-11 flex-1 rounded-lg border text-[12.5px] font-bold transition disabled:opacity-40 ${
-              on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-400'
+              on ? s.on : 'border-neutral-200 bg-surface text-neutral-400'
             }`}
           >
             {s.label}

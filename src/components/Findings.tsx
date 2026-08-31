@@ -499,7 +499,7 @@ function FindingCard({
                 onClick={() => setPicked(on ? null : s.value)}
                 aria-pressed={on}
                 className={`tap flex-1 rounded-lg border text-[13px] font-bold transition ${
-                  on ? `${s.on} border-transparent` : 'border-neutral-200 bg-surface text-neutral-500'
+                  on ? s.on : 'border-neutral-200 bg-surface text-neutral-500'
                 }`}
               >
                 {s.label}

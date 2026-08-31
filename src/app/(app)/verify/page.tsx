@@ -92,7 +92,7 @@ export default function VerifyPage() {
               aria-pressed={tab === t.value}
               className={`tap flex-1 gap-1 rounded-xl border text-[13px] font-bold transition ${
                 tab === t.value
-                  ? 'border-brand bg-brand text-white'
+                  ? 'pick-on'
                   : 'border-neutral-200 bg-surface text-neutral-500'
               }`}
             >
