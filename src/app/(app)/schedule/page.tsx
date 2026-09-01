@@ -304,7 +304,7 @@ export default function SchedulePage() {
                   href="/roles"
                   className="tap flex shrink-0 items-center rounded-full border border-neutral-300 bg-surface px-3.5 text-[13px] font-semibold text-neutral-500"
                 >
-                  부서가 아직 없어요 — 역할분장에서 만들기 ›
+                  부서가 아직 없어요 — 부서업무에서 만들기 ›
                 </Link>
               ) : (
                 depts.map((d) => {
@@ -336,7 +336,7 @@ export default function SchedulePage() {
               href="/roles"
               className="-my-3 flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
             >
-              역할분장 ›
+              부서업무 ›
             </Link>
           </div>
         )}

@@ -13,7 +13,7 @@ import { ErrorBanner } from '@/components/ui';
 import type { Department, Duty, DutyGroup, DutyHelper } from '@/lib/types';
 
 /**
- * 역할분장 인쇄 — 한꺼번에 뽑아서 종이로 본다.
+ * 부서업무 인쇄 — 한꺼번에 뽑아서 종이로 본다.
  *
  * `?parts=dept,person,unassigned` 로 무엇을 넣을지 정한다 (`src/lib/print.ts`).
  *   · `dept`       부서별 통합 — 조직 전체가 한 문서에 (부서 › 중분류 › 역할 › 담당)
@@ -69,7 +69,7 @@ function RolesPrint() {
         setDuties((u.data ?? []) as Duty[]);
         setHelpers((h.data ?? []) as DutyHelper[]);
       } catch (e) {
-        setError(friendlyError(e, '역할분장을 불러오지 못했어요.'));
+        setError(friendlyError(e, '부서업무를 불러오지 못했어요.'));
         setDepts([]);
       }
     })();
@@ -153,7 +153,7 @@ function RolesPrint() {
 
       {!onlyOne && (
         <header className="print-block mb-6 border-b-2 border-black pb-3">
-          <h1 className="text-[22px] font-black">역할분장</h1>
+          <h1 className="text-[22px] font-black">부서업무</h1>
           <p className="mt-1 text-[12.5px] text-neutral-600">
             부서 {totals.depts} · 역할 {totals.duties}
             {totals.unassigned > 0 && ` · 담당자 미정 ${totals.unassigned}`}
@@ -248,7 +248,7 @@ function RolesPrint() {
       )}
 
       <footer className="mt-8 border-t border-neutral-300 pt-2 text-[10.5px] text-neutral-500">
-        모아킷 · 모아랩 업무 워크스페이스 — 역할분장
+        모아킷 · 모아랩 업무 워크스페이스 — 부서업무
       </footer>
     </main>
   );
@@ -271,7 +271,7 @@ function DeptDoc({
     <section>
       {bare && (
         <header className="print-block mb-5 border-b-2 border-black pb-3">
-          <h1 className="text-[20px] font-black">역할분장 — 부서별</h1>
+          <h1 className="text-[20px] font-black">부서업무 — 부서별</h1>
           <p className="mt-1 text-[11px] text-neutral-400">출력일 {today}</p>
         </header>
       )}

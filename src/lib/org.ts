@@ -1,7 +1,7 @@
 import type { Department, Duty, DutyGroup, DutyHelper, MemberPublic } from './types';
 
 /**
- * 역할분장 계산 — 부서 › 중분류 › 소분류 트리와, 그걸 사람 축으로 뒤집은 것.
+ * 부서업무 계산 — 부서 › 중분류 › 소분류 트리와, 그걸 사람 축으로 뒤집은 것.
  *
  * 화면 코드에 계산을 흩어놓지 않는다 (task.ts · cost.ts 와 같은 자리).
  * `scripts/org.test.mjs` 가 이 파일을 지킨다.

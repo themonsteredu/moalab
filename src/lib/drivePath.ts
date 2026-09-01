@@ -38,7 +38,7 @@ export const DRIVE_KINDS: { value: DriveKind; label: string; where: string; hint
     value: 'dept',
     label: '역할 자료',
     where: '업무분장 / {부서} / {중분류}',
-    hint: '역할분장에서 그 일을 열고 올린 결과물',
+    hint: '부서업무에서 그 일을 열고 올린 결과물',
   },
 ];
 
