@@ -80,7 +80,16 @@ export default function RolesPage() {
   const [onlyOpen, setOnlyOpen] = useState(false);
 
   /** 역할 시트 */
-  const [editing, setEditing] = useState<{ duty: Duty | null; groupId: string; label: string } | null>(null);
+  /* 부서·중분류 이름을 같이 들고 다닌다 — `DutyFiles` 가 드라이브 폴더
+     (`업무분장/{부서}/{중분류}`)를 정하는 데 쓴다. 예전엔 label 을 `›` 로 쪼개
+     알아냈는데, 이름에 `›` 가 들어가면 그대로 어긋난다 */
+  const [editing, setEditing] = useState<{
+    duty: Duty | null;
+    groupId: string;
+    label: string;
+    deptName: string;
+    groupName: string;
+  } | null>(null);
   /** 부서·중분류 시트 */
   const [deptSheet, setDeptSheet] = useState<Department | 'new' | null>(null);
   const [groupSheet, setGroupSheet] = useState<{ group: DutyGroup | null; deptId: string; deptName: string } | null>(null);
@@ -261,7 +270,13 @@ export default function RolesPage() {
 
   /* ------------------------------------------------------------ 화면 */
 
-  const dutyRow = (node: { duty: Duty; helperIds: string[] }, label: string, deptHeadId?: string | null) => {
+  const dutyRow = (
+    node: { duty: Duty; helperIds: string[] },
+    deptName: string,
+    groupName: string,
+    deptHeadId?: string | null,
+  ) => {
+    const label = `${deptName} › ${groupName}`;
     /* 주담당이 없으면 **그 부서 팀장**이 맡는다 — 원장이 부서마다 팀장을 정해뒀으니
        역할 63개마다 다시 고르게 하지 않는다. 팀장도 없을 때만 '미정' 이다 */
     const owner = ownerOf(node.duty, deptHeadId);
@@ -271,7 +286,7 @@ export default function RolesPage() {
         {/* 누구나 누를 수 있다 — 담당자를 정하는 건 '내가 이거 할게요' 이기도 하다
             (검증자 참여를 본인이 누르게 연 것과 같은 갈래) */}
         <button
-          onClick={() => setEditing({ duty: node.duty, groupId: node.duty.group_id, label })}
+          onClick={() => setEditing({ duty: node.duty, groupId: node.duty.group_id, label, deptName, groupName })}
           className="flex min-h-[44px] w-full items-center gap-2 py-1.5 text-left"
         >
           <span className="min-w-0 flex-1">
@@ -298,24 +313,47 @@ export default function RolesPage() {
     );
   };
 
-  /** tone 이 없으면 칩을 안 그린다 — '담당자 미정' 칸에서 '주담당' 이라고 하면 말이 안 된다 */
+  /**
+   * `내 역할`·`사람별` 목록의 한 줄.
+   *
+   * tone 이 없으면 칩을 안 그린다 — '담당자 미정' 칸에서 '주담당' 이라고 하면 말이 안 된다.
+   *
+   * ⚠️ **누를 수 있어야 한다.** 예전엔 그냥 글자만 그려서, `내 역할` 에서 자기 역할을
+   * 보고도 **자료를 올릴 방법이 없었다** — 올리려면 `전체` 트리로 넘어가 부서·중분류를
+   * 펼쳐 그 역할을 다시 찾아야 했다. 원장이 바로 여기서 막혔다.
+   * 누르면 트리에서 누르는 것과 **같은 시트**가 열린다.
+   */
   const refRow = (r: DutyRef, tone?: 'own' | 'help') => (
-    <li key={`${tone ?? 'x'}-${r.duty.id}`} className="flex items-start gap-2 py-1.5">
-      {tone && (
-        <span
-          className={`chip mt-0.5 shrink-0 ${
-            tone === 'own' ? 'bg-brand-50 text-brand-700' : 'bg-neutral-100 text-neutral-500'
-          }`}
-        >
-          {tone === 'own' ? '주담당' : '부담당'}
+    <li key={`${tone ?? 'x'}-${r.duty.id}`}>
+      <button
+        onClick={() =>
+          setEditing({
+            duty: r.duty,
+            groupId: r.duty.group_id,
+            label: `${r.deptName} › ${r.groupName}`,
+            deptName: r.deptName,
+            groupName: r.groupName,
+          })
+        }
+        className="flex min-h-[44px] w-full items-center gap-2 py-1.5 text-left"
+      >
+        {tone && (
+          <span
+            className={`chip shrink-0 ${
+              tone === 'own' ? 'bg-brand-50 text-brand-700' : 'bg-neutral-100 text-neutral-500'
+            }`}
+          >
+            {tone === 'own' ? '주담당' : '부담당'}
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-semibold text-neutral-800">{r.duty.name}</span>
+          <span className="block truncate text-[11.5px] text-neutral-400">
+            {r.deptName} › {r.groupName}
+          </span>
         </span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-semibold text-neutral-800">{r.duty.name}</span>
-        <span className="block truncate text-[11.5px] text-neutral-400">
-          {r.deptName} › {r.groupName}
-        </span>
-      </span>
+        <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
+      </button>
     </li>
   );
 
@@ -495,6 +533,8 @@ export default function RolesPage() {
                             duty: r.duty,
                             groupId: r.duty.group_id,
                             label: `${r.deptName} › ${r.groupName}`,
+                            deptName: r.deptName,
+                            groupName: r.groupName,
                           })
                         }
                         className="flex min-h-[44px] w-full items-center gap-2 py-2 text-left"
@@ -596,7 +636,7 @@ export default function RolesPage() {
                               }
                             >
                               <ul className="divide-y divide-neutral-100 border-t border-neutral-100">
-                                {g.duties.map((n) => dutyRow(n, `${d.dept.name} › ${g.group.name}`, d.dept.head_id))}
+                                {g.duties.map((n) => dutyRow(n, d.dept.name, g.group.name, d.dept.head_id))}
                               </ul>
                               {/* 역할 추가는 전원에게 — 자기가 맡을 일은 자기가 적는 게 빠르다 */}
                               <button
@@ -605,6 +645,8 @@ export default function RolesPage() {
                                     duty: null,
                                     groupId: g.group.id,
                                     label: `${d.dept.name} › ${g.group.name}`,
+                                    deptName: d.dept.name,
+                                    groupName: g.group.name,
                                   })
                                 }
                                 className="-my-3 flex min-h-[44px] items-center gap-1 text-[12.5px] font-bold text-brand"
@@ -645,6 +687,8 @@ export default function RolesPage() {
         onClose={() => setEditing(null)}
         groupId={editing?.groupId ?? ''}
         groupLabel={editing?.label ?? ''}
+        deptName={editing?.deptName}
+        groupName={editing?.groupName}
         duty={editing?.duty ?? null}
         members={members}
         canDelete={isAdmin}
