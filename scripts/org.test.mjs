@@ -117,6 +117,27 @@ eq('부담당', O.myDuties(tree, 'm2').help.map((r) => r.duty.id), ['t1', 't3'])
 eq('주담당이면 부담당으로 또 안 센다', O.myDuties(tree, 'm2').own.map((r) => r.duty.id), ['t2']);
 eq('로그인 전이면 빈 목록', O.myDuties(tree, null), { own: [], help: [] });
 
+{
+  /* ★ 주담당이 비면 그 부서 팀장이 맡은 것으로 센다.
+     예전엔 사람별 보기(groupByPerson)만 이 규칙을 써서, 팀장의 '내 역할' 은
+     0건인데 사람별 보기에는 N건이 잡히는 어긋남이 있었다 */
+  const headed = O.buildOrg(
+    DEPTS.map((d) => (d.id === 'd1' ? { ...d, head_id: 'm3' } : d)),
+    GROUPS,
+    DUTIES,
+    HELPERS,
+  );
+  const asHead = O.myDuties(headed, 'm3');
+  const asPerson = O.groupByPerson(headed, MEMBERS).find((p) => p.memberId === 'm3');
+  eq('★ 팀장은 담당자 미정인 역할을 자기 것으로 본다', asHead.own.length > 0, true);
+  eq(
+    '★ 내 역할과 사람별 보기가 같은 것을 센다',
+    asHead.own.map((r) => r.duty.id),
+    asPerson.own.map((r) => r.duty.id),
+  );
+  eq('팀장을 안 정한 부서는 여전히 미정', O.groupByPerson(tree, MEMBERS)[0].memberId, null);
+}
+
 console.log('\n[검색]');
 eq('소분류 이름으로', O.filterOrg(tree, 'SNS').map((d) => d.dept.name), ['영업마케팅부']);
 eq('설명으로도 걸린다', O.filterOrg(tree, '학교가 찾는').map((d) => d.dept.name), ['기획개발부']);

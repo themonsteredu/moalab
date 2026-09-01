@@ -182,7 +182,13 @@ export function groupByPerson(tree: DeptNode[], members: MemberPublic[]): Person
   return rows;
 }
 
-/** 내가 맡은 것만 (주담당 + 부담당). 강사 기본 화면이 이걸 쓴다 */
+/**
+ * 내가 맡은 것만 (주담당 + 부담당). `내 역할`·`내 업무` 화면이 이걸 쓴다.
+ *
+ * **주담당이 비면 그 부서 팀장이 맡은 것으로 센다** (`ownerOf` 와 같은 규칙).
+ * 예전엔 `owner_id === memberId` 만 봐서, 사람별 보기에는 팀장에게 N건이 잡히는데
+ * 정작 그 팀장의 `내 역할` 은 0건이었다 — 화면마다 숫자가 어긋났다.
+ */
 export function myDuties(tree: DeptNode[], memberId: string | null | undefined): {
   own: DutyRef[];
   help: DutyRef[];
@@ -194,7 +200,7 @@ export function myDuties(tree: DeptNode[], memberId: string | null | undefined):
     for (const g of d.groups) {
       for (const node of g.duties) {
         const ref: DutyRef = { duty: node.duty, deptName: d.dept.name, groupName: g.group.name };
-        if (node.duty.owner_id === memberId) own.push(ref);
+        if (ownerOf(node.duty, d.dept.head_id) === memberId) own.push(ref);
         else if (node.helperIds.includes(memberId)) help.push(ref);
       }
     }
