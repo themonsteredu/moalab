@@ -4,11 +4,10 @@ import { useEffect, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { logActivity } from '@/lib/log';
-import { Avatar } from '@/components/Brand';
 import { Icon } from '@/components/Icon';
 import { DutyFiles } from '@/components/DutyFiles';
-import { ConfirmDialog, ErrorBanner, MultiPicker, Sheet } from '@/components/ui';
-import type { Duty, MemberPublic } from '@/lib/types';
+import { ConfirmDialog, ErrorBanner, Sheet } from '@/components/ui';
+import type { Duty } from '@/lib/types';
 
 interface LinkTarget {
   href: string;
@@ -35,7 +34,6 @@ export function DutyForm({
   deptName,
   groupName,
   duty,
-  members,
   canDelete,
   onSaved,
 }: {
@@ -50,7 +48,6 @@ export function DutyForm({
   groupName?: string;
   /** null 이면 새로 만들기 */
   duty: Duty | null;
-  members: MemberPublic[];
   /**
    * 지우기는 **원장만.** 만들고 고치는 건 전원이지만, 지우는 것은 남이 적어둔
    * 역할을 없애는 일이라 갈래가 다르다 (프로그램은 등록·수정이 전원, 보관은 원장인 것과 같다).
@@ -61,8 +58,6 @@ export function DutyForm({
   const { session } = useSession();
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
-  const [ownerId, setOwnerId] = useState('');
-  const [helperIds, setHelperIds] = useState<string[]>([]);
   /** 이 일로 바로 가는 곳 — 프로그램 페이지·원가표 주소 */
   const [link, setLink] = useState('');
   const [targets, setTargets] = useState<{ apps: LinkTarget[]; sheets: LinkTarget[] }>({ apps: [], sheets: [] });
@@ -75,16 +70,7 @@ export function DutyForm({
     setError('');
     setName(duty?.name ?? '');
     setNote(duty?.note ?? '');
-    setOwnerId(duty?.owner_id ?? '');
     setLink(duty?.link ?? '');
-    if (!duty) {
-      setHelperIds([]);
-      return;
-    }
-    void (async () => {
-      const { data } = await supabase.from('duty_helpers').select('member_id').eq('duty_id', duty.id);
-      setHelperIds((data ?? []).map((r: { member_id: string }) => r.member_id));
-    })();
   }, [open, duty]);
 
   /* 바로가기로 걸 수 있는 것 — 프로그램과 원가표. 시트를 열 때 한 번만 읽는다.
@@ -109,12 +95,6 @@ export function DutyForm({
     })();
   }, [open]);
 
-  /** 주담당으로 고른 사람은 부담당에서 뺀다 */
-  const pickOwner = (id: string) => {
-    setOwnerId(id);
-    setHelperIds((v) => v.filter((m) => m !== id));
-  };
-
   const save = async () => {
     const n = name.trim();
     setError('');
@@ -128,7 +108,10 @@ export function DutyForm({
       if (duty) {
         const { error: e } = await supabase
           .from('duties')
-          .update({ name: n, note: note.trim() || null, owner_id: ownerId || null, link: link || null })
+          /* owner_id·duty_helpers 는 **건드리지 않는다.** 역할은 부서(팀장)가 도맡고
+             사람을 붙이지 않기로 했다 — 다만 지난 기록을 지울 이유는 없어서 남겨둔다
+             (옛 `checks` 표를 기록 보존용으로 남긴 것과 같은 판단) */
+          .update({ name: n, note: note.trim() || null, link: link || null })
           .eq('id', duty.id);
         if (e) throw e;
       } else {
@@ -141,7 +124,6 @@ export function DutyForm({
             group_id: groupId,
             name: n,
             note: note.trim() || null,
-            owner_id: ownerId || null,
             link: link || null,
             sort_order: next,
           })
@@ -149,17 +131,6 @@ export function DutyForm({
           .single();
         if (e) throw e;
         id = data.id;
-      }
-
-      // 부담당은 통째로 다시 쓴다 — 몇 명 안 되고, 지웠는지 더했는지 따질 이유가 없다
-      const { error: dErr } = await supabase.from('duty_helpers').delete().eq('duty_id', id);
-      if (dErr) throw dErr;
-      const keep = helperIds.filter((m) => m !== ownerId);
-      if (keep.length > 0) {
-        const { error: hErr } = await supabase
-          .from('duty_helpers')
-          .insert(keep.map((member_id) => ({ duty_id: id, member_id })));
-        if (hErr) throw hErr;
       }
 
       logActivity(session?.id, `역할 ${duty ? '수정' : '추가'} — ${groupLabel} › ${n}`, `duty:${id}`);
@@ -291,53 +262,6 @@ export function DutyForm({
               />
             </div>
           )}
-
-          <div>
-            <p className="label">주담당 — 한 명</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => pickOwner('')}
-                aria-pressed={ownerId === ''}
-                className={`tap rounded-full border px-3.5 text-[14px] font-semibold transition ${
-                  ownerId === ''
-                    ? 'border-neutral-400 bg-neutral-100 text-neutral-700'
-                    : 'border-neutral-300 bg-surface text-neutral-400'
-                }`}
-              >
-                미정
-              </button>
-              {members.map((m) => {
-                const on = ownerId === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => pickOwner(m.id)}
-                    aria-pressed={on}
-                    className={`tap gap-1.5 rounded-full border px-3 text-[14px] font-semibold transition ${
-                      on ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-600'
-                    }`}
-                  >
-                    <Avatar name={m.name} size={20} />
-                    {m.name}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-1 text-[11.5px] text-neutral-400">
-              책임은 한 사람에게 지웁니다. 둘이 나눠 맡아야 하면 역할을 둘로 쪼개주세요.
-            </p>
-          </div>
-
-          <div>
-            <p className="label">부담당 — 같이 하는 사람</p>
-            <MultiPicker
-              options={members.filter((m) => m.id !== ownerId).map((m) => ({ id: m.id, name: m.name }))}
-              selected={helperIds}
-              onChange={setHelperIds}
-            />
-          </div>
 
           {error && <ErrorBanner message={error} />}
 
