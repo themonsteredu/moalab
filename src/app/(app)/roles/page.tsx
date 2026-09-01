@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
@@ -144,7 +146,14 @@ export default function RolesPage() {
         d.groups.flatMap((g) =>
           g.duties
             .filter((n) => !n.duty.owner_id)
-            .map((n) => ({ duty: n.duty, deptName: d.dept.name, groupName: g.group.name })),
+            /* 지금 누가 대신 맡고 있는지도 실어 보낸다 — 빨간 '미정' 만 63개 붙이면
+               사실과 다르고, 무엇이 바뀌는지도 안 보인다 */
+            .map((n) => ({
+              duty: n.duty,
+              deptName: d.dept.name,
+              groupName: g.group.name,
+              headId: d.dept.head_id,
+            })),
         ),
       ),
     [shown],
@@ -283,7 +292,7 @@ export default function RolesPage() {
     const owner = ownerOf(node.duty, deptHeadId);
     const inherited = !node.duty.owner_id && !!owner;
     return (
-      <li key={node.duty.id}>
+      <li key={node.duty.id} className="flex items-center gap-1">
         {/* 누구나 누를 수 있다 — 담당자를 정하는 건 '내가 이거 할게요' 이기도 하다
             (검증자 참여를 본인이 누르게 연 것과 같은 갈래) */}
         <button
@@ -310,6 +319,15 @@ export default function RolesPage() {
           )}
           <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
         </button>
+        {node.duty.link && (
+          <Link
+            href={node.duty.link}
+            aria-label={`${node.duty.name} — 이 일로 바로 가기`}
+            className="tap -my-3 flex min-h-[44px] w-9 shrink-0 items-center justify-center text-brand"
+          >
+            <Icon name="external" size={14} />
+          </Link>
+        )}
       </li>
     );
   };
@@ -325,7 +343,7 @@ export default function RolesPage() {
    * 누르면 트리에서 누르는 것과 **같은 시트**가 열린다.
    */
   const refRow = (r: DutyRef, tone?: 'own' | 'help') => (
-    <li key={`${tone ?? 'x'}-${r.duty.id}`}>
+    <li key={`${tone ?? 'x'}-${r.duty.id}`} className="flex items-center gap-1">
       <button
         onClick={() =>
           setEditing({
@@ -355,6 +373,16 @@ export default function RolesPage() {
         </span>
         <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
       </button>
+      {/* 바로가기는 **버튼 밖**이다 — button 안에 a 를 넣으면 안 되는 중첩이 된다 */}
+      {r.duty.link && (
+        <Link
+          href={r.duty.link}
+          aria-label={`${r.duty.name} — 이 일로 바로 가기`}
+          className="tap -my-3 flex min-h-[44px] w-9 shrink-0 items-center justify-center text-brand"
+        >
+          <Icon name="external" size={14} />
+        </Link>
+      )}
     </li>
   );
 
@@ -400,7 +428,11 @@ export default function RolesPage() {
         subtitle={
           depts === null
             ? '불러오는 중…'
-            : `부서 ${totals.depts} · 역할 ${totals.duties}${totals.unassigned ? ` · 미정 ${totals.unassigned}` : ''}`
+            : `부서 ${totals.depts} · 역할 ${totals.duties}` +
+              /* 진짜 미정(팀장도 없음)이 있으면 그걸 먼저, 없으면 '아직 안 정한 것' 을 적는다.
+                 둘 다 안 적으면 63개가 전부 팀장 몫인 걸 아무 데서도 알 수 없다 */
+              (totals.unassigned ? ` · 미정 ${totals.unassigned}` : '') +
+              (totals.unpicked ? ` · 아직 안 정함 ${totals.unpicked}` : '')
         }
         /* 부서 만들기도 전원에게. 원장만 두면 "이런 칸이 필요한데요" 를 말로 전하고
            기다려야 한다 — 등록이 밀리는 그 문제가 층만 바뀌어 그대로 생긴다 */
@@ -524,25 +556,38 @@ export default function RolesPage() {
                 aria-label="역할 검색"
                 className="field mb-2 lg:mb-0 lg:flex-1"
               />
-              {totals.unassigned > 0 && (
+              {/* ⚠️ `unassigned`(진짜 미정) 가 아니라 `unpicked`(아직 직접 안 고른 것)로 연다.
+                  부서에 팀장이 있으면 ownerOf 가 팀장을 채워 미정이 0이 되는데, 그러면
+                  역할 63개가 전부 팀장 몫인데도 **채울 문이 안 보였다** */}
+              {totals.unpicked > 0 && (
                 <button
                   onClick={() => setOnlyOpen((v) => !v)}
                   aria-pressed={onlyOpen}
                   className={`tap w-full shrink-0 rounded-xl border px-4 text-[13px] font-bold transition lg:w-auto ${
                     onlyOpen
-                      ? 'border-red-300 bg-red-100 text-red-700'
+                      ? 'border-amber-300 bg-amber-100 text-amber-800'
                       : 'border-neutral-200 bg-surface text-neutral-500'
                   }`}
                 >
-                  담당자 미정 {totals.unassigned}건{onlyOpen ? ' — 전체 보기' : '만 보기'}
+                  아직 안 정한 역할 {totals.unpicked}건{onlyOpen ? ' — 전체 보기' : '만 보기'}
                 </button>
               )}
             </div>
 
             {onlyOpen ? (
               openList.length === 0 ? (
-                <EmptyState icon="check" title="담당자가 다 정해졌어요" desc="비어 있는 역할이 없습니다." />
+                <EmptyState
+                  icon="check"
+                  title="역할마다 담당자를 다 정했어요"
+                  desc="팀장이 대신 맡고 있는 역할이 없습니다."
+                />
               ) : (
+                <>
+                <p className="mb-2 px-1 text-[12px] leading-relaxed text-neutral-400 lg:max-w-3xl">
+                  아직 <b className="text-neutral-500">사람을 직접 고르지 않은</b> 역할이에요.
+                  지금은 그 부서 <b className="text-neutral-500">팀장</b>이 대신 맡고 있습니다 —
+                  눌러서 실제 담당자를 넣으면 팀장에게서 빠져요.
+                </p>
                 <ul className="card divide-y divide-neutral-100 px-3.5 lg:max-w-3xl">
                   {openList.map((r) => (
                     <li key={r.duty.id}>
@@ -566,12 +611,19 @@ export default function RolesPage() {
                             {r.deptName} › {r.groupName}
                           </span>
                         </span>
-                        <span className="chip shrink-0 bg-red-100 text-red-700">미정</span>
+                        {r.headId ? (
+                          <span className="chip shrink-0 bg-neutral-100 text-neutral-500">
+                            {nameOf(r.headId)} · 팀장
+                          </span>
+                        ) : (
+                          <span className="chip shrink-0 bg-red-100 text-red-700">미정</span>
+                        )}
                         <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
                       </button>
                     </li>
                   ))}
                 </ul>
+                </>
               )
             ) : shown.length === 0 ? (
               <EmptyState icon="search" title="찾는 역할이 없어요" desc="다른 말로 찾아보세요." />

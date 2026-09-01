@@ -786,10 +786,16 @@ create table if not exists moalab.duties (
   -- 주담당. 책임은 한 사람에게 지운다 (tasks 의 assignee_id 와 같은 판단).
   -- 사람을 지워도 역할은 남고 '담당자 미정' 으로 돌아간다
   owner_id   uuid references moalab.members(id) on delete set null,
+  -- 이 일로 바로 가는 곳. 원장 말: "계획안이나 원가계산 이런 것은 부서가 나뉘었으니
+  -- 거기로 이동해야 해". **자료를 옮기지는 않는다** — 프로그램 페이지 한 장에 계획안·
+  -- 원가·샘플이 모여 있는 게 이 앱의 핵심 설계라, 부서별로 쪼개면 '따로국밥' 으로
+  -- 되돌아간다. 대신 역할에서 그 화면으로 가는 길만 낸다 ('/apps/<id>' · '/cost/<id>')
+  link       text,
   sort_order int not null default 0,
   created_at timestamptz not null default now(),
   unique (group_id, name)
 );
+alter table moalab.duties add column if not exists link text;
 create index if not exists duties_group_idx on moalab.duties(group_id, sort_order);
 create index if not exists duties_owner_idx on moalab.duties(owner_id);
 

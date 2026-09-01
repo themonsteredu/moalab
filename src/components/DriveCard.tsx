@@ -49,6 +49,7 @@ export function DriveCard() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [killing, setKilling] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
 
   const headers = useCallback(
     () => ({ 'Content-Type': 'application/json', 'x-actor-id': session?.id ?? '' }),
@@ -139,6 +140,32 @@ export function DriveCard() {
       await load();
     } finally {
       setBusy(false);
+    }
+  };
+
+  /**
+   * 지금까지 앱에 쌓인 **옛 파일을 한 번에** 드라이브로 줄 세운다.
+   *
+   * 평소에는 올리는 그 순간에만 줄이 서고, **연결 안 돼 있으면 줄도 안 선다**
+   * (나중에 연결했을 때 옛날 파일이 쏟아지지 않게). 그래서 연결 전에 올린 것은
+   * 원장이 여기서 한 번 눌러줘야 올라간다.
+   */
+  const backfill = async () => {
+    setBackfilling(true);
+    setError('');
+    setNote('');
+    try {
+      const res = await fetch('/api/drive/backfill', { method: 'POST', headers: headers() });
+      const j = await res.json();
+      if (!res.ok) return setError(j.error ?? '옛 파일을 못 보냈어요.');
+      if ((j.found ?? 0) === 0) setNote('보낼 옛 파일이 없어요.');
+      else if ((j.queued ?? 0) === 0) setNote(`옛 파일 ${j.found}개는 이미 다 보냈어요.`);
+      else setNote(`옛 파일 ${j.queued}개를 보내는 중이에요. 조금 걸릴 수 있어요.`);
+      await load();
+    } catch {
+      setError('옛 파일을 못 보냈어요. 잠시 후 다시 눌러주세요.');
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -269,6 +296,24 @@ export function DriveCard() {
         >
           {status.connected ? '구글 계정 다시 연결' : '2. 구글 계정 연결하기'}
         </a>
+      )}
+
+      {/* 연결 전에 올린 것 한 번에 보내기 */}
+      {status?.connected && (
+        <div className="mb-3 rounded-xl border border-neutral-200 bg-raised px-3 py-2.5">
+          <p className="text-[12.5px] font-bold text-neutral-600">연결 전에 올린 파일</p>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed text-neutral-400">
+            연결하기 전에 앱에 올린 것은 드라이브에 없어요. 한 번 눌러 보내면 돼요 —
+            여러 번 눌러도 같은 파일이 두 번 올라가지 않습니다.
+          </p>
+          <button
+            onClick={() => void backfill()}
+            disabled={backfilling || busy}
+            className="btn-ghost mt-2 w-full text-[13.5px]"
+          >
+            {backfilling ? '보내는 중…' : '지금까지 올린 파일 전부 보내기'}
+          </button>
+        </div>
       )}
 
       {/* 3단계 — 무엇을 올릴지 */}
