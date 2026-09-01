@@ -236,7 +236,7 @@ export async function ensurePath(
 
 /* ------------------------------------------------------------------ 올리기 */
 
-/** 같은 이름이 이미 있으면 그 id 를 준다 — 다시 시도해도 두 벌이 안 생긴다 */
+/** 같은 이름이 이미 있으면 그 id 를 준다 — 두 벌을 안 만들고 **그 파일을 덮어쓴다** */
 async function findFile(access: string, folderId: string, name: string): Promise<string | null> {
   const q = `'${esc(folderId)}' in parents and name = '${esc(name)}' and trashed = false`;
   try {
@@ -258,22 +258,36 @@ export async function uploadFile(
   mime: string,
   bytes: Blob,
 ): Promise<{ id: string } | { error: string }> {
+  /* 같은 이름이 이미 있으면 **그 파일을 덮어쓴다.**
+     예전엔 건너뛰었는데, 그러면 같은 자리에 새 판을 올려도 드라이브에는 옛 파일이
+     그대로 남는다 — 원장이 *"그 위치의 파일을 새로 만들 경우 항상 새로운 파일이
+     대체되는 구조로"* 라고 한 것이 이것이다.
+     · 새로 만들지 않고 **그 파일의 내용만 갈아끼운다** — 드라이브 파일 id 가 그대로라
+       공유 링크와 지난 판(구글이 스스로 남기는 버전 기록)이 안 끊긴다
+     · 판(버전)을 올릴 때는 이름 앞에 판 번호가 붙으므로(`2판_지도안.hwp`) 이름이 달라
+       덮어쓰기가 아니라 새 파일로 올라간다 — 그건 원래 그렇게 두는 게 맞다 */
   const already = await findFile(access, folderId, name);
-  if (already) return { id: already }; // 이미 있다 — 다시 올리지 않는다
 
   const boundary = `moalab${Math.random().toString(36).slice(2)}`;
+  // 덮어쓸 때는 부모를 다시 주지 않는다 (그 자리에 그대로 있다)
+  const meta = already ? { name } : { name, parents: [folderId] };
   const head =
     `--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n` +
-    `${JSON.stringify({ name, parents: [folderId] })}\r\n` +
+    `${JSON.stringify(meta)}\r\n` +
     `--${boundary}\r\ncontent-type: ${mime}\r\n\r\n`;
   const body = new Blob([head, bytes, `\r\n--${boundary}--`]);
 
   try {
-    const res = await fetch(`${UPLOAD}?uploadType=multipart&fields=id`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${access}`, 'content-type': `multipart/related; boundary=${boundary}` },
-      body,
-    });
+    const res = await fetch(
+      already
+        ? `${UPLOAD}/${encodeURIComponent(already)}?uploadType=multipart&fields=id`
+        : `${UPLOAD}?uploadType=multipart&fields=id`,
+      {
+        method: already ? 'PATCH' : 'POST',
+        headers: { authorization: `Bearer ${access}`, 'content-type': `multipart/related; boundary=${boundary}` },
+        body,
+      },
+    );
     if (!res.ok) return { error: driveError(res.status, await res.text().catch(() => '')) };
     const id = ((await res.json()) as { id?: string }).id;
     return id ? { id } : { error: '드라이브가 파일 번호를 안 줬어요.' };

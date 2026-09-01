@@ -80,7 +80,6 @@ export default function RolesPage() {
     ROLE_PRINT_PARTS.map((p) => p.key),
   );
   const [q, setQ] = useState('');
-  const [onlyOpen, setOnlyOpen] = useState(false);
 
   /** 역할 시트 */
   /* 부서·중분류 이름을 같이 들고 다닌다 — `DutyFiles` 가 드라이브 폴더
@@ -135,29 +134,6 @@ export default function RolesPage() {
   /** 트리에는 검색만 건다 */
   const shown = useMemo(() => filterOrg(tree, q), [tree, q]);
 
-  /**
-   * 담당자 미정은 **트리가 아니라 평평한 목록**으로 보여준다.
-   * 트리로 그리면 부서·중분류를 전부 펼쳐야 해서 15건 보는 데 3.6화면(2949px)이었다.
-   * 채우는 게 목적인 화면이라 헤집을 이유가 없다 — 한 줄에 한 건씩 눌러서 채운다.
-   */
-  const openList = useMemo(
-    () =>
-      shown.flatMap((d) =>
-        d.groups.flatMap((g) =>
-          g.duties
-            .filter((n) => !n.duty.owner_id)
-            /* 지금 누가 대신 맡고 있는지도 실어 보낸다 — 빨간 '미정' 만 63개 붙이면
-               사실과 다르고, 무엇이 바뀌는지도 안 보인다 */
-            .map((n) => ({
-              duty: n.duty,
-              deptName: d.dept.name,
-              groupName: g.group.name,
-              headId: d.dept.head_id,
-            })),
-        ),
-      ),
-    [shown],
-  );
 
   /** 검색이 걸린 동안에는 트리를 강제로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다 */
   const forceOpen = Boolean(q.trim());
@@ -414,10 +390,10 @@ export default function RolesPage() {
     ? [
         { key: 'dept', label: '부서별' },
         { key: 'person', label: '사람별' },
-        { key: 'me', label: '내 역할' },
+        { key: 'me', label: '내 부서' },
       ]
     : [
-        { key: 'me', label: '내 역할' },
+        { key: 'me', label: '내 부서' },
         { key: 'dept', label: '전체' },
       ];
 
@@ -428,11 +404,7 @@ export default function RolesPage() {
         subtitle={
           depts === null
             ? '불러오는 중…'
-            : `부서 ${totals.depts} · 역할 ${totals.duties}` +
-              /* 진짜 미정(팀장도 없음)이 있으면 그걸 먼저, 없으면 '아직 안 정한 것' 을 적는다.
-                 둘 다 안 적으면 63개가 전부 팀장 몫인 걸 아무 데서도 알 수 없다 */
-              (totals.unassigned ? ` · 미정 ${totals.unassigned}` : '') +
-              (totals.unpicked ? ` · 아직 안 정함 ${totals.unpicked}` : '')
+            : `부서 ${totals.depts} · 역할 ${totals.duties}`
         }
         /* 부서 만들기도 전원에게. 원장만 두면 "이런 칸이 필요한데요" 를 말로 전하고
            기다려야 한다 — 등록이 밀리는 그 문제가 층만 바뀌어 그대로 생긴다 */
@@ -556,76 +528,9 @@ export default function RolesPage() {
                 aria-label="역할 검색"
                 className="field mb-2 lg:mb-0 lg:flex-1"
               />
-              {/* ⚠️ `unassigned`(진짜 미정) 가 아니라 `unpicked`(아직 직접 안 고른 것)로 연다.
-                  부서에 팀장이 있으면 ownerOf 가 팀장을 채워 미정이 0이 되는데, 그러면
-                  역할 63개가 전부 팀장 몫인데도 **채울 문이 안 보였다** */}
-              {totals.unpicked > 0 && (
-                <button
-                  onClick={() => setOnlyOpen((v) => !v)}
-                  aria-pressed={onlyOpen}
-                  className={`tap w-full shrink-0 rounded-xl border px-4 text-[13px] font-bold transition lg:w-auto ${
-                    onlyOpen
-                      ? 'border-amber-300 bg-amber-100 text-amber-800'
-                      : 'border-neutral-200 bg-surface text-neutral-500'
-                  }`}
-                >
-                  아직 안 정한 역할 {totals.unpicked}건{onlyOpen ? ' — 전체 보기' : '만 보기'}
-                </button>
-              )}
-            </div>
+              </div>
 
-            {onlyOpen ? (
-              openList.length === 0 ? (
-                <EmptyState
-                  icon="check"
-                  title="역할마다 담당자를 다 정했어요"
-                  desc="팀장이 대신 맡고 있는 역할이 없습니다."
-                />
-              ) : (
-                <>
-                <p className="mb-2 px-1 text-[12px] leading-relaxed text-neutral-400 lg:max-w-3xl">
-                  아직 <b className="text-neutral-500">사람을 직접 고르지 않은</b> 역할이에요.
-                  지금은 그 부서 <b className="text-neutral-500">팀장</b>이 대신 맡고 있습니다 —
-                  눌러서 실제 담당자를 넣으면 팀장에게서 빠져요.
-                </p>
-                <ul className="card divide-y divide-neutral-100 px-3.5 lg:max-w-3xl">
-                  {openList.map((r) => (
-                    <li key={r.duty.id}>
-                      <button
-                        onClick={() =>
-                          setEditing({
-                            duty: r.duty,
-                            groupId: r.duty.group_id,
-                            label: `${r.deptName} › ${r.groupName}`,
-                            deptName: r.deptName,
-                            groupName: r.groupName,
-                          })
-                        }
-                        className="flex min-h-[44px] w-full items-center gap-2 py-2 text-left"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13.5px] font-semibold text-neutral-800">
-                            {r.duty.name}
-                          </span>
-                          <span className="block truncate text-[11.5px] text-neutral-400">
-                            {r.deptName} › {r.groupName}
-                          </span>
-                        </span>
-                        {r.headId ? (
-                          <span className="chip shrink-0 bg-neutral-100 text-neutral-500">
-                            {nameOf(r.headId)} · 팀장
-                          </span>
-                        ) : (
-                          <span className="chip shrink-0 bg-red-100 text-red-700">미정</span>
-                        )}
-                        <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                </>
-              )
-            ) : shown.length === 0 ? (
+            {shown.length === 0 ? (
               <EmptyState icon="search" title="찾는 역할이 없어요" desc="다른 말로 찾아보세요." />
             ) : (
               /* PC 는 두 칸으로 흘린다 (grid 가 아니라 columns) —
@@ -761,7 +666,6 @@ export default function RolesPage() {
         deptName={editing?.deptName}
         groupName={editing?.groupName}
         duty={editing?.duty ?? null}
-        members={members}
         canDelete={isAdmin}
         onSaved={() => void load()}
       />

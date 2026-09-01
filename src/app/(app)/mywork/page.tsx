@@ -4,9 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
-import { useMembers } from '@/lib/useMembers';
 import { logActivity } from '@/lib/log';
-import { buildOrg, groupRefs, myDuties, type DutyRef } from '@/lib/org';
+import { buildOrg, type DutyRef } from '@/lib/org';
 import { isOverdue, sortTasks, todayStr } from '@/lib/task';
 import { buildEntries, filterEntries, scheduleKindLabel, sortEntries } from '@/lib/schedule';
 import { collabPriorityLabel, sortRequests } from '@/lib/collab';
@@ -53,7 +52,6 @@ interface FileRow {
 export default function MyWorkPage() {
   const { session, isAdmin } = useSession();
   const meId = session?.id ?? '';
-  const { members } = useMembers();
   const toast = useToast();
 
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -63,6 +61,8 @@ export default function MyWorkPage() {
   const [deptNames, setDeptNames] = useState<Record<string, string>>({});
   const [entries, setEntries] = useState<ReturnType<typeof buildEntries>>([]);
   const [files, setFiles] = useState<FileRow[]>([]);
+  /** 역할별 자료 개수 — 줄에 배지로 보여준다 (내 것만이 아니라 그 역할에 쌓인 전부) */
+  const [fileCount, setFileCount] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
   const [actionErr, setActionErr] = useState('');
 
@@ -86,7 +86,7 @@ export default function MyWorkPage() {
     if (!meId) return;
     setError('');
     try {
-      const [taskRes, deptRes, grpRes, dutyRes, helperRes, collabRes, schedRes, smRes, appRes, revRes, dfRes, pfRes] =
+      const [taskRes, deptRes, grpRes, dutyRes, helperRes, collabRes, schedRes, smRes, appRes, revRes, dfRes, pfRes, dcRes] =
         await Promise.all([
           supabase.from('tasks').select('*').eq('assignee_id', meId),
           supabase.from('departments').select('*').order('sort_order'),
@@ -110,6 +110,7 @@ export default function MyWorkPage() {
             .eq('member_id', meId)
             .order('created_at', { ascending: false })
             .limit(10),
+          supabase.from('duty_files').select('duty_id'),
         ]);
 
       setTasks((taskRes.data ?? []) as Task[]);
@@ -123,26 +124,26 @@ export default function MyWorkPage() {
       setTree(built);
       setDeptNames(Object.fromEntries(depts.map((d) => [d.id, d.name])));
 
-      /* 내 부서는 부서업무에서 파생한다 — 팀장이거나 그 부서 역할의 주담당·부담당.
-         새 소속 표를 만들지 않는다 (부서협업·홈·일정과 같은 규칙) */
-      const groupDept = new Map(groups.map((g) => [g.id, g.dept_id]));
-      const myGroups = new Set(duties.filter((d) => d.owner_id === meId).map((d) => d.group_id));
-      for (const h of helpers) {
-        if (h.member_id !== meId) continue;
-        const d = duties.find((x) => x.id === h.duty_id);
-        if (d) myGroups.add(d.group_id);
-      }
+      /* **내 부서 = 내가 팀장인 부서.**
+         역할에 사람을 안 붙이기로 했으니(부서의 역할은 그 부서 팀장이 도맡는다)
+         소속도 팀장으로만 정해진다. 예전엔 주담당·부담당으로도 파생했는데,
+         그러면 한 사람이 여러 부서에 걸쳐 **이 화면이 5화면(4148px)까지 늘어났다.**
+         새 소속 표는 여전히 안 만든다 — `departments.head_id` 를 그대로 쓴다 */
       const mine = new Set(depts.filter((d) => d.head_id === meId).map((d) => d.id));
-      for (const g of myGroups) {
-        const dep = groupDept.get(g);
-        if (dep) mine.add(dep);
-      }
       const myDepts = [...mine];
       setMyDeptIds(myDepts);
 
+      const counted: Record<string, number> = {};
+      for (const r of (dcRes.data ?? []) as { duty_id: string }[]) {
+        counted[r.duty_id] = (counted[r.duty_id] ?? 0) + 1;
+      }
+      setFileCount(counted);
+
       /* ---- 받은 요청 --------------------------------------------------- */
       const reqs = (collabRes.data ?? []) as CollabRequest[];
-      setCollabs(reqs.filter((r) => mine.has(r.to_dept_id)));
+      /* **받은 것만이 아니라 보낸 것도** 싣는다 — 역할에 사람을 안 붙이기로 한 대신
+         "누구와 협업 중인지" 가 보여야 한다고 정했다. 보낸 쪽이 안 보이면 재촉도 못 한다 */
+      setCollabs(reqs.filter((r) => mine.has(r.to_dept_id) || mine.has(r.from_dept_id)));
 
       /* ---- 이번 주 일정 (일정 화면과 같은 계산을 쓴다) ------------------- */
       const apps = (appRes.data ?? []) as AppRow[];
@@ -287,10 +288,12 @@ export default function MyWorkPage() {
 
   /* ------------------------------------------------------------ 역할 */
 
-  const roles = useMemo(() => myDuties(tree, meId), [tree, meId]);
-  const roleCount = roles.own.length + roles.help.length;
-  /** 묶어서 그리면 own/help 가 섞이므로 주담당인지는 id 로 가른다 */
-  const ownIds = useMemo(() => new Set(roles.own.map((r) => r.duty.id)), [roles]);
+  /** 내 부서의 트리 — 이 화면의 주인공이다 (역할은 부서가 도맡는다) */
+  const myDepts = useMemo(
+    () => tree.filter((d) => myDeptIds.includes(d.dept.id)),
+    [tree, myDeptIds],
+  );
+
 
   const sortedCollabs = useMemo(() => sortRequests(collabs, today), [collabs, today]);
 
@@ -389,6 +392,105 @@ export default function MyWorkPage() {
               {chip('오늘', stat.today, 'today')}
             </div>
 
+            {/* ------------------------------------------------------ 내 부서 */}
+            {/* 원장이 말한 구조: *"내 업무를 클릭하면 내 부서의 일을 체계적으로 할 수
+                있는 구조가 펼쳐지면 좋겠음"*. 그래서 접지 않고 **펼친 채로** 그린다 —
+                중분류 › 역할이 바로 보이고, 역할을 누르면 그 자리에서 자료를 올린다.
+
+                역할에는 **사람을 안 붙인다.** 부서의 역할은 그 부서 팀장이 도맡고,
+                손이 더 필요하면 부서협업으로 요청한다 (누구와 협업 중인지는 아래
+                `주고받는 일` 에 보인다) */}
+            {myDepts.length === 0 ? (
+              <section className="card p-3.5">
+                <h2 className="text-[14px] font-bold">내 부서</h2>
+                <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-400">
+                  아직 어느 부서에도 안 묶여 있어요. 원장님이 부서 <b className="text-neutral-500">팀장</b>으로
+                  넣어주면 그 부서의 일이 여기 펼쳐집니다.
+                </p>
+                <Link href="/roles" className="tap -mb-3 mt-1 inline-flex min-h-[44px] items-center text-[12.5px] font-bold text-brand">
+                  부서업무 보기 ›
+                </Link>
+              </section>
+            ) : (
+              myDepts.map((d) => (
+                <section key={d.dept.id} className="card p-3.5">
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <h2 className="text-[15px] font-bold">{d.dept.name}</h2>
+                    <span className="text-[11.5px] text-neutral-400">역할 {d.total}</span>
+                    <Link
+                      href="/roles"
+                      className="tap -my-3 ml-auto flex min-h-[44px] items-center px-1 text-[12px] font-bold text-neutral-400"
+                    >
+                      전체 ›
+                    </Link>
+                  </div>
+                  <p className="mb-2 text-[12px] leading-relaxed text-neutral-400">
+                    역할을 누르면 <b className="text-neutral-500">그 자리에서 자료를 올려요.</b> 올린 파일은
+                    구글 드라이브 <code className="text-neutral-500">업무분장/{d.dept.name}</code> 에도 들어갑니다.
+                  </p>
+
+                  <div className="divide-y divide-neutral-100">
+                    {d.groups.map((g) => (
+                      <div key={g.group.id} className="py-2 first:pt-0 last:pb-0">
+                        <p className="mb-0.5 text-[11px] font-bold tracking-wide text-neutral-400">
+                          {g.group.name}
+                        </p>
+                        <ul>
+                          {g.duties.map((n) => {
+                            const ref: DutyRef = {
+                              duty: n.duty,
+                              deptName: d.dept.name,
+                              groupName: g.group.name,
+                            };
+                            const files = fileCount[n.duty.id] ?? 0;
+                            return (
+                              <li key={n.duty.id} className="flex items-center gap-1">
+                                <button
+                                  onClick={() => setOpenDuty(ref)}
+                                  className="tap flex min-h-[44px] flex-1 items-center gap-2 py-1.5 text-left"
+                                >
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[14px] font-bold">{n.duty.name}</span>
+                                    {n.duty.note && (
+                                      <span className="block truncate text-[11.5px] text-neutral-400">
+                                        {n.duty.note}
+                                      </span>
+                                    )}
+                                  </span>
+                                  {/* 자료가 있으면 개수를, 없으면 아무것도 안 그린다 —
+                                      '0개' 를 63줄에 붙이면 자리만 먹는다 */}
+                                  {files > 0 && (
+                                    <span className="chip shrink-0 bg-neutral-100 text-neutral-500">
+                                      자료 {files}
+                                    </span>
+                                  )}
+                                  <Icon
+                                    name="chevronDown"
+                                    size={14}
+                                    className="-rotate-90 shrink-0 text-neutral-300"
+                                  />
+                                </button>
+                                {/* 바로가기는 버튼 밖 — button 안에 a 를 넣으면 안 되는 중첩이다 */}
+                                {n.duty.link && (
+                                  <Link
+                                    href={n.duty.link}
+                                    aria-label={`${n.duty.name} — 이 일로 바로 가기`}
+                                    className="tap -my-3 flex min-h-[44px] w-9 shrink-0 items-center justify-center text-brand"
+                                  >
+                                    <Icon name="external" size={14} />
+                                  </Link>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))
+            )}
+
             {/* ---------------------------------------------------- 내 할 일 */}
             <Collapsible
               id="mywork.tasks"
@@ -417,90 +519,6 @@ export default function MyWorkPage() {
                   </summary>
                   <ul className="divide-y divide-neutral-100">{doneTasks.slice(0, 20).map(taskRow)}</ul>
                 </details>
-              )}
-            </Collapsible>
-
-            {/* ------------------------------------------------------ 내 역할 */}
-            <Collapsible
-              id="mywork.roles"
-              title="내 역할"
-              badge={
-                roleCount > 0 ? (
-                  <span className="chip bg-neutral-100 text-neutral-600">{roleCount}건</span>
-                ) : null
-              }
-              right={
-                <Link href="/roles" className="tap -my-3 px-1 text-[12px] font-bold text-neutral-400">
-                  전체 ›
-                </Link>
-              }
-            >
-              {roleCount === 0 ? (
-                <EmptyState
-                  icon="target"
-                  title="아직 맡은 역할이 없어요"
-                  desc="부서업무에서 역할을 눌러 주담당에 내 이름을 넣으면 여기 모여요."
-                />
-              ) : (
-                <>
-                  <p className="mb-1.5 text-[12px] text-neutral-400">
-                    역할을 누르면 <b className="text-neutral-500">그 자리에서 자료를 올릴 수 있어요.</b>{' '}
-                    올린 파일은 구글 드라이브에도 한 벌 들어갑니다.
-                  </p>
-                  {/* 부서 › 중분류로 묶어 머리글에 한 번만 적는다 — 줄마다 붙이면
-                      역할이 여럿일 때 같은 글자가 반복돼 이름이 안 읽힌다 */}
-                  <div className="divide-y divide-neutral-100">
-                    {groupRefs([...roles.own, ...roles.help]).map((g) => (
-                      <div key={g.path} className="py-2 first:pt-0 last:pb-0">
-                        <p className="mb-0.5 text-[11px] font-bold tracking-wide text-neutral-400">{g.path}</p>
-                        <ul>
-                          {g.items.map((r) => {
-                            const own = ownIds.has(r.duty.id);
-                            return (
-                              <li key={r.duty.id} className="flex items-center gap-1">
-                                <button
-                                  onClick={() => setOpenDuty(r)}
-                                  className="tap flex min-h-[44px] flex-1 items-center gap-2 py-1.5 text-left"
-                                >
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-[14px] font-bold">{r.duty.name}</span>
-                                    {r.duty.note && (
-                                      <span className="block truncate text-[11.5px] text-neutral-400">
-                                        {r.duty.note}
-                                      </span>
-                                    )}
-                                  </span>
-                                  <span
-                                    className={`chip shrink-0 ${
-                                      own ? 'bg-brand-100 text-brand-700' : 'bg-neutral-100 text-neutral-500'
-                                    }`}
-                                  >
-                                    {own ? '주담당' : '부담당'}
-                                  </span>
-                                  <Icon
-                                    name="chevronDown"
-                                    size={14}
-                                    className="-rotate-90 shrink-0 text-neutral-300"
-                                  />
-                                </button>
-                                {/* 바로가기는 버튼 밖 — button 안에 a 를 넣으면 안 되는 중첩이다 */}
-                                {r.duty.link && (
-                                  <Link
-                                    href={r.duty.link}
-                                    aria-label={`${r.duty.name} — 이 일로 바로 가기`}
-                                    className="tap -my-3 flex min-h-[44px] w-9 shrink-0 items-center justify-center text-brand"
-                                  >
-                                    <Icon name="external" size={14} />
-                                  </Link>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </>
               )}
             </Collapsible>
 
@@ -546,7 +564,7 @@ export default function MyWorkPage() {
             {(sortedCollabs.length > 0 || myDeptIds.length > 0) && (
               <Collapsible
                 id="mywork.collab"
-                title="받은 요청"
+                title="주고받는 일"
                 badge={
                   sortedCollabs.length > 0 ? (
                     <span className="chip bg-neutral-100 text-neutral-600">{sortedCollabs.length}건</span>
@@ -559,7 +577,7 @@ export default function MyWorkPage() {
                 }
               >
                 {sortedCollabs.length === 0 ? (
-                  <EmptyState icon="users" title="우리 부서가 받은 요청이 없어요" />
+                  <EmptyState icon="users" title="지금 주고받는 일이 없어요" />
                 ) : (
                   <ul className="divide-y divide-neutral-100">
                     {sortedCollabs.map((r) => (
@@ -570,7 +588,16 @@ export default function MyWorkPage() {
                               {r.project || r.body.slice(0, 40)}
                             </span>
                             <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-neutral-400">
-                              <span>{deptNames[r.from_dept_id] ?? '부서'} →</span>
+                              {/* 누구와 하는 일인지 — 받은 것이면 보낸 부서, 보낸 것이면 받는 부서 */}
+                              {myDeptIds.includes(r.to_dept_id) ? (
+                                <span>
+                                  <b className="text-neutral-500">{deptNames[r.from_dept_id] ?? '부서'}</b> 에서 받음
+                                </span>
+                              ) : (
+                                <span>
+                                  <b className="text-neutral-500">{deptNames[r.to_dept_id] ?? '부서'}</b> 에 보냄
+                                </span>
+                              )}
                               <span>{collabPriorityLabel(r.priority)}</span>
                               {r.due_date && (
                                 <span className={ddayClass(r.due_date)}>
@@ -652,7 +679,6 @@ export default function MyWorkPage() {
           deptName={openDuty.deptName}
           groupName={openDuty.groupName}
           duty={openDuty.duty}
-          members={members}
           canDelete={isAdmin}
           onSaved={() => {
             setOpenDuty(null);

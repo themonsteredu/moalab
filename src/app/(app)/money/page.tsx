@@ -10,7 +10,7 @@ import { Icon, type IconName } from '@/components/Icon';
 import { ErrorBanner, Skeleton } from '@/components/ui';
 
 /**
- * 돈 — 원가 · 수익배분 · 지출결의서로 들어가는 문 하나.
+ * 회계 — 원가 · 수익배분 · 지출결의서로 들어가는 문 하나.
  *
  * **메뉴만 합친 것이다.** 표도 계산도 그대로 셋으로 나뉘어 있다 —
  * 원가(`cost_sheets`)는 *앞으로 얼마 들까*(계획)이고 지출(`expenses`)은
@@ -100,7 +100,7 @@ export default function MoneyPage() {
 
   return (
     <div>
-      <PageHeader title="돈" subtitle="원가 · 수익배분 · 지출결의서" />
+      <PageHeader title="회계" subtitle="원가 · 수익배분 · 지출결의서" />
 
       <div className="mx-auto max-w-3xl px-4 py-4">
         {error && (

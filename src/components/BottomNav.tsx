@@ -83,7 +83,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: '/roles', label: '부서업무', icon: 'target' },
       // 원가·수익배분·지출결의서는 `돈` 한 문 뒤에 있다. 표도 계산도 그대로 따로다
-      { href: '/money', label: '돈', icon: 'won' },
+      { href: '/money', label: '회계', icon: 'won' },
       { href: '/schedule', label: '일정', icon: 'calendar' },
     ],
   },
