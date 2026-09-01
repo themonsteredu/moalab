@@ -431,6 +431,26 @@ export function DutyTable({
             className="field pl-9"
           />
         </div>
+        {/* 인쇄·CSV·칸 고치기 — 셋 다 아이콘 하나짜리다. 라벨을 달면 폰에서 줄이
+            하나 더 생기는데, 매일 쓰는 건 검색이라 검색이 폭을 가져야 한다 */}
+        <a
+          href={`/print/duty/${dutyId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="이 목록 인쇄 / 엑셀로 받기"
+          className="tap flex w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-300 text-neutral-500"
+        >
+          <Icon name="printer" size={15} />
+        </a>
+        {/* 서버가 내려준다 — 브라우저에서 Blob 으로 만들면 **파일 이름에 한글이 있을 때
+            크로미움이 이름을 통째로 버리고 `download` 로 저장한다** (점검에서 잡았다) */}
+        <a
+          href={`/api/duty/csv?dutyId=${dutyId}`}
+          aria-label="엑셀(CSV)로 받기"
+          className="tap flex w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-300 text-neutral-500"
+        >
+          <Icon name="download" size={15} />
+        </a>
         <button
           onClick={openStruct}
           aria-label="표 칸 고치기"

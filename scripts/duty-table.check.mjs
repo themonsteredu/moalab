@@ -50,7 +50,9 @@ const db = {
      **둘을 다 재야 한다** — 갈래에 따라 무엇이 펼쳐지는지가 이 화면의 전부다 */
   duties: [
     { id: 'u1', group_id: 'g1', name: '신규 기관 발굴', note: null, owner_id: ME, link: null, sort_order: 1, created_at: '' },
-    { id: 'u2', group_id: 'g2', name: '소개자료 관리', note: null, owner_id: ME, link: null, sort_order: 2, created_at: '' },
+    /* 아무 규칙에도 안 걸리는 이름이라 **업로드만** 이 된다. 규칙에 걸리는 이름을 쓰면
+       (`소개자료 관리` 처럼) 표 갈래로 잡혀서 이 절이 통째로 헛돈다 */
+    { id: 'u2', group_id: 'g2', name: '외부 자문 회의록', note: null, owner_id: ME, link: null, sort_order: 2, created_at: '' },
   ],
   duty_helpers: [],
   duty_files: [],
@@ -127,7 +129,7 @@ const ok = (label, cond, extra = '') => {
 
 const exe = process.env.PLAYWRIGHT_CHROMIUM ?? '/opt/pw-browsers/chromium';
 const browser = await chromium.launch(existsSync(exe) ? { executablePath: exe } : {});
-const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, acceptDownloads: true });
 await ctx.addInitScript((s) => {
   window.localStorage.setItem('moalab.session.v1', JSON.stringify(s));
 }, { id: ME, name: '강양희', role: 'admin', expiresAt: Date.now() + 30 * 864e5 });
@@ -214,12 +216,49 @@ ok('표는 접힌 채로 시작한다', !(await page.getByText('학교·기관 �
 await page.getByRole('button', { name: /목록/ }).first().click();
 await page.waitForTimeout(600);
 ok('펼치면 양식 고르는 자리가 있다', await page.getByText('학교·기관 목록').first().isVisible());
-await page.getByRole('button', { name: /교구·재료 목록/ }).click();
+await page.getByRole('button', { name: /재료·교구 재고/ }).click();
 await page.waitForTimeout(900);
-ok('고른 양식의 열이 실제로 만들어진다', db.duty_columns.filter((c) => c.duty_id === 'u2').length === 6);
+ok('고른 양식의 열이 실제로 만들어진다', db.duty_columns.filter((c) => c.duty_id === 'u2').length === 10,
+  `${db.duty_columns.filter((c) => c.duty_id === 'u2').length}칸`);
 ok('첫 칸이 제목이 될 칸이다', db.duty_columns.find((c) => c.duty_id === 'u2' && c.sort_order === 1)?.name === '품목');
 
+console.log('\n[인쇄·엑셀로 받기]');
+await page.goto(`${BASE}/roles/u1`, { waitUntil: 'commit' });
+await page.waitForTimeout(2500);
+{
+  const link = page.getByRole('link', { name: /인쇄/ });
+  ok('인쇄 버튼이 있다', await link.isVisible());
+  ok('새 창으로 연다 (보던 목록을 잃지 않게)', (await link.getAttribute('target')) === '_blank');
+  ok('그 역할의 인쇄 주소로 간다', (await link.getAttribute('href')) === '/roles/u1'.replace('/roles/', '/print/duty/'));
+
+  /* ⚠️ **CSV 는 서버가 내려준다.** 브라우저에서 Blob 으로 만들면 크로미움이
+     파일 이름에 한글이 있을 때 그 이름을 통째로 버리고 `download`(확장자도 없이)로
+     저장한다 — 원장님이 엑셀에서 못 여는 파일을 받는다. 실제로 여기서 잡아 고쳤다.
+     헤더를 짓는 계산(`csvDisposition`)과 CSV 내용은 duty-table.test.mjs 가 지킨다.
+     여기서는 **화면이 그 길로 이어지는지**만 본다 — 이 점검은 가짜 DB 로 도는데
+     라우트는 서버에서 진짜 DB 를 보므로 여기서 끝까지 부를 수가 없다 */
+  const csvLink = page.getByRole('link', { name: '엑셀(CSV)로 받기' });
+  ok('엑셀로 받기가 링크다 (Blob 이 아니라 서버가 내려준다)', await csvLink.isVisible());
+  ok('그 역할의 CSV 주소로 간다', (await csvLink.getAttribute('href')) === '/api/duty/csv?dutyId=u1');
+  ok('새 창을 안 연다 (내려받기라 화면이 그대로 있어야 한다)', (await csvLink.getAttribute('target')) === null);
+}
+
+console.log('\n[인쇄 화면]');
+await page.goto(`${BASE}/print/duty/u1`, { waitUntil: 'commit' });
+await page.waitForTimeout(2500);
+{
+  ok('역할 이름이 제목이다', await page.getByRole('heading', { name: '신규 기관 발굴' }).isVisible());
+  ok('부서 › 중분류가 적힌다', await page.getByText('영업마케팅부 › 학교·기관 영업').isVisible());
+  const cells = await page.locator('table tbody tr td').allInnerTexts();
+  ok('표로 그린다', cells.includes('광주중학교(본교)'), cells.slice(0, 6).join(' | '));
+  ok('번호가 붙는다 (종이에서 줄을 세려면 필요하다)', cells[0] === '1');
+  ok('가로 인쇄로 정해둔다', (await page.locator('style').allInnerTexts()).join('').includes('A4 landscape'));
+  ok('조작 줄은 인쇄에서 빠진다', await page.locator('.no-print').first().isVisible());
+}
+
 console.log('\n[폰 375px]');
+await page.goto(`${BASE}/roles/u1`, { waitUntil: 'commit' });
+await page.waitForTimeout(2000);
 const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
 ok('가로 스크롤이 없다', !wide);
 const small = await page.evaluate(() =>
