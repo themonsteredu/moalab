@@ -28,7 +28,18 @@ const SHOT_DIR = process.env.MEASURE_SHOT ?? '';
 
 const ME = '00000000-0000-0000-0000-000000000001';
 const M = (n) => `00000000-0000-0000-0000-00000000000${n}`;
-const TODAY = '2026-08-21';
+/**
+ * ⚠️ **날짜를 박아두지 않는다.** 달력은 늘 이번 달로 열리므로 고정 날짜를 쓰면
+ * 그 달이 지나는 순간 일정·업무·지출이 통째로 안 뜨고 **텅 빈 화면을 재게 된다** —
+ * 숫자는 짧아지는데 그건 좋아진 게 아니다 (`schedule-ui.check.mjs` 도 같은 이유로 고쳤다).
+ * `off` 는 달 넘김 (1 이면 다음 달).
+ */
+const NOW = new Date();
+const d = (day, off = 0) => {
+  const x = new Date(NOW.getFullYear(), NOW.getMonth() + off, day);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+};
+const TODAY = d(NOW.getDate());
 
 /* ---------------------------------------------------------------- 가짜 데이터
    숫자는 실제 DB 를 세어서 맞췄다. 규모가 다르면 재는 의미가 없다. */
@@ -61,7 +72,7 @@ const APPS = Array.from({ length: 33 }, (_, i) => ({
   creator_id: MEMBERS[i % 5].id,
   deploy_url: 'https://example.com',
   repo_url: null,
-  due_date: i % 3 === 0 ? '2026-08-28' : null,
+  due_date: i % 3 === 0 ? d(28) : null,
   archived: false,
   plan_body: null,
   created_at: '2026-07-10T00:00:00Z',
@@ -89,11 +100,11 @@ const REVIEWERS = APPS.slice(0, 20).flatMap((a, i) => [
 
 const TASKS = [
   ['강사 관리 메뉴얼 만들기', null, null, 'todo'],
-  ['팜플렛 제작', M(3), '2026-08-19', 'todo'],
+  ['팜플렛 제작', M(3), d(19), 'todo'],
   ['강사 계약서 준비하기', M(2), TODAY, 'todo'],
   ['사이트 구축', M(4), null, 'doing'],
   ['블로그 포스팅', null, null, 'todo'],
-  ['8월 지출 정리', ME, '2026-08-20', 'done'],
+  ['8월 지출 정리', ME, d(20), 'done'],
 ].map(([title, a, d, st], i) => ({
   id: `t${i}`, title, detail: null, assignee_id: a, due_date: d, state: st,
   app_id: null, batch_id: 'b1', batch_title: '말로 넣기 — 8월 21일 (금)',
@@ -109,13 +120,13 @@ const NOTICES = [{
 
 /* 일정 — 출강 3 · 회의 1. 출강은 학교·프로그램·인원·타임까지 채워서 카드가 실제 높이로 그려지게 한다 */
 const SCHEDULES = [
-  { id: 's0', kind: 'meeting', title: '팀 회의', date: '2026-08-25', start_time: '10:00:00', end_time: null,
+  { id: 's0', kind: 'meeting', title: '팀 회의', date: d(25), start_time: '10:00:00', end_time: null,
     place: '사무실', memo: null, app_id: null, school: null, headcount: null, periods: null },
-  { id: 's1', kind: 'class', title: '모아초등학교 · AI 그림 수업 1', date: '2026-08-27', start_time: '09:00:00',
+  { id: 's1', kind: 'class', title: '모아초등학교 · AI 그림 수업 1', date: d(27), start_time: '09:00:00',
     end_time: '12:00:00', place: '3층 과학실', memo: null, app_id: 'app0', school: '모아초등학교', headcount: 24, periods: 3 },
-  { id: 's2', kind: 'class', title: '한빛중학교 · 드론 수업 1', date: '2026-08-28', start_time: '13:00:00',
+  { id: 's2', kind: 'class', title: '한빛중학교 · 드론 수업 1', date: d(28), start_time: '13:00:00',
     end_time: null, place: null, memo: null, app_id: 'app3', school: '한빛중학교', headcount: 18, periods: 2 },
-  { id: 's3', kind: 'class', title: '새샘초등학교 · 코딩 수업 1', date: '2026-09-01', start_time: '10:00:00',
+  { id: 's3', kind: 'class', title: '새샘초등학교 · 코딩 수업 1', date: d(1, 1), start_time: '10:00:00',
     end_time: null, place: null, memo: null, app_id: 'app6', school: '새샘초등학교', headcount: 20, periods: null },
 ].map((s) => ({ ...s, created_at: '2026-08-01T00:00:00Z' }));
 
@@ -127,7 +138,7 @@ const SCHEDULE_MEMBERS = [
 ];
 
 const EXPENSES = [{
-  id: 'e1', spent_on: '2026-08-18', amount: 45000, category: '재료비',
+  id: 'e1', spent_on: d(18), amount: 45000, category: '재료비',
   purpose: '색종이·풀 구매', member_id: ME, app_id: null, school: null, memo: null,
   approved: false, created_at: '2026-08-18T00:00:00Z', updated_at: '2026-08-18T00:00:00Z',
 }];
@@ -154,14 +165,47 @@ const DUTIES = Array.from({ length: 48 }, (_, i) => ({
   note: '올라온 지출을 확인한다', owner_id: i % 6 === 0 ? ME : null,
   sort_order: i, created_at: '2026-08-01T00:00:00Z',
 }));
+/* 표가 주인공인 역할 하나 — 원장이 예로 든 '학교기관관리' 다.
+   위 여덟 이름은 전부 앱에 자리가 있는 일(지출·계약서…)이라 표가 접힌 채로 열려서
+   그것만 재면 '늘 한 화면' 이라는 거짓 결과가 나온다 */
+DUTIES.push({
+  id: 'u48', group_id: 'g0', name: '신규 기관 발굴',
+  note: '교육청·진로교육원·기관 담당자 접촉', owner_id: ME, link: null,
+  sort_order: 48, created_at: '2026-08-01T00:00:00Z',
+});
+
+/* 역할에 붙는 표 — `학교·기관 목록` 양식 그대로. u0(내가 주담당인 역할)에 매단다.
+   ⚠️ **줄이 있는 상태로 재야 한다.** 빈 표는 늘 짧아서 '한 화면' 이라는 거짓 결과가 나온다 */
+const DUTY_COLUMNS = [
+  ['학교·기관', 'text', null], ['담당 선생님', 'text', null], ['연락처', 'text', null],
+  ['진행 상태', 'select', ['연락 전', '연락함', '제안서 보냄', '미팅', '계약', '보류']],
+  ['다음 할 일', 'text', null], ['다음 연락일', 'date', null], ['메모', 'text', null],
+].map(([name, kind, options], i) => ({
+  id: `dc${i}`, duty_id: 'u48', name, kind, options, sort_order: i + 1,
+  created_at: '2026-08-01T00:00:00Z',
+}));
+const DUTY_STATES = ['연락 전', '연락함', '제안서 보냄', '미팅', '계약'];
+const DUTY_ROWS = Array.from({ length: 14 }, (_, i) => ({
+  id: `dr${i}`, duty_id: 'u48', sort_order: i, updated_by: ME,
+  created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-20T00:00:00Z',
+  cells: {
+    dc0: `${['광주', '무등', '수완', '첨단', '봉선'][i % 5]}${i % 2 ? '중학교' : '초등학교'}`,
+    dc1: `${['김', '이', '박', '최'][i % 4]}선생님`,
+    dc2: `010-0000-00${String(i).padStart(2, '0')}`,
+    dc3: DUTY_STATES[i % 5],
+    dc4: '제안서 보내고 연락하기',
+    dc5: d(10, 1),
+    dc6: i % 3 === 0 ? '작년에 한 번 나갔던 곳' : null,
+  },
+}));
 
 /* 부서 협업 요청 — 기한이 달력에 마감으로 얹힌다 (①→② 연결) */
 const COLLABS = [
   { id: 'cr1', from_dept_id: 'd3', to_dept_id: 'd2', project: '○○중 3학년 4차시',
-    body: '계약이 확정됐어요. 9/20까지 교안이 필요합니다.', due_date: '2026-08-30',
+    body: '계약이 확정됐어요. 9/20까지 교안이 필요합니다.', due_date: d(30),
     priority: 'high', status: 'requested' },
   { id: 'cr2', from_dept_id: 'd2', to_dept_id: 'd4', project: '드론 교구 확인',
-    body: '드론 배터리 수량 확인 부탁드려요.', due_date: '2026-09-03',
+    body: '드론 배터리 수량 확인 부탁드려요.', due_date: d(3, 1),
     priority: 'normal', status: 'doing' },
 ].map((r) => ({ ...r, created_by: ME, accepted_by: null, done_at: null,
   created_at: '2026-08-20T00:00:00Z', updated_at: '2026-08-20T00:00:00Z' }));
@@ -182,9 +226,17 @@ function rowsFor(url) {
     schedules: SCHEDULES, schedule_members: SCHEDULE_MEMBERS,
     expenses: EXPENSES, cost_sheets: COST_SHEETS,
     departments: DEPTS, duty_groups: DUTY_GROUPS, duties: DUTIES, duty_helpers: [],
+    duty_files: [], duty_columns: DUTY_COLUMNS, duty_rows: DUTY_ROWS,
     collab_requests: COLLABS, collab_comments: [],
   };
-  return map[table] ?? [];
+  let rows = map[table] ?? [];
+  /* `id=eq.x` · `duty_id=eq.x` 를 실제로 걸러준다.
+     ⚠️ 안 거르면 `/roles/[dutyId]` 처럼 한 줄을 집는 화면이 48줄을 통째로 받아
+     `maybeSingle()` 에서 죽는다 — 그러면 그 화면은 영영 못 잰다 */
+  for (const [, key, val] of url.matchAll(/[?&]([a-z_]+)=eq\.([^&]+)/g)) {
+    rows = rows.filter((r) => String(r[key]) === decodeURIComponent(val));
+  }
+  return rows;
 }
 
 /* -------------------------------------------------------------------- 화면 */
@@ -198,6 +250,7 @@ const PAGES = [
   ['/apps', '프로그램계획'],
   ['/verify', '프로그램검증'],
   ['/roles', '부서업무'],
+  ['/roles/u48', '역할 한 장(표)'],
   ['/mock', '모의수업'],
   ['/training', '강사양성'],
   ['/money', '돈'],
@@ -226,13 +279,16 @@ await ctx.addInitScript((s) => {
   window.localStorage.setItem('moalab.session.v1', JSON.stringify(s));
 }, { id: ME, name: '강양희', role: ROLE, expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 });
 
-await ctx.route('**/rest/v1/**', (route) =>
-  route.fulfill({
+await ctx.route('**/rest/v1/**', (route) => {
+  const rows = rowsFor(route.request().url());
+  // single()·maybeSingle() 은 배열이 아니라 객체를 기대한다 (Accept 헤더로 알 수 있다)
+  const one = (route.request().headers()['accept'] ?? '').includes('vnd.pgrst.object');
+  return route.fulfill({
     status: 200,
     headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
-    body: JSON.stringify(rowsFor(route.request().url())),
-  }),
-);
+    body: JSON.stringify(one ? rows[0] ?? null : rows),
+  });
+});
 
 const page = await ctx.newPage();
 const rows = [];

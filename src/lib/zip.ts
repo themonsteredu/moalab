@@ -1,5 +1,7 @@
 'use client';
 
+import { safeFileName as safeName } from './dutyTable';
+
 /**
  * 파일 여러 개를 zip 으로 묶어 내려받는다. jszip 은 필요할 때만 불러온다.
  * (사진·문서 첨부 등 공용)
@@ -43,9 +45,15 @@ export async function downloadFilesAsZip(
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-/** 파일명에 못 쓰는 글자 정리 */
+/**
+ * 파일명에 못 쓰는 글자 정리.
+ *
+ * ⚠️ **`dutyTable.ts` 것을 그대로 쓴다.** 같은 이름의 함수를 두 벌 두면 한쪽만
+ * 고쳐져서 화면마다 파일 이름이 달라진다 (실제로 두 벌이 됐다가 합쳤다).
+ * 여기서 다른 건 못 쓸 이름일 때의 기본값뿐이다.
+ */
 export function safeFileName(s: string): string {
-  return s.replace(/[\\/:*?"<>|]/g, '_').trim() || 'photos';
+  return safeName(s, 'photos');
 }
 
 /** 예전 이름 — 사진 화면들이 쓰고 있다 */

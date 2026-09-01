@@ -18,6 +18,16 @@
 import { existsSync } from 'node:fs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
+
+/**
+ * ⚠️ **날짜를 박아두지 않는다.** 달력은 늘 이번 달로 열리므로, 고정 날짜를 쓰면
+ * 그 달이 지나는 순간 화면에 아무것도 안 뜨고 **네 건이 통째로 실패한다**
+ * (실제로 2026-08 로 박아뒀다가 9월이 되자 그렇게 됐다).
+ * 그러니 이번 달의 며칠로 만든다 — 달을 넘기지 않게 10일 안쪽만 쓴다.
+ */
+const NOW = new Date();
+const d = (day) =>
+  `${NOW.getFullYear()}-${String(NOW.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 const ME = '00000000-0000-0000-0000-000000000001';
 const M = (n) => `00000000-0000-0000-0000-00000000000${n}`;
 
@@ -28,7 +38,7 @@ const MEMBERS = [
 ];
 const APPS = [
   { id: 'app0', title_ko: '제과제빵', slug: 'a0', topic_id: null, topic: null, url: null, purpose: null,
-    target_grade: null, creator_id: ME, due_date: '2026-08-28', current_round: 1, status: 'pending',
+    target_grade: null, creator_id: ME, due_date: d(8), current_round: 1, status: 'pending',
     archived: false, plan_body: null, created_at: '2026-08-01T00:00:00Z' },
 ];
 const DEPTS = [
@@ -37,11 +47,11 @@ const DEPTS = [
 ];
 /* 출강 셋 — 내 것 1, 남의 것 2. '내 일정' 과 '전체' 가 실제로 갈리는지 보려면 필요하다 */
 const SCHEDULES = [
-  { id: 's1', kind: 'class', title: '모아초 · 제과제빵', date: '2026-08-27', start_time: '09:00:00',
+  { id: 's1', kind: 'class', title: '모아초 · 제과제빵', date: d(7), start_time: '09:00:00',
     end_time: '12:00:00', place: null, memo: null, app_id: 'app0', school: '모아초', headcount: 24, periods: 3 },
-  { id: 's2', kind: 'class', title: '한빛중 · 제과제빵', date: '2026-08-28', start_time: '13:00:00',
+  { id: 's2', kind: 'class', title: '한빛중 · 제과제빵', date: d(8), start_time: '13:00:00',
     end_time: null, place: null, memo: null, app_id: 'app0', school: '한빛중', headcount: 18, periods: 2 },
-  { id: 's3', kind: 'meeting', title: '팀 회의', date: '2026-08-25', start_time: '10:00:00',
+  { id: 's3', kind: 'meeting', title: '팀 회의', date: d(5), start_time: '10:00:00',
     end_time: null, place: '사무실', memo: null, app_id: null, school: null, headcount: null, periods: null },
 ].map((s) => ({ ...s, created_at: '2026-08-01T00:00:00Z' }));
 
@@ -53,7 +63,7 @@ const SCHEDULE_MEMBERS = [
 /* 기획개발부(d1)가 받은 요청 — 부서별 보기에서 마감으로 떠야 한다 */
 const COLLABS = [
   { id: 'cr1', from_dept_id: 'd0', to_dept_id: 'd1', project: '○○중 3학년 4차시',
-    body: '9/20까지 교안이 필요합니다', due_date: '2026-08-26', priority: 'high', status: 'requested',
+    body: '교안이 필요합니다', due_date: d(6), priority: 'high', status: 'requested',
     created_by: ME, accepted_by: null, done_at: null,
     created_at: '2026-08-20T00:00:00Z', updated_at: '2026-08-20T00:00:00Z' },
 ];
@@ -134,7 +144,8 @@ ok(
 
 await page.getByRole('button', { name: '전체', exact: true }).click();
 await page.waitForTimeout(300);
-const settle = await page.getByText('8월 출강 정산').first().isVisible();
+// 달 이름도 박아두지 않는다 — 위 d() 와 같은 이유다
+const settle = await page.getByText(`${NOW.getMonth() + 1}월 출강 정산`).first().isVisible();
 ok('이번 달 출강 정산 카드가 있다', settle);
 
 /* ------------------------------------------------------------------ 폼 */

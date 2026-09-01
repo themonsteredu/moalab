@@ -687,6 +687,49 @@ export interface DutyHelper {
   member_id: string;
 }
 
+/* ------------------------------------------------ 역할마다 붙는 표(문서 양식)
+   원장: *"각각 해야 할 일에 맞는 문서 양식이 구현이 되어 있어야 다들 일하기
+   편할 것 같음. 예를 들어 학교기관관리 → 리스트 업하고 관리하는 페이지."*
+
+   **역할이 63개라 화면을 63개 만들 수는 없다.** 그래서 프로그램을 코드 수정 없이
+   데이터로 늘리는 것과 같은 방식을 쓴다 — **열(칼럼)을 데이터로 둔다.**
+   새 역할에 표를 붙일 때 고칠 파일은 없다.
+
+   ⚠️ `duty_files`(만든 자료)와 축이 다르다. 저쪽은 *결과물 파일*이고
+   이쪽은 *계속 고쳐가며 관리하는 목록*이다 (학교 명단·교구 재고처럼).
+   합치면 파일 목록에 줄이 섞이고 검색도 못 한다. */
+
+/** 열 하나 — 이름과 갈래만 있으면 된다 */
+export interface DutyColumn {
+  id: string;
+  duty_id: string;
+  name: string;
+  /** 'text' | 'number' | 'date' | 'select' | 'check' — 값 검사는 dutyTable.ts 의 safeKind */
+  kind: string;
+  /** 고르기 칸의 보기들. 다른 갈래면 null */
+  options: string[] | null;
+  sort_order: number;
+  created_at: string;
+}
+
+/**
+ * 줄 하나. 값은 **열 id 를 열쇠로 한 jsonb**(`cells`) 다.
+ *
+ * 열마다 진짜 컬럼을 만들면 열을 더할 때마다 `alter table` 이 필요하다 —
+ * "코드를 안 건드린다" 를 지키려면 스키마도 안 건드려야 한다.
+ */
+export interface DutyRow {
+  id: string;
+  duty_id: string;
+  /** ⚠️ 이름이 `values` 가 아니다 — SQL 예약어라 따옴표 없이는 컬럼을 만들 수 없다 */
+  cells: Record<string, string | number | boolean | null>;
+  sort_order: number;
+  /** 마지막으로 고친 사람 — 여럿이 같은 목록을 만지므로 누가 바꿨는지 남는다 */
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /* ------------------------------------------------- 부서 간 협업 요청 / 지시
    업무(tasks)와 축이 다르다 — 저쪽은 1건 × 담당자 1명이고,
    이쪽은 **부서 → 부서**라 받아들일지 말지가 상대에게 있다. */
