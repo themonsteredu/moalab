@@ -232,15 +232,18 @@ const RULES: { has: string[]; plan: DutyPlan }[] = [
   { has: ['원가', '판매가'], plan: { mode: 'app', href: '/cost', why: '원가는 원가표에서 계산해요. 여기에 또 적으면 숫자가 두 벌이 돼요.' } },
   { has: ['지출', '영수증', '정산자료'], plan: { mode: 'app', href: '/expense', why: '쓴 돈과 영수증은 지출결의서에 쌓여요.' } },
   { has: ['세금계산서', '매출', '수익'], plan: { mode: 'app', href: '/revenue', why: '달별 수금·배분은 회계에 있어요.' } },
-  { has: ['웹앱 제작', '배포'], plan: { mode: 'app', href: '/apps', why: '프로그램 페이지에 링크·상태가 이미 있어요.' } },
+  /* ⚠️ **중분류까지 같이 보므로, 좁은 말이 먼저 와야 한다.** `웹앱 제작` 을 위에 두면
+     중분류가 `AI 웹앱 제작` 인 것이 통째로 /apps 로 끌려가 `AI 키 관리` 까지
+     프로그램 페이지로 갔다 — 실제 역할 45개로 돌려보고 잡은 것이다 */
+  { has: ['계정', '권한', '멤버', '강사 등록', 'PIN'], plan: { mode: 'app', href: '/admin', why: '멤버와 PIN 은 관리 화면에서 바꿔요.' } },
+  { has: ['AI 키', 'API'], plan: { mode: 'app', href: '/admin', why: 'AI 키와 모델은 관리 화면에 있어요.' } },
   { has: ['검증'], plan: { mode: 'app', href: '/verify', why: '지적과 답변은 검증 화면에 쌓여요.' } },
-  { has: ['강의계획서', '교육안', '활동지', '샘플'], plan: { mode: 'app', href: '/apps', why: '프로그램 페이지의 문서 첨부에 올리면 판까지 쌓여요.' } },
+  { has: ['웹앱 제작', '배포'], plan: { mode: 'app', href: '/apps', why: '프로그램 페이지에 링크·상태가 이미 있어요.' } },
+  { has: ['강의계획서', '교육안', '활동지', '샘플', '학년', '차시'], plan: { mode: 'app', href: '/apps', why: '프로그램 페이지의 문서 첨부에 올리면 판까지 쌓여요.' } },
   { has: ['수업 사진', '사진 정리', '촬영'], plan: { mode: 'app', href: '/gallery', why: '수업 사진은 갤러리 앨범에 모여요.' } },
   { has: ['양성과정', '이수'], plan: { mode: 'app', href: '/training', why: '과정 × 강사 이수표가 이미 있어요.' } },
   { has: ['모의수업'], plan: { mode: 'app', href: '/mock', why: '날짜·발표자·피드백 자리가 이미 있어요.' } },
   { has: ['출강 일정', '일정 배정', '강사비'], plan: { mode: 'app', href: '/schedule', why: '출강과 달별 타임 정산은 일정 화면에 있어요.' } },
-  { has: ['계정', '권한', '멤버', '강사 등록', 'PIN'], plan: { mode: 'app', href: '/admin', why: '멤버와 PIN 은 관리 화면에서 바꿔요.' } },
-  { has: ['AI 키', 'API'], plan: { mode: 'app', href: '/admin', why: 'AI 키와 모델은 관리 화면에 있어요.' } },
 
   /* ── 줄이 쌓이는 것 → 표 ──
      ⚠️ **순서가 곧 규칙이다.** 위에서부터 먼저 걸리는 것을 쓰므로,
@@ -255,7 +258,7 @@ const RULES: { has: string[]; plan: DutyPlan }[] = [
     plan: { mode: 'table', preset: 'stock', why: '무엇이 몇 개 있고 더 사야 하는지가 줄로 쌓여요.' } },
   { has: ['모집', '면접', '채용', '지원', '평가', '동의'],
     plan: { mode: 'table', preset: 'people', why: '사람이 한 줄씩 늘고 상태가 바뀌어요.' } },
-  { has: ['주제 발굴', '아이디어', 'SNS', '블로그', '홍보'],
+  { has: ['주제 발굴', '아이디어', 'SNS', '블로그'],
     plan: { mode: 'table', preset: 'blank', why: '떠오른 것을 줄로 쌓아두는 일이에요.' } },
 ];
 
