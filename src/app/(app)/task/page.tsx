@@ -336,7 +336,9 @@ export default function TaskPage() {
   return (
     <div>
       <PageHeader
-        title="업무"
+        /* 화면 이름은 `업무배분` 이다 — 나눠주는 쪽(전체·사람별·나눠주기)이 이 화면의 일이고,
+           자기 것만 보는 자리는 `내 업무`(/mywork)로 옮겼다. 주소는 그대로 둔다 */
+        title="업무배분"
         subtitle={
           tasks === null
             ? '불러오는 중…'

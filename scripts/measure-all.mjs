@@ -182,14 +182,16 @@ function rowsFor(url) {
 
 const PAGES = [
   ['/home', '홈'],
+  ['/mywork', '내 업무'],
   ['/notice', '공지사항'],
-  ['/task', '업무'],
+  ['/task', '업무배분'],
   ['/collab', '부서협업'],
   ['/apps', '프로그램계획'],
   ['/verify', '프로그램검증'],
-  ['/roles', '역할분장'],
+  ['/roles', '부서업무'],
   ['/mock', '모의수업'],
   ['/training', '강사양성'],
+  ['/money', '돈'],
   ['/cost', '원가'],
   ['/expense', '지출결의서'],
   ['/gallery', '갤러리'],
