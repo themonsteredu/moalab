@@ -19,6 +19,8 @@ const PUB = path.join(ROOT, 'public');
 /** 원본에서 측정한 값 (scripts 주석으로 남겨둔다) */
 const BRAND_TEAL = '#06BDBD';
 const LOGO_BG = '#000000';
+/** 파비콘은 teal 판에 검정 M 이다 — 아래 faviconPlate 주석 참고 */
+const FAVICON_MARK = '#0B0B0B';
 /** M 심볼 영역 */
 const SYMBOL = { x: 569, y: 221, w: 431, h: 273 };
 /** 심볼 + 워드마크 (태그라인 제외) — 작게 쓸 땐 태그라인이 뭉개져서 뺀다 */
@@ -150,10 +152,104 @@ write('icon-512.png', await appIcon(512, { fraction: 0.62, radius: 0.22 }));
 // 안드로이드 maskable — 원형으로 잘려도 M 이 안 잘리게 작게
 write('icon-maskable-512.png', await appIcon(512, { fraction: 0.48, radius: 0 }));
 
-// 파비콘 (Next.js app router 가 src/app/icon.png 을 자동으로 쓴다)
-const favicon = await appIcon(64, { fraction: 0.66, radius: 0.22 });
+/**
+ * 파비콘은 **앱 아이콘을 그냥 줄인 것이 아니다.**
+ *
+ * 탭에 실제로 그려지는 크기는 16px 다. 앱 아이콘(검정 판 + M 62%)을 16px 로 줄이면
+ * · M 의 가운데 V 홈이 사라져 **어두운 덩어리**로만 보이고
+ * · 검정 판이라 **다크 테마 탭 배경에 묻힌다**
+ * 실제로 재보고 확인한 것이라, 파비콘만 따로 그린다:
+ *   · 판을 **teal**(로고색)로 뒤집어 밝은 탭·어두운 탭 양쪽에서 눈에 띄게
+ *   · M 을 검정으로 얹고 **88%** 까지 키워 16px 에서도 두 봉우리가 남게
+ */
+async function faviconPlate(size) {
+  const symbolB64 = symbolPng.toString('base64');
+  const dataUrl = await page.evaluate(
+    async ({ symbolB64, size, bg, mark, fraction, radius }) => {
+      const img = new Image();
+      await new Promise((r, j) => {
+        img.onload = r;
+        img.onerror = j;
+        img.src = 'data:image/png;base64,' + symbolB64;
+      });
+
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const g = c.getContext('2d');
+
+      const r = size * radius;
+      g.beginPath();
+      g.moveTo(r, 0);
+      g.arcTo(size, 0, size, size, r);
+      g.arcTo(size, size, 0, size, r);
+      g.arcTo(0, size, 0, 0, r);
+      g.arcTo(0, 0, size, 0, r);
+      g.closePath();
+      g.clip();
+      g.fillStyle = bg;
+      g.fillRect(0, 0, size, size);
+
+      /* M 을 한 번 딴 데 그린 뒤 `source-in` 으로 통째로 검정으로 물들인다.
+         (원본은 teal 이라 teal 판 위에서는 안 보인다) */
+      const off = document.createElement('canvas');
+      off.width = off.height = size;
+      const o = off.getContext('2d');
+      const w = size * fraction;
+      const h = (img.naturalHeight / img.naturalWidth) * w;
+      o.imageSmoothingQuality = 'high';
+      o.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      o.globalCompositeOperation = 'source-in';
+      o.fillStyle = mark;
+      o.fillRect(0, 0, size, size);
+
+      g.drawImage(off, 0, 0);
+      return c.toDataURL('image/png');
+    },
+    { symbolB64, size, bg: BRAND_TEAL, mark: FAVICON_MARK, fraction: 0.88, radius: 0.22 },
+  );
+  return Buffer.from(dataUrl.split(',')[1], 'base64');
+}
+
+/**
+ * 여러 크기를 한 파일에 담은 `.ico`.
+ *
+ * 한 장짜리 PNG 만 주면 **브라우저가 알아서 줄인다** — 16px 로 줄어들 때
+ * 획이 반투명해져 뭉갠다. 크기별로 미리 그려 담으면 브라우저가 그중 맞는 것을
+ * 골라 쓰므로 그 단계가 없어진다. (Vista 이후 ico 는 PNG 를 그대로 품는다)
+ */
+function icoOf(images) {
+  const head = Buffer.alloc(6 + 16 * images.length);
+  head.writeUInt16LE(0, 0); // reserved
+  head.writeUInt16LE(1, 2); // 1 = icon
+  head.writeUInt16LE(images.length, 4);
+  let offset = head.length;
+  for (const [i, { size, buf }] of images.entries()) {
+    const e = 6 + 16 * i;
+    head.writeUInt8(size >= 256 ? 0 : size, e);
+    head.writeUInt8(size >= 256 ? 0 : size, e + 1);
+    head.writeUInt8(0, e + 2); // 팔레트 없음
+    head.writeUInt8(0, e + 3); // reserved
+    head.writeUInt16LE(1, e + 4); // planes
+    head.writeUInt16LE(32, e + 6); // 32bpp
+    head.writeUInt32LE(buf.length, e + 8);
+    head.writeUInt32LE(offset, e + 12);
+    offset += buf.length;
+  }
+  return Buffer.concat([head, ...images.map((i) => i.buf)]);
+}
+
+console.log('파비콘');
+const favSizes = [16, 32, 48];
+const favPngs = [];
+for (const size of favSizes) favPngs.push({ size, buf: await faviconPlate(size) });
+
+// Next.js app router 가 src/app/icon.png · src/app/favicon.ico 를 자동으로 집는다
+const favicon = await faviconPlate(64);
 fs.writeFileSync(path.join(ROOT, 'src/app/icon.png'), favicon);
 console.log(`  src/app/icon.png             ${(favicon.length / 1024).toFixed(1)}KB`);
+const ico = icoOf(favPngs);
+fs.writeFileSync(path.join(ROOT, 'src/app/favicon.ico'), ico);
+console.log(`  src/app/favicon.ico          ${(ico.length / 1024).toFixed(1)}KB  (${favSizes.join('·')}px)`);
 
 await browser.close();
 console.log(
