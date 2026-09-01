@@ -138,6 +138,22 @@ eq('로그인 전이면 빈 목록', O.myDuties(tree, null), { own: [], help: []
   eq('팀장을 안 정한 부서는 여전히 미정', O.groupByPerson(tree, MEMBERS)[0].memberId, null);
 }
 
+console.log('\n[역할 목록 묶기]');
+{
+  const refs = O.myDuties(tree, 'm1').own.concat(O.myDuties(tree, 'm2').help);
+  const gs = O.groupRefs(refs);
+  eq('부서 › 중분류로 묶인다', gs.map((g) => g.path).length === new Set(gs.map((g) => g.path)).size, true);
+  eq('줄이 하나도 안 빠진다', gs.reduce((a, g) => a + g.items.length, 0), refs.length);
+  eq('들어온 차례가 그대로', gs[0].items[0].duty.id, refs[0].duty.id);
+  eq('빈 목록은 빈 묶음', O.groupRefs([]), []);
+  {
+    // 같은 중분류 이름이 다른 부서에 있어도 안 합친다 — 부서까지 열쇠로 쓴다
+    const a = { duty: { id: 'x' }, deptName: 'A부', groupName: '홍보' };
+    const b = { duty: { id: 'y' }, deptName: 'B부', groupName: '홍보' };
+    eq('★ 부서가 다르면 따로 묶는다', O.groupRefs([a, b]).length, 2);
+  }
+}
+
 console.log('\n[검색]');
 eq('소분류 이름으로', O.filterOrg(tree, 'SNS').map((d) => d.dept.name), ['영업마케팅부']);
 eq('설명으로도 걸린다', O.filterOrg(tree, '학교가 찾는').map((d) => d.dept.name), ['기획개발부']);

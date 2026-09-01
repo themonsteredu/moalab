@@ -6,7 +6,7 @@ import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { logActivity } from '@/lib/log';
-import { buildOrg, myDuties, type DutyRef } from '@/lib/org';
+import { buildOrg, groupRefs, myDuties, type DutyRef } from '@/lib/org';
 import { isOverdue, sortTasks, todayStr } from '@/lib/task';
 import { buildEntries, filterEntries, scheduleKindLabel, sortEntries } from '@/lib/schedule';
 import { collabPriorityLabel, sortRequests } from '@/lib/collab';
@@ -289,6 +289,8 @@ export default function MyWorkPage() {
 
   const roles = useMemo(() => myDuties(tree, meId), [tree, meId]);
   const roleCount = roles.own.length + roles.help.length;
+  /** 묶어서 그리면 own/help 가 섞이므로 주담당인지는 id 로 가른다 */
+  const ownIds = useMemo(() => new Set(roles.own.map((r) => r.duty.id)), [roles]);
 
   const sortedCollabs = useMemo(() => sortRequests(collabs, today), [collabs, today]);
 
@@ -445,33 +447,49 @@ export default function MyWorkPage() {
                     역할을 누르면 <b className="text-neutral-500">그 자리에서 자료를 올릴 수 있어요.</b>{' '}
                     올린 파일은 구글 드라이브에도 한 벌 들어갑니다.
                   </p>
-                  <ul className="divide-y divide-neutral-100">
-                    {[...roles.own.map((r) => ({ r, own: true })), ...roles.help.map((r) => ({ r, own: false }))].map(
-                      ({ r, own }) => (
-                        <li key={r.duty.id}>
-                          <button
-                            onClick={() => setOpenDuty(r)}
-                            className="tap flex w-full items-center gap-2 py-2 text-left"
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-[14px] font-bold">{r.duty.name}</span>
-                              <span className="block truncate text-[11.5px] text-neutral-400">
-                                {r.deptName} › {r.groupName}
-                              </span>
-                            </span>
-                            <span
-                              className={`chip shrink-0 ${
-                                own ? 'bg-brand-100 text-brand-700' : 'bg-neutral-100 text-neutral-500'
-                              }`}
-                            >
-                              {own ? '주담당' : '부담당'}
-                            </span>
-                            <Icon name="chevronDown" size={14} className="-rotate-90 shrink-0 text-neutral-300" />
-                          </button>
-                        </li>
-                      ),
-                    )}
-                  </ul>
+                  {/* 부서 › 중분류로 묶어 머리글에 한 번만 적는다 — 줄마다 붙이면
+                      역할이 여럿일 때 같은 글자가 반복돼 이름이 안 읽힌다 */}
+                  <div className="divide-y divide-neutral-100">
+                    {groupRefs([...roles.own, ...roles.help]).map((g) => (
+                      <div key={g.path} className="py-2 first:pt-0 last:pb-0">
+                        <p className="mb-0.5 text-[11px] font-bold tracking-wide text-neutral-400">{g.path}</p>
+                        <ul>
+                          {g.items.map((r) => {
+                            const own = ownIds.has(r.duty.id);
+                            return (
+                              <li key={r.duty.id}>
+                                <button
+                                  onClick={() => setOpenDuty(r)}
+                                  className="tap flex min-h-[44px] w-full items-center gap-2 py-1.5 text-left"
+                                >
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[14px] font-bold">{r.duty.name}</span>
+                                    {r.duty.note && (
+                                      <span className="block truncate text-[11.5px] text-neutral-400">
+                                        {r.duty.note}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span
+                                    className={`chip shrink-0 ${
+                                      own ? 'bg-brand-100 text-brand-700' : 'bg-neutral-100 text-neutral-500'
+                                    }`}
+                                  >
+                                    {own ? '주담당' : '부담당'}
+                                  </span>
+                                  <Icon
+                                    name="chevronDown"
+                                    size={14}
+                                    className="-rotate-90 shrink-0 text-neutral-300"
+                                  />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
                 </>
               )}
             </Collapsible>

@@ -23,6 +23,7 @@ import {
   buildOrg,
   filterOrg,
   groupByPerson,
+  groupRefs,
   myDuties,
   nextOrder,
   orgTotals,
@@ -348,14 +349,38 @@ export default function RolesPage() {
         )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-semibold text-neutral-800">{r.duty.name}</span>
-          <span className="block truncate text-[11.5px] text-neutral-400">
-            {r.deptName} › {r.groupName}
-          </span>
+          {r.duty.note && (
+            <span className="block truncate text-[11.5px] text-neutral-400">{r.duty.note}</span>
+          )}
         </span>
         <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
       </button>
     </li>
   );
+
+  /**
+   * 역할 목록을 **부서 › 중분류로 묶어** 그린다.
+   *
+   * 예전엔 줄마다 `영업마케팅부 › 홍보` 가 그대로 붙어서, 역할이 13개면 같은 글자가
+   * 13번 찍혔다 — 정작 역할 이름이 안 읽힌다. 머리글에 한 번만 적는다.
+   */
+  const refList = (own: DutyRef[], help: DutyRef[], showTone = true) => {
+    const ownIds = new Set(own.map((r) => r.duty.id));
+    return (
+      <div className="divide-y divide-neutral-100">
+        {groupRefs([...own, ...help]).map((g) => (
+          <div key={g.path} className="py-2 first:pt-0 last:pb-0">
+            <p className="mb-0.5 text-[11px] font-bold tracking-wide text-neutral-400">{g.path}</p>
+            <ul>
+              {g.items.map((r) =>
+                refRow(r, showTone ? (ownIds.has(r.duty.id) ? 'own' : 'help') : undefined),
+              )}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const views: { key: View; label: string }[] = isAdmin
     ? [
@@ -454,10 +479,7 @@ export default function RolesPage() {
               <h2 className="mb-1 text-[14px] font-bold">
                 주담당 {mine.own.length} · 부담당 {mine.help.length}
               </h2>
-              <ul className="divide-y divide-neutral-100">
-                {mine.own.map((r) => refRow(r, 'own'))}
-                {mine.help.map((r) => refRow(r, 'help'))}
-              </ul>
+              {refList(mine.own, mine.help)}
             </section>
           )
         ) : view === 'person' ? (
@@ -484,10 +506,7 @@ export default function RolesPage() {
                   {p.own.length + p.help.length === 0 ? (
                     <p className="text-[12.5px] text-neutral-400">아직 맡은 역할이 없어요.</p>
                   ) : (
-                    <ul className="divide-y divide-neutral-100">
-                      {p.own.map((r) => refRow(r, p.memberId === null ? undefined : 'own'))}
-                      {p.help.map((r) => refRow(r, 'help'))}
-                    </ul>
+                    refList(p.own, p.help, p.memberId !== null)
                   )}
                 </Collapsible>
               </section>
