@@ -141,9 +141,13 @@ const DUTY_GROUPS = [
 ].map((name, i) => ({ id: `g${i}`, dept_id: `d${Math.floor(i / 3)}`, name, sort_order: i % 3, created_at: '2026-08-01T00:00:00Z' }));
 const DUTY_NAMES = ['지출결의서 확인', '영수증 증빙 보관', '세금계산서·매출', '계약 행정문서 관리',
   '총무 자산관리', '계정 권한 관리', '개인정보 자료보안', '계약서·공문 보관'];
+/* 주담당을 여덟 개는 나에게 준다 — 실제 원장 계정이 그렇다(주담당 8).
+   예전엔 전부 owner_id: null 이라 `내 역할` 이 **늘 빈 화면**이었고, 그래서
+   그 목록의 줄이 눌리지 않는 것(자료를 못 올린다)을 측정에서 한 번도 못 잡았다 */
 const DUTIES = Array.from({ length: 48 }, (_, i) => ({
   id: `u${i}`, group_id: `g${i % 15}`, name: DUTY_NAMES[i % 8],
-  note: '올라온 지출을 확인한다', owner_id: null, sort_order: i, created_at: '2026-08-01T00:00:00Z',
+  note: '올라온 지출을 확인한다', owner_id: i % 6 === 0 ? ME : null,
+  sort_order: i, created_at: '2026-08-01T00:00:00Z',
 }));
 
 /* 부서 협업 요청 — 기한이 달력에 마감으로 얹힌다 (①→② 연결) */

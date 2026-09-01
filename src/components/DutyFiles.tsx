@@ -131,6 +131,11 @@ export function DutyFiles({
       <Collapsible
         id={`duty-files-${dutyId}`}
         dense
+        /* **펼친 채로 시작한다.** 역할 시트를 여는 이유가 대개 자료를 올리는 것인데,
+           접혀 있으면 올리는 버튼이 한 번 더 눌러야 나온다 — 원장이 "업로드를 못하게
+           되어 있다" 고 한 이유의 절반이 이것이었다 (나머지 절반은 `내 역할` 목록의
+           줄이 아예 안 눌리던 것). 접어두면 그 상태는 기기에 기억된다 */
+        defaultOpen
         title="만든 자료"
         badge={
           n > 0 ? (
