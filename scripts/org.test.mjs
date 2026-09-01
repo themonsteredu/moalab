@@ -90,8 +90,8 @@ eq('주담당은 부담당에서 빠진다', tree[0].groups[0].duties[0].helperI
 eq('안 겹치는 부담당은 그대로', tree[0].groups[1].duties[0].helperIds, ['m2']);
 
 console.log('\n[전체 합계]');
-eq('합계', O.orgTotals(tree), { depts: 2, duties: 4, unassigned: 1 });
-eq('빈 조직도 0으로', O.orgTotals([]), { depts: 0, duties: 0, unassigned: 0 });
+eq('합계', O.orgTotals(tree), { depts: 2, duties: 4, unassigned: 1, unpicked: 1 });
+eq('빈 조직도 0으로', O.orgTotals([]), { depts: 0, duties: 0, unassigned: 0, unpicked: 0 });
 
 console.log('\n[사람별 보기]');
 const people = O.groupByPerson(tree, MEMBERS);
@@ -136,6 +136,28 @@ eq('로그인 전이면 빈 목록', O.myDuties(tree, null), { own: [], help: []
     asPerson.own.map((r) => r.duty.id),
   );
   eq('팀장을 안 정한 부서는 여전히 미정', O.groupByPerson(tree, MEMBERS)[0].memberId, null);
+}
+
+{
+  /* ★ 팀장이 있으면 `unassigned` 는 0이 되지만 **아직 아무도 직접 안 골랐다**는 사실은
+     남아야 한다. 실제로 역할 63개가 전부 팀장 몫인데 화면에 '미정 0' 만 떠서
+     채울 문이 사라졌었다 — 그래서 unpicked 를 따로 센다 */
+  const headed = O.buildOrg(
+    DEPTS.map((d) => ({ ...d, head_id: 'm3' })),
+    GROUPS,
+    DUTIES.map((d) => ({ ...d, owner_id: null })),
+    HELPERS,
+  );
+  const t = O.orgTotals(headed);
+  eq('★ 팀장이 있으면 진짜 미정은 0', t.unassigned, 0);
+  eq('★ 그래도 아직 안 정한 것은 그대로 센다', t.unpicked, t.duties);
+
+  const noHead = O.buildOrg(DEPTS, GROUPS, DUTIES.map((d) => ({ ...d, owner_id: null })), HELPERS);
+  eq('팀장이 없으면 둘이 같다', O.orgTotals(noHead).unassigned, O.orgTotals(noHead).unpicked);
+
+  const picked = O.buildOrg(DEPTS.map((d) => ({ ...d, head_id: 'm3' })), GROUPS,
+    DUTIES.map((d) => ({ ...d, owner_id: 'm1' })), HELPERS);
+  eq('직접 고르면 안 정한 것에서 빠진다', O.orgTotals(picked).unpicked, 0);
 }
 
 console.log('\n[역할 목록 묶기]');

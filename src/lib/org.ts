@@ -17,8 +17,17 @@ export interface DutyNode {
 export interface GroupNode {
   group: DutyGroup;
   duties: DutyNode[];
-  /** 주담당이 없는 소분류 수 */
+  /** 진짜 미정 — 주담당도 없고 그 부서 팀장도 없는 것 */
   unassigned: number;
+  /**
+   * **아직 사람이 직접 안 고른 것** (`owner_id` 가 비어 있는 것 전부).
+   *
+   * `unassigned` 와 다르다. 부서에 팀장이 있으면 `ownerOf` 가 팀장을 채워주므로
+   * `unassigned` 는 0이 되는데, 그러면 **"아직 아무도 정하지 않았다"는 사실이
+   * 화면에서 통째로 사라진다** — 실제로 역할 63개가 전부 팀장 몫으로 잡혀 있는데
+   * `담당자 미정 0건` 이라 채울 문이 안 보였다. 그래서 따로 센다.
+   */
+  unpicked: number;
 }
 
 export interface DeptNode {
@@ -27,6 +36,8 @@ export interface DeptNode {
   /** 이 부서의 소분류 총 개수 */
   total: number;
   unassigned: number;
+  /** 아직 사람이 직접 안 고른 것 — GroupNode.unpicked 주석 참고 */
+  unpicked: number;
 }
 
 /**
@@ -94,6 +105,7 @@ export function buildOrg(
         duties: ds,
         // 팀장이 있으면 미정이 아니다 — 그 부서 팀장이 맡는 것으로 본다
         unassigned: ds.filter((d) => !ownerOf(d.duty, dept.head_id)).length,
+        unpicked: ds.filter((d) => !isOwnPick(d.duty)).length,
       };
     });
     return {
@@ -101,16 +113,23 @@ export function buildOrg(
       groups: gs,
       total: gs.reduce((n, g) => n + g.duties.length, 0),
       unassigned: gs.reduce((n, g) => n + g.unassigned, 0),
+      unpicked: gs.reduce((n, g) => n + g.unpicked, 0),
     };
   });
 }
 
 /** 전체 합계 — 헤더 부제에 그대로 쓴다 */
-export function orgTotals(tree: DeptNode[]): { depts: number; duties: number; unassigned: number } {
+export function orgTotals(tree: DeptNode[]): {
+  depts: number;
+  duties: number;
+  unassigned: number;
+  unpicked: number;
+} {
   return {
     depts: tree.length,
     duties: tree.reduce((n, d) => n + d.total, 0),
     unassigned: tree.reduce((n, d) => n + d.unassigned, 0),
+    unpicked: tree.reduce((n, d) => n + d.unpicked, 0),
   };
 }
 

@@ -10,6 +10,11 @@ import { DutyFiles } from '@/components/DutyFiles';
 import { ConfirmDialog, ErrorBanner, MultiPicker, Sheet } from '@/components/ui';
 import type { Duty, MemberPublic } from '@/lib/types';
 
+interface LinkTarget {
+  href: string;
+  label: string;
+}
+
 /**
  * 소분류(역할) 한 줄 고치기 — 이름 · 설명 · 주담당 · 부담당.
  *
@@ -58,6 +63,9 @@ export function DutyForm({
   const [note, setNote] = useState('');
   const [ownerId, setOwnerId] = useState('');
   const [helperIds, setHelperIds] = useState<string[]>([]);
+  /** 이 일로 바로 가는 곳 — 프로그램 페이지·원가표 주소 */
+  const [link, setLink] = useState('');
+  const [targets, setTargets] = useState<{ apps: LinkTarget[]; sheets: LinkTarget[] }>({ apps: [], sheets: [] });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -68,6 +76,7 @@ export function DutyForm({
     setName(duty?.name ?? '');
     setNote(duty?.note ?? '');
     setOwnerId(duty?.owner_id ?? '');
+    setLink(duty?.link ?? '');
     if (!duty) {
       setHelperIds([]);
       return;
@@ -77,6 +86,28 @@ export function DutyForm({
       setHelperIds((data ?? []).map((r: { member_id: string }) => r.member_id));
     })();
   }, [open, duty]);
+
+  /* 바로가기로 걸 수 있는 것 — 프로그램과 원가표. 시트를 열 때 한 번만 읽는다.
+     주소를 손으로 치게 하면 폰에서 아무도 안 건다 (출강 제목을 사람이 안 짓게 한 것과 같은 판단) */
+  useEffect(() => {
+    if (!open) return;
+    void (async () => {
+      const [a, c] = await Promise.all([
+        supabase.from('apps').select('id,title_ko').order('title_ko'),
+        supabase.from('cost_sheets').select('id,title').order('title'),
+      ]);
+      setTargets({
+        apps: ((a.data ?? []) as { id: string; title_ko: string }[]).map((r) => ({
+          href: `/apps/${r.id}`,
+          label: r.title_ko,
+        })),
+        sheets: ((c.data ?? []) as { id: string; title: string }[]).map((r) => ({
+          href: `/cost/${r.id}`,
+          label: r.title,
+        })),
+      });
+    })();
+  }, [open]);
 
   /** 주담당으로 고른 사람은 부담당에서 뺀다 */
   const pickOwner = (id: string) => {
@@ -97,7 +128,7 @@ export function DutyForm({
       if (duty) {
         const { error: e } = await supabase
           .from('duties')
-          .update({ name: n, note: note.trim() || null, owner_id: ownerId || null })
+          .update({ name: n, note: note.trim() || null, owner_id: ownerId || null, link: link || null })
           .eq('id', duty.id);
         if (e) throw e;
       } else {
@@ -106,7 +137,14 @@ export function DutyForm({
         const next = (sib ?? []).reduce((m: number, r: { sort_order: number }) => Math.max(m, r.sort_order), 0) + 1;
         const { data, error: e } = await supabase
           .from('duties')
-          .insert({ group_id: groupId, name: n, note: note.trim() || null, owner_id: ownerId || null, sort_order: next })
+          .insert({
+            group_id: groupId,
+            name: n,
+            note: note.trim() || null,
+            owner_id: ownerId || null,
+            link: link || null,
+            sort_order: next,
+          })
           .select()
           .single();
         if (e) throw e;
@@ -193,6 +231,48 @@ export function DutyForm({
               className="field resize-none"
               placeholder="한 줄이면 충분해요. 안 적어도 됩니다."
             />
+          </div>
+
+          {/* 이 일로 바로 가는 곳 — 원장이 "계획안이나 원가계산은 부서가 나뉘었으니
+              거기로 이동해야 해" 라고 한 것. **자료를 옮기는 게 아니라 길만 낸다.**
+              주소를 손으로 치게 하면 폰에서 아무도 안 건다 → 목록에서 고른다 */}
+          <div>
+            <label className="label" htmlFor="duty-link">
+              이 일로 바로 가기 <span className="font-normal text-neutral-400">(선택)</span>
+            </label>
+            <select
+              id="duty-link"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              className="field"
+            >
+              <option value="">안 걸기</option>
+              {targets.apps.length > 0 && (
+                <optgroup label="프로그램">
+                  {targets.apps.map((t) => (
+                    <option key={t.href} value={t.href}>
+                      {t.label}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {targets.sheets.length > 0 && (
+                <optgroup label="원가표">
+                  {targets.sheets.map((t) => (
+                    <option key={t.href} value={t.href}>
+                      {t.label}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {/* 목록에 없는 옛 값도 지워지지 않게 남긴다 */}
+              {link && ![...targets.apps, ...targets.sheets].some((t) => t.href === link) && (
+                <option value={link}>{link}</option>
+              )}
+            </select>
+            <p className="mt-1 text-[11.5px] text-neutral-400">
+              걸어두면 역할 옆에 바로가기가 생겨요. 자료는 그대로 원래 자리에 있습니다.
+            </p>
           </div>
 
           {/* 이 일을 해서 만든 결과물 — **이미 만들어진 역할일 때만.**

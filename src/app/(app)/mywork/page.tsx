@@ -457,10 +457,10 @@ export default function MyWorkPage() {
                           {g.items.map((r) => {
                             const own = ownIds.has(r.duty.id);
                             return (
-                              <li key={r.duty.id}>
+                              <li key={r.duty.id} className="flex items-center gap-1">
                                 <button
                                   onClick={() => setOpenDuty(r)}
-                                  className="tap flex min-h-[44px] w-full items-center gap-2 py-1.5 text-left"
+                                  className="tap flex min-h-[44px] flex-1 items-center gap-2 py-1.5 text-left"
                                 >
                                   <span className="min-w-0 flex-1">
                                     <span className="block truncate text-[14px] font-bold">{r.duty.name}</span>
@@ -483,6 +483,16 @@ export default function MyWorkPage() {
                                     className="-rotate-90 shrink-0 text-neutral-300"
                                   />
                                 </button>
+                                {/* 바로가기는 버튼 밖 — button 안에 a 를 넣으면 안 되는 중첩이다 */}
+                                {r.duty.link && (
+                                  <Link
+                                    href={r.duty.link}
+                                    aria-label={`${r.duty.name} — 이 일로 바로 가기`}
+                                    className="tap -my-3 flex min-h-[44px] w-9 shrink-0 items-center justify-center text-brand"
+                                  >
+                                    <Icon name="external" size={14} />
+                                  </Link>
+                                )}
                               </li>
                             );
                           })}

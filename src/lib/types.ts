@@ -669,6 +669,14 @@ export interface Duty {
   note: string | null;
   /** 주담당 — 책임은 한 사람에게 지운다 (tasks 의 assignee_id 와 같은 판단) */
   owner_id: string | null;
+  /**
+   * 이 일로 **바로 가는 곳** — `/apps/<id>` · `/cost/<id>` 같은 앱 안 주소.
+   *
+   * 자료를 부서로 옮기는 게 아니다. 프로그램 페이지 한 장에 계획안·원가·샘플이
+   * 모여 있는 게 이 앱의 핵심 설계라 쪼개면 '따로국밥' 으로 되돌아간다.
+   * 대신 `원가·판매가 설계` 역할을 열면 그 원가표로 가게 **길만** 낸다.
+   */
+  link: string | null;
   sort_order: number;
   created_at: string;
 }
