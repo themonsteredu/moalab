@@ -37,7 +37,7 @@ import type { Department, Duty, DutyGroup, DutyHelper } from '@/lib/types';
 type View = 'dept' | 'person' | 'me';
 
 /**
- * 역할분장 — 부서 › 중분류 › 소분류, 그리고 그 역할을 누가 맡나.
+ * 부서업무 — 부서 › 중분류 › 소분류, 그리고 그 역할을 누가 맡나.
  *
  * 업무(/task)와 **축이 다르다.** 저쪽은 *1건 × 담당자 × 기한* 이고 끝나면 지나간다.
  * 이쪽은 기한이 없고 계속 남는 '이 일은 누구 담당' 이다.
@@ -105,7 +105,7 @@ export default function RolesPage() {
       setDuties((tRes.data ?? []) as Duty[]);
       setHelpers((hRes.data ?? []) as DutyHelper[]);
     } catch (e) {
-      setError(friendlyError(e, '역할분장을 불러오지 못했어요.'));
+      setError(friendlyError(e, '부서업무를 불러오지 못했어요.'));
       setDepts([]);
     }
   }, []);
@@ -333,7 +333,7 @@ export default function RolesPage() {
   return (
     <div>
       <PageHeader
-        title="역할분장"
+        title="부서업무"
         subtitle={
           depts === null
             ? '불러오는 중…'
@@ -345,7 +345,7 @@ export default function RolesPage() {
           <span className="flex items-center gap-1.5">
             <button
               onClick={() => setPrintOpen(true)}
-              aria-label="역할분장 인쇄"
+              aria-label="부서업무 인쇄"
               className="btn-ghost h-10 w-10 px-0"
             >
               <Icon name="printer" size={16} />
@@ -847,7 +847,7 @@ export default function RolesPage() {
       {/* ---------------------------------------------------------- 인쇄 고르기
           부서 5 · 역할 48 이면 한 장에 안 들어간다. 무엇을 넣을지 고르게 한다
           (프로그램 인쇄·지출결의서 인쇄와 같은 방식) */}
-      <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="역할분장 인쇄">
+      <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="부서업무 인쇄">
         <div className="space-y-3">
           <p className="text-[13px] leading-relaxed text-neutral-500">
             넣을 것을 고르고 <b>인쇄 화면 열기</b> 를 누르세요. 새 창에서 열립니다.

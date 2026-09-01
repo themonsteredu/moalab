@@ -624,7 +624,7 @@ export const TASK_STATES: { value: TaskState; label: string; cls: string; on: st
   { value: 'done', label: '완료', cls: 'bg-green-100 text-green-800', on: 'border-green-600 bg-green-100 text-green-800' },
 ];
 
-/* ------------------------------------------------------------ 역할분장
+/* ------------------------------------------------------------ 부서업무
    부서 › 중분류 › 소분류. 소분류 하나가 사람이 실제로 맡는 단위다.
 
    **업무(tasks)와 축이 다르다.** 저쪽은 *1건 × 담당자 1명 × 기한* 이고 끝나면

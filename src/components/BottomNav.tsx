@@ -27,7 +27,7 @@ export interface NavItem {
 /**
  * 왼쪽 메뉴 = 일하는 순서.
  * 공지 → 계획 → 검증 → 모의수업 → 강사양성 이 한 프로그램이 학교에 나가기까지의 흐름이다.
- * 그 끝에 역할분장 — 누가 무엇을 책임지는지의 틀이다.
+ * 그 끝에 부서업무 — 누가 무엇을 책임지는지의 틀이다.
  * 원가·갤러리·일정은 그 흐름에 딸린 '자료'라서 아래로 내렸다.
  */
 export const WORK_NAV: NavItem[] = [
@@ -45,9 +45,9 @@ export const WORK_NAV: NavItem[] = [
   { href: '/verify', label: '프로그램검증', icon: 'checkCircle' },
   { href: '/mock', label: '모의수업', icon: 'present', quiet: true },
   { href: '/training', label: '강사양성', icon: 'cap', quiet: true },
-  // 역할분장은 강사양성 옆이다 — 둘 다 '사람' 쪽 일이고,
+  // 부서업무는 강사양성 옆이다 — 둘 다 '사람' 쪽 일이고,
   // 한 번 정하면 오래 가는 화면이라 자주 쓰는 메뉴를 밀어내지 않는다
-  { href: '/roles', label: '역할분장', icon: 'target' },
+  { href: '/roles', label: '부서업무', icon: 'target' },
 ];
 
 export const RESOURCE_NAV: NavItem[] = [

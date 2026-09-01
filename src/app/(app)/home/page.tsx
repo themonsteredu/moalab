@@ -99,7 +99,7 @@ export default function HomePage() {
     setNoticeReads((readRes.data ?? []) as NoticeRead[]);
     setMyOpen((taskRes.data ?? []) as Task[]);
 
-    /* 내 부서를 역할분장에서 파생한다 — 팀장이거나 그 부서 역할의 주담당·부담당이면
+    /* 내 부서를 부서업무에서 파생한다 — 팀장이거나 그 부서 역할의 주담당·부담당이면
        그 부서 사람이다 (부서협업 화면과 같은 규칙). 새 소속 표를 만들지 않는다 */
     const deps = (deptRes.data ?? []) as { id: string; name: string; head_id: string | null }[];
     const grps = (grpRes.data ?? []) as { id: string; dept_id: string }[];
