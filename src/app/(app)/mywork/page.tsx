@@ -12,7 +12,6 @@ import { collabPriorityLabel, sortRequests } from '@/lib/collab';
 import { korDate, ddayLabel, ddayClass, hhmm, relTime, toISODate } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
 import { Icon } from '@/components/Icon';
-import { DutyForm } from '@/components/DutyForm';
 import { Collapsible, EmptyState, ErrorBanner, Sheet, CardSkeleton, useToast } from '@/components/ui';
 import type {
   AppRow,
@@ -63,11 +62,11 @@ export default function MyWorkPage() {
   const [files, setFiles] = useState<FileRow[]>([]);
   /** 역할별 자료 개수 — 줄에 배지로 보여준다 (내 것만이 아니라 그 역할에 쌓인 전부) */
   const [fileCount, setFileCount] = useState<Record<string, number>>({});
+  const [rowCount, setRowCount] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
   const [actionErr, setActionErr] = useState('');
 
   /* 역할 시트 */
-  const [openDuty, setOpenDuty] = useState<DutyRef | null>(null);
   /* 새 업무 시트 — 담당자는 늘 나다. 남에게 나눠주는 건 원장의 `업무배분` 화면이 한다 */
   const [addOpen, setAddOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -86,7 +85,7 @@ export default function MyWorkPage() {
     if (!meId) return;
     setError('');
     try {
-      const [taskRes, deptRes, grpRes, dutyRes, helperRes, collabRes, schedRes, smRes, appRes, revRes, dfRes, pfRes, dcRes] =
+      const [taskRes, deptRes, grpRes, dutyRes, helperRes, collabRes, schedRes, smRes, appRes, revRes, dfRes, pfRes, dcRes, drRes] =
         await Promise.all([
           supabase.from('tasks').select('*').eq('assignee_id', meId),
           supabase.from('departments').select('*').order('sort_order'),
@@ -111,6 +110,7 @@ export default function MyWorkPage() {
             .order('created_at', { ascending: false })
             .limit(10),
           supabase.from('duty_files').select('duty_id'),
+          supabase.from('duty_rows').select('duty_id'),
         ]);
 
       setTasks((taskRes.data ?? []) as Task[]);
@@ -138,6 +138,14 @@ export default function MyWorkPage() {
         counted[r.duty_id] = (counted[r.duty_id] ?? 0) + 1;
       }
       setFileCount(counted);
+
+      /* 표에 몇 줄 쌓였는지 — 자료 개수와 나란히 칩으로 보여준다.
+         `duty_rows` 표가 아직 없는 DB 에서도 화면이 죽으면 안 되므로 실패는 조용히 0 이다 */
+      const rowed: Record<string, number> = {};
+      for (const r of (drRes.data ?? []) as { duty_id: string }[]) {
+        rowed[r.duty_id] = (rowed[r.duty_id] ?? 0) + 1;
+      }
+      setRowCount(rowed);
 
       /* ---- 받은 요청 --------------------------------------------------- */
       const reqs = (collabRes.data ?? []) as CollabRequest[];
@@ -425,7 +433,8 @@ export default function MyWorkPage() {
                     </Link>
                   </div>
                   <p className="mb-2 text-[12px] leading-relaxed text-neutral-400">
-                    역할을 누르면 <b className="text-neutral-500">그 자리에서 자료를 올려요.</b> 올린 파일은
+                    역할을 누르면 <b className="text-neutral-500">그 일을 하는 자리가 열려요</b> — 목록·자료·바로가기.
+                    올린 파일은
                     구글 드라이브 <code className="text-neutral-500">업무분장/{d.dept.name}</code> 에도 들어갑니다.
                   </p>
 
@@ -437,16 +446,14 @@ export default function MyWorkPage() {
                         </p>
                         <ul>
                           {g.duties.map((n) => {
-                            const ref: DutyRef = {
-                              duty: n.duty,
-                              deptName: d.dept.name,
-                              groupName: g.group.name,
-                            };
                             const files = fileCount[n.duty.id] ?? 0;
+                            const lines = rowCount[n.duty.id] ?? 0;
                             return (
                               <li key={n.duty.id} className="flex items-center gap-1">
-                                <button
-                                  onClick={() => setOpenDuty(ref)}
+                                {/* **역할 한 장으로 간다** — 목록·자료·바로가기가 거기 다 있다.
+                                    시트는 이름·설명을 고치는 자리라 *일을 하는 자리* 로는 좁았다 */}
+                                <Link
+                                  href={`/roles/${n.duty.id}`}
                                   className="tap flex min-h-[44px] flex-1 items-center gap-2 py-1.5 text-left"
                                 >
                                   <span className="min-w-0 flex-1">
@@ -459,6 +466,11 @@ export default function MyWorkPage() {
                                   </span>
                                   {/* 자료가 있으면 개수를, 없으면 아무것도 안 그린다 —
                                       '0개' 를 63줄에 붙이면 자리만 먹는다 */}
+                                  {lines > 0 && (
+                                    <span className="chip shrink-0 bg-neutral-100 text-neutral-500">
+                                      {lines}줄
+                                    </span>
+                                  )}
                                   {files > 0 && (
                                     <span className="chip shrink-0 bg-neutral-100 text-neutral-500">
                                       자료 {files}
@@ -469,8 +481,8 @@ export default function MyWorkPage() {
                                     size={14}
                                     className="-rotate-90 shrink-0 text-neutral-300"
                                   />
-                                </button>
-                                {/* 바로가기는 버튼 밖 — button 안에 a 를 넣으면 안 되는 중첩이다 */}
+                                </Link>
+                                {/* 바로가기는 바깥 — a 안에 a 를 넣을 수 없다 */}
                                 {n.duty.link && (
                                   <Link
                                     href={n.duty.link}
@@ -668,24 +680,6 @@ export default function MyWorkPage() {
           </div>
         )}
       </div>
-
-      {/* 역할 시트 — 부서업무 화면과 **같은 컴포넌트**다. 두 벌이 되면 내용이 갈라진다 */}
-      {openDuty && (
-        <DutyForm
-          open
-          onClose={() => setOpenDuty(null)}
-          groupId={openDuty.duty.group_id}
-          groupLabel={`${openDuty.deptName} › ${openDuty.groupName}`}
-          deptName={openDuty.deptName}
-          groupName={openDuty.groupName}
-          duty={openDuty.duty}
-          canDelete={isAdmin}
-          onSaved={() => {
-            setOpenDuty(null);
-            void load();
-          }}
-        />
-      )}
 
       {/* 새 업무 — 담당자는 늘 나다 */}
       <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="새 업무">

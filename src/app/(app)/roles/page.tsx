@@ -256,23 +256,19 @@ export default function RolesPage() {
 
   /* ------------------------------------------------------------ 화면 */
 
-  const dutyRow = (
-    node: { duty: Duty; helperIds: string[] },
-    deptName: string,
-    groupName: string,
-    deptHeadId?: string | null,
-  ) => {
-    const label = `${deptName} › ${groupName}`;
+  const dutyRow = (node: { duty: Duty; helperIds: string[] }, deptHeadId?: string | null) => {
     /* 주담당이 없으면 **그 부서 팀장**이 맡는다 — 원장이 부서마다 팀장을 정해뒀으니
        역할 63개마다 다시 고르게 하지 않는다. 팀장도 없을 때만 '미정' 이다 */
     const owner = ownerOf(node.duty, deptHeadId);
     const inherited = !node.duty.owner_id && !!owner;
     return (
       <li key={node.duty.id} className="flex items-center gap-1">
-        {/* 누구나 누를 수 있다 — 담당자를 정하는 건 '내가 이거 할게요' 이기도 하다
-            (검증자 참여를 본인이 누르게 연 것과 같은 갈래) */}
-        <button
-          onClick={() => setEditing({ duty: node.duty, groupId: node.duty.group_id, label, deptName, groupName })}
+        {/* **누르면 그 역할 한 장으로 간다** — 목록·자료·바로가기가 거기 다 있다.
+            예전엔 고치기 시트가 열렸는데, 시트는 이름·설명을 바꾸는 자리라
+            *일을 하는 자리* 로는 좁았다 (원장: "리스트 업하고 관리하는 페이지").
+            이름 고치기는 그 페이지 오른쪽 위 렌치에 있다 */}
+        <Link
+          href={`/roles/${node.duty.id}`}
           className="flex min-h-[44px] w-full items-center gap-2 py-1.5 text-left"
         >
           <span className="min-w-0 flex-1">
@@ -294,7 +290,7 @@ export default function RolesPage() {
             <span className="chip shrink-0 bg-red-100 text-red-700">미정</span>
           )}
           <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
-        </button>
+        </Link>
         {node.duty.link && (
           <Link
             href={node.duty.link}
@@ -316,20 +312,12 @@ export default function RolesPage() {
    * ⚠️ **누를 수 있어야 한다.** 예전엔 그냥 글자만 그려서, `내 역할` 에서 자기 역할을
    * 보고도 **자료를 올릴 방법이 없었다** — 올리려면 `전체` 트리로 넘어가 부서·중분류를
    * 펼쳐 그 역할을 다시 찾아야 했다. 원장이 바로 여기서 막혔다.
-   * 누르면 트리에서 누르는 것과 **같은 시트**가 열린다.
+   * 지금은 트리에서 누르는 것과 **같은 곳**(`/roles/[dutyId]`)으로 간다.
    */
   const refRow = (r: DutyRef, tone?: 'own' | 'help') => (
     <li key={`${tone ?? 'x'}-${r.duty.id}`} className="flex items-center gap-1">
-      <button
-        onClick={() =>
-          setEditing({
-            duty: r.duty,
-            groupId: r.duty.group_id,
-            label: `${r.deptName} › ${r.groupName}`,
-            deptName: r.deptName,
-            groupName: r.groupName,
-          })
-        }
+      <Link
+        href={`/roles/${r.duty.id}`}
         className="flex min-h-[44px] w-full items-center gap-2 py-1.5 text-left"
       >
         {tone && (
@@ -348,8 +336,8 @@ export default function RolesPage() {
           )}
         </span>
         <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
-      </button>
-      {/* 바로가기는 **버튼 밖**이다 — button 안에 a 를 넣으면 안 되는 중첩이 된다 */}
+      </Link>
+      {/* 바로가기는 **바깥**이다 — button 안에 a 를 넣으면 안 되는 중첩이 된다 */}
       {r.duty.link && (
         <Link
           href={r.duty.link}
@@ -612,7 +600,7 @@ export default function RolesPage() {
                               }
                             >
                               <ul className="divide-y divide-neutral-100 border-t border-neutral-100">
-                                {g.duties.map((n) => dutyRow(n, d.dept.name, g.group.name, d.dept.head_id))}
+                                {g.duties.map((n) => dutyRow(n, d.dept.head_id))}
                               </ul>
                               {/* 역할 추가는 전원에게 — 자기가 맡을 일은 자기가 적는 게 빠르다 */}
                               <button

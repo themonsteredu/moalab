@@ -1204,3 +1204,56 @@ grant all on moalab.duty_files to anon, authenticated, service_role;
 
 -- 부서에 붙이던 표는 안 쓴다 (있으면 지운다 — 아직 아무것도 안 쌓였다)
 drop table if exists moalab.dept_files;
+
+-- ---------------------------------------------------------------------
+-- 25. 역할마다 붙는 표 — "이 일은 무엇을 적어두는 일인가"
+--
+--   원장: *"각각 해야 할 일에 맞는 문서 양식이 구현이 되어 있어야 다들 일하기
+--   편할 것 같음. 예를 들어 학교기관관리 → 리스트 업하고 관리하는 페이지."*
+--
+--   **역할이 63개라 화면을 63개 만들 수는 없다.** 그래서 프로그램을 코드 수정
+--   없이 데이터로 늘리는 것과 같은 방식을 쓴다 — 표의 **열을 데이터로** 둔다.
+--   새 역할에 표를 붙일 때 고칠 파일도, 돌릴 SQL 도 없다.
+--
+--   ⚠️ 값은 열마다 진짜 컬럼을 만들지 않고 **열 id 를 열쇠로 한 jsonb** 다.
+--   진짜 컬럼으로 두면 열을 하나 더할 때마다 `alter table` 이 필요해서
+--   "코드를 안 건드린다" 가 지켜지지 않는다.
+--
+--   ⚠️ duty_files(만든 자료)와 축이 다르다 — 저쪽은 *결과물 파일*,
+--   이쪽은 *계속 고쳐가며 관리하는 목록*(학교 명단·교구 재고)이다.
+-- ---------------------------------------------------------------------
+
+create table if not exists moalab.duty_columns (
+  id         uuid primary key default gen_random_uuid(),
+  duty_id    uuid not null references moalab.duties(id) on delete cascade,
+  name       text not null,
+  -- 모르는 값이 흘러들어도 화면이 안 죽게 DB 에서도 막는다
+  -- (schedules.kind · apps.status 와 같은 갈래)
+  kind       text not null default 'text'
+             check (kind in ('text','number','date','select','check')),
+  options    jsonb,                    -- 고르기 칸의 보기들. 다른 갈래면 null
+  sort_order int  not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists duty_columns_duty_idx on moalab.duty_columns(duty_id, sort_order);
+
+create table if not exists moalab.duty_rows (
+  id         uuid primary key default gen_random_uuid(),
+  duty_id    uuid not null references moalab.duties(id) on delete cascade,
+  cells      jsonb not null default '{}'::jsonb,   -- 열 id 를 열쇠로 한 값들
+  sort_order int  not null default 0,
+  -- 사람을 지워도 줄은 남는다 (duty_files 와 같은 갈래)
+  updated_by uuid references moalab.members(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists duty_rows_duty_idx on moalab.duty_rows(duty_id, sort_order);
+
+alter table moalab.duty_columns enable row level security;
+alter table moalab.duty_rows    enable row level security;
+drop policy if exists "internal_all" on moalab.duty_columns;
+drop policy if exists "internal_all" on moalab.duty_rows;
+create policy "internal_all" on moalab.duty_columns for all using (true) with check (true);
+create policy "internal_all" on moalab.duty_rows    for all using (true) with check (true);
+grant all on moalab.duty_columns to anon, authenticated, service_role;
+grant all on moalab.duty_rows    to anon, authenticated, service_role;
