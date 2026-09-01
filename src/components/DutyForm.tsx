@@ -195,6 +195,23 @@ export function DutyForm({
             />
           </div>
 
+          {/* 이 일을 해서 만든 결과물 — **이미 만들어진 역할일 때만.**
+              새로 만드는 중에는 붙일 id 가 없다 (저장하면 그때 칸이 생긴다)
+
+              ⚠️ **담당자 칸보다 위다.** 이 시트를 여는 이유는 대개 자료를 올리는
+              것인데 맨 아래 있으면 스크롤을 내려야 나온다. 담당자는 한 번 정하면
+              오래 가고 자료는 계속 쌓이니, 자주 하는 것이 위로 온다 */}
+          {duty && (
+            <div className="border-y border-neutral-200 py-3">
+              <DutyFiles
+                dutyId={duty.id}
+                dutyName={duty.name}
+                deptName={deptName ?? groupLabel.split('›')[0].trim()}
+                groupName={groupName ?? groupLabel.split('›').pop()!.trim()}
+              />
+            </div>
+          )}
+
           <div>
             <p className="label">주담당 — 한 명</p>
             <div className="flex flex-wrap gap-2">
@@ -241,19 +258,6 @@ export function DutyForm({
               onChange={setHelperIds}
             />
           </div>
-
-          {/* 이 일을 해서 만든 결과물 — **이미 만들어진 역할일 때만.**
-              새로 만드는 중에는 붙일 id 가 없다 (저장하면 그때 칸이 생긴다) */}
-          {duty && (
-            <div className="border-t border-neutral-200 pt-3">
-              <DutyFiles
-                dutyId={duty.id}
-                dutyName={duty.name}
-                deptName={deptName ?? groupLabel.split('›')[0].trim()}
-                groupName={groupName ?? groupLabel.split('›').pop()!.trim()}
-              />
-            </div>
-          )}
 
           {error && <ErrorBanner message={error} />}
 

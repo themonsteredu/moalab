@@ -208,6 +208,40 @@ export function myDuties(tree: DeptNode[], memberId: string | null | undefined):
   return { own, help };
 }
 
+export interface RefGroup {
+  /** '영업마케팅부 › 홍보' — 화면 머리글로 한 번만 적는다 */
+  path: string;
+  deptName: string;
+  groupName: string;
+  items: DutyRef[];
+}
+
+/**
+ * 역할 목록을 **부서 › 중분류로 묶는다.**
+ *
+ * 묶지 않으면 줄마다 `영업마케팅부 › 홍보` 가 그대로 반복된다. 역할이 13개면
+ * 같은 글자가 13번 찍혀서 **정작 역할 이름이 안 읽힌다** (인쇄물에서 같은 값이
+ * 이어지면 통합 셀로 합치는 것과 같은 판단).
+ *
+ * 순서는 **들어온 차례 그대로**다 — 트리 순서(부서·중분류 sort_order)를 이미
+ * 따르고 있어서, 여기서 다시 정렬하면 화면마다 순서가 달라진다.
+ */
+export function groupRefs(refs: DutyRef[]): RefGroup[] {
+  const out: RefGroup[] = [];
+  const at = new Map<string, RefGroup>();
+  for (const r of refs) {
+    const path = `${r.deptName} › ${r.groupName}`;
+    let g = at.get(path);
+    if (!g) {
+      g = { path, deptName: r.deptName, groupName: r.groupName, items: [] };
+      at.set(path, g);
+      out.push(g);
+    }
+    g.items.push(r);
+  }
+  return out;
+}
+
 /** 검색 — 부서·중분류·소분류·설명 어디에 걸려도 남긴다 */
 export function filterOrg(tree: DeptNode[], q: string): DeptNode[] {
   const s = q.trim().toLowerCase();
