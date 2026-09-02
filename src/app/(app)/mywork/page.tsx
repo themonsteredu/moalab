@@ -13,6 +13,8 @@ import { collabPriorityLabel, sortRequests } from '@/lib/collab';
 import { korDate, ddayLabel, ddayClass, hhmm, relTime, toISODate } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
 import { Icon } from '@/components/Icon';
+import { SalesBoard } from '@/components/SalesBoard';
+import type { SalesInput } from '@/lib/sales';
 import { Collapsible, EmptyState, ErrorBanner, Sheet, CardSkeleton, useToast } from '@/components/ui';
 import type {
   AppRow,
@@ -286,6 +288,12 @@ export default function MyWorkPage() {
     [tree, myDeptIds],
   );
 
+  /** 영업 한 판에 넣을 후보 — 내 부서의 역할 전부. 어떤 표를 실제로 모을지는 sales.ts 가 칸을 보고 정한다 */
+  const salesInputs = useMemo<SalesInput[]>(
+    () => myDepts.flatMap((d) => d.groups.flatMap((g) => g.duties.map((n) => ({ duty: n.duty, groupName: g.group.name })))),
+    [myDepts],
+  );
+
 
   const sortedCollabs = useMemo(() => sortRequests(collabs, today), [collabs, today]);
 
@@ -383,6 +391,11 @@ export default function MyWorkPage() {
               {chip('기한 지남', stat.late, 'late')}
               {chip('오늘', stat.today, 'today')}
             </div>
+
+            {/* ------------------------------------------------------ 영업 한 판 */}
+            {/* 기관 표가 갈래 15개로 나뉘어 "오늘 연락할 곳" 을 보려면 15개를 열어야 했다.
+                여기서 읽어서 합친다 — 모을 표가 없는 사람(영업이 아닌 부서)에게는 아예 안 그려진다 */}
+            <SalesBoard inputs={salesInputs} today={today} />
 
             {/* ------------------------------------------------------ 내 부서 */}
             {/* 원장이 말한 구조: *"내 업무를 클릭하면 내 부서의 일을 체계적으로 할 수

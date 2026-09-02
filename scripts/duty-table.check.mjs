@@ -223,6 +223,19 @@ console.log('\n[여러 줄 한꺼번에 넣기]');
     await page.getByText('북구청소년문화의집').first().isVisible());
 }
 
+console.log('\n[?q= 로 들어오면 그 줄부터 — 영업 한 판에서 누르면 여기로 온다]');
+{
+  /* 14줄짜리 표에 떨어져 다시 찾게 하면 '오늘 연락할 곳' 을 누를 이유가 없다 */
+  await page.goto(`${BASE}/roles/u1?q=${encodeURIComponent('북구청소년문화의집')}`, { waitUntil: 'commit' });
+  await page.waitForTimeout(2500);
+  ok('검색 칸이 미리 채워진다', (await page.getByLabel('목록에서 찾기').inputValue()) === '북구청소년문화의집');
+  ok('그 줄만 보인다', await page.getByText('북구청소년문화의집').first().isVisible());
+  ok('다른 줄은 걸러진다', !(await page.getByText('광주청소년문화의집', { exact: true }).first().isVisible().catch(() => false)));
+  await page.getByLabel('목록에서 찾기').fill('');
+  await page.waitForTimeout(500);
+  ok('검색을 지우면 원래 목록이다', await page.getByText('광주청소년문화의집', { exact: true }).first().isVisible());
+}
+
 console.log('\n[표의 모양(열)은 명시적 저장이다]');
 await page.getByRole('button', { name: '표 칸 고치기' }).click();
 await page.waitForTimeout(600);

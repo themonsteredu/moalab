@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
@@ -73,7 +74,11 @@ export function DutyTable({
   const [cols, setCols] = useState<DutyColumn[] | null>(null);
   const [rows, setRows] = useState<DutyRow[]>([]);
   const [error, setError] = useState('');
-  const [q, setQ] = useState('');
+  /* `?q=기관이름` 으로 들어오면 그 줄부터 보여준다 — 영업 한 판의 '오늘 연락할 곳' 에서
+     누르면 14줄짜리 표에 떨어져 다시 찾게 하지 않으려고. 검색만 미리 채우는 것이라
+     주소를 지우면 원래 목록이다 */
+  const params = useSearchParams();
+  const [q, setQ] = useState(() => params?.get('q') ?? '');
 
   const [editing, setEditing] = useState<DutyRow | null>(null);
   const [values, setValues] = useState<Values>({});
@@ -338,7 +343,15 @@ export function DutyTable({
   /** 머리글은 늘 같은 자리다 — 안이 무엇이든(불러오는 중·양식 고르기·목록) 접었다 폈다 한다 */
   const shell = (badge: React.ReactNode, body: React.ReactNode) => (
     <div className="mt-2">
-      <Collapsible id={`duty-table-${dutyId}`} dense defaultOpen={defaultOpen} title="목록" badge={badge}>
+      {/* 검색어가 있으면 펼친다 — 접힌 채로 0건처럼 보이면 안 된다 (`?q=` 로 들어온 경우도) */}
+      <Collapsible
+        id={`duty-table-${dutyId}`}
+        dense
+        defaultOpen={defaultOpen}
+        forceOpen={q.trim() !== ''}
+        title="목록"
+        badge={badge}
+      >
         {body}
       </Collapsible>
     </div>
