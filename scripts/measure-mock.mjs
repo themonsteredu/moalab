@@ -252,7 +252,34 @@ await page.getByRole('button', { name: '내 부서', exact: true }).click();
 await page.waitForTimeout(700);
 await measure('내 부서');
 
-const worst = [...rolesTop.small, ...person.small];
+/* ★ 내 부서는 **중분류별로 접힌다** (39단계). 원장의 영업마케팅부는 역할 28개라
+   펼쳐 늘어놓으니 폰 1701px · PC 1904px 이었다. 접힌 채로 0건처럼 보이면 안 되므로
+   **펼치기와 검색 자동 펼침을 실제로 눌러본다.** 역할 이름은 화면에서 읽어 쓴다 —
+   가짜 데이터의 이름에 묶이면 데이터를 바꿀 때마다 여기가 깨진다 */
+let meOpened = null;
+{
+  const hdr = page.getByRole('button', { name: /역할 \d+/ }).first();
+  const hasHdr = (await hdr.count()) > 0;
+  console.log(`\n내 부서 접힌 머리글: ${hasHdr ? 'OK' : '✗ 없음 (접이식이 아니다)'}`);
+  if (hasHdr) {
+    await hdr.click();
+    await page.waitForTimeout(500);
+    meOpened = await measure('내 부서 · 중분류 하나 펼침');
+    const first = page.locator('a[href^="/roles/"] span.font-semibold').first();
+    const name = ((await first.textContent()) ?? '').trim();
+    await hdr.click();
+    await page.waitForTimeout(300);
+    const beforeQ = await page.getByText(name, { exact: true }).first().isVisible().catch(() => false);
+    await page.getByLabel('내 부서 역할 검색').fill(name.slice(0, 3));
+    await page.waitForTimeout(600);
+    const afterQ = await page.getByText(name, { exact: true }).first().isVisible().catch(() => false);
+    console.log(`내 부서 검색 자동 펼침: 검색 전 보임=${beforeQ} → 검색 후 보임=${afterQ}  ${!beforeQ && afterQ ? 'OK' : '✗'}`);
+    await page.getByLabel('내 부서 역할 검색').fill('');
+    await page.waitForTimeout(300);
+  }
+}
+
+const worst = [...rolesTop.small, ...person.small, ...(meOpened?.small ?? [])];
 if (worst.length) {
   console.log('\n44px 미만 탭 대상');
   [...new Set(worst)].forEach((s) => console.log('  · ' + s));

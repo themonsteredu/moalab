@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
+import { useDutyCounts } from '@/lib/useDutyCounts';
 import { logActivity } from '@/lib/log';
 import { PageHeader } from '@/components/PageHeader';
 import { Avatar } from '@/components/Brand';
@@ -24,6 +25,7 @@ import {
 import {
   buildOrg,
   filterOrg,
+  filterRefs,
   groupByPerson,
   groupRefs,
   myDuties,
@@ -61,6 +63,8 @@ type View = 'dept' | 'person' | 'me';
 export default function RolesPage() {
   const { session, isAdmin } = useSession();
   const { members, nameOf } = useMembers();
+  /** 역할마다 줄·자료가 몇 개인지 — `내 업무` 와 같은 훅이다 (두 벌로 들지 않는다) */
+  const counts = useDutyCounts();
   const toast = useToast();
 
   const [depts, setDepts] = useState<Department[] | null>(null);
@@ -140,6 +144,11 @@ export default function RolesPage() {
 
   const people = useMemo(() => groupByPerson(tree, members), [tree, members]);
   const mine = useMemo(() => myDuties(tree, session?.id), [tree, session]);
+  /** `내 부서` 에도 검색이 걸린다 — 중분류를 접어두기 시작하면서 필요해졌다 */
+  const mineShown = useMemo(
+    () => ({ own: filterRefs(mine.own, q), help: filterRefs(mine.help, q) }),
+    [mine, q],
+  );
 
   /* 강사가 맡은 역할이 0개면 '전체' 로 연다. 손으로 탭을 한 번 누른 뒤에는(viewPinned)
      다시 안 건드린다 — 고른 걸 되돌려버리면 그게 더 답답하다 */
@@ -335,6 +344,13 @@ export default function RolesPage() {
             <span className="block truncate text-[11.5px] text-neutral-400">{r.duty.note}</span>
           )}
         </span>
+        {/* 어디에 일이 쌓였는지 — 있을 때만 그린다. `0줄` 을 28줄에 붙이면 자리만 먹는다 */}
+        {(counts.rows[r.duty.id] ?? 0) > 0 && (
+          <span className="chip shrink-0 bg-neutral-100 text-neutral-500">{counts.rows[r.duty.id]}줄</span>
+        )}
+        {(counts.files[r.duty.id] ?? 0) > 0 && (
+          <span className="chip shrink-0 bg-neutral-100 text-neutral-500">자료 {counts.files[r.duty.id]}</span>
+        )}
         <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
       </Link>
       {/* 바로가기는 **바깥**이다 — button 안에 a 를 넣으면 안 되는 중첩이 된다 */}
@@ -356,11 +372,51 @@ export default function RolesPage() {
    * 예전엔 줄마다 `영업마케팅부 › 홍보` 가 그대로 붙어서, 역할이 13개면 같은 글자가
    * 13번 찍혔다 — 정작 역할 이름이 안 읽힌다. 머리글에 한 번만 적는다.
    */
-  const refList = (own: DutyRef[], help: DutyRef[], showTone = true) => {
+  /**
+   * @param collapse **중분류별로 접는다** — `내 부서` 용.
+   *   원장의 영업마케팅부는 역할 28개다. 펼쳐 늘어놓으니 PC 에서도 두 화면(1904px)이라
+   *   *"되게 일하기 불편"* 이 됐다. 접힌 머리글에 역할 수·줄·자료 합계를 실어
+   *   **펼치지 않고도 어디에 일이 있는지** 보이게 한다 (프로그램 목록의 주제 트리와
+   *   같은 판단). 검색이 걸리면 저절로 펼친다 (`forceOpen`).
+   *   한 부서뿐이라 머리글은 부서를 빼고 중분류 이름만 적는다.
+   */
+  const refList = (own: DutyRef[], help: DutyRef[], showTone = true, collapse = false) => {
     const ownIds = new Set(own.map((r) => r.duty.id));
+    const groupsOf = groupRefs([...own, ...help]);
+    if (collapse) {
+      return (
+        <div className="divide-y divide-neutral-100">
+          {groupsOf.map((g) => {
+            const lines = g.items.reduce((n, r) => n + (counts.rows[r.duty.id] ?? 0), 0);
+            const files = g.items.reduce((n, r) => n + (counts.files[r.duty.id] ?? 0), 0);
+            return (
+              <div key={g.path} className="py-1 first:pt-0 last:pb-0">
+                <Collapsible
+                  id={`roles.me.${g.path}`}
+                  dense
+                  title={g.groupName}
+                  forceOpen={forceOpen}
+                  badge={
+                    <>
+                      <span className="chip bg-neutral-100 text-neutral-500">역할 {g.items.length}</span>
+                      {lines > 0 && <span className="chip bg-neutral-100 text-neutral-500">{lines}줄</span>}
+                      {files > 0 && <span className="chip bg-neutral-100 text-neutral-500">자료 {files}</span>}
+                    </>
+                  }
+                >
+                  <ul className="border-l border-neutral-200 pl-2.5">
+                    {g.items.map((r) => refRow(r, undefined))}
+                  </ul>
+                </Collapsible>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
     return (
       <div className="divide-y divide-neutral-100">
-        {groupRefs([...own, ...help]).map((g) => (
+        {groupsOf.map((g) => (
           <div key={g.path} className="py-2 first:pt-0 last:pb-0">
             <p className="mb-0.5 text-[11px] font-bold tracking-wide text-neutral-400">{g.path}</p>
             <ul>
@@ -468,10 +524,23 @@ export default function RolesPage() {
             />
           ) : (
             <section className="card p-3.5 lg:max-w-3xl">
-              <h2 className="mb-1 text-[14px] font-bold">
-                주담당 {mine.own.length} · 부담당 {mine.help.length}
-              </h2>
-              {refList(mine.own, mine.help)}
+              {/* `주담당 28 · 부담당 0` 이라고 적혀 있었다 — 역할에 사람을 안 붙이기로 한 뒤로
+                  '주담당' 은 팀장 자동 배정일 뿐이라 아무 뜻이 없다. 줄마다 붙던 칩도 같이 뺐다 */}
+              <div className="mb-2 flex items-center gap-2">
+                <h2 className="text-[14px] font-bold">역할 {mine.own.length + mine.help.length}</h2>
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="역할 이름으로 찾기"
+                  aria-label="내 부서 역할 검색"
+                  className="field ml-auto max-w-[220px] text-[13px]"
+                />
+              </div>
+              {mineShown.own.length + mineShown.help.length === 0 ? (
+                <EmptyState icon="search" title="찾는 역할이 없어요" desc="다른 말로 찾아보세요." />
+              ) : (
+                refList(mineShown.own, mineShown.help, false, true)
+              )}
             </section>
           )
         ) : view === 'person' ? (
@@ -655,7 +724,10 @@ export default function RolesPage() {
         groupName={editing?.groupName}
         duty={editing?.duty ?? null}
         canDelete={isAdmin}
-        onSaved={() => void load()}
+        onSaved={() => {
+          void load();
+          void counts.reload();
+        }}
       />
 
       {/* 부서 시트 */}
