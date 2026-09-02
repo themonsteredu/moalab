@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
+import { useDutyCounts } from '@/lib/useDutyCounts';
 import { logActivity } from '@/lib/log';
 import { buildOrg, type DutyRef } from '@/lib/org';
 import { isOverdue, sortTasks, todayStr } from '@/lib/task';
@@ -60,9 +61,8 @@ export default function MyWorkPage() {
   const [deptNames, setDeptNames] = useState<Record<string, string>>({});
   const [entries, setEntries] = useState<ReturnType<typeof buildEntries>>([]);
   const [files, setFiles] = useState<FileRow[]>([]);
-  /** 역할별 자료 개수 — 줄에 배지로 보여준다 (내 것만이 아니라 그 역할에 쌓인 전부) */
-  const [fileCount, setFileCount] = useState<Record<string, number>>({});
-  const [rowCount, setRowCount] = useState<Record<string, number>>({});
+  /** 역할별 줄·자료 개수 — 줄에 배지로 보여준다. `부서업무 › 내 부서` 와 같은 훅이다 */
+  const counts = useDutyCounts();
   const [error, setError] = useState('');
   const [actionErr, setActionErr] = useState('');
 
@@ -85,7 +85,7 @@ export default function MyWorkPage() {
     if (!meId) return;
     setError('');
     try {
-      const [taskRes, deptRes, grpRes, dutyRes, helperRes, collabRes, schedRes, smRes, appRes, revRes, dfRes, pfRes, dcRes, drRes] =
+      const [taskRes, deptRes, grpRes, dutyRes, helperRes, collabRes, schedRes, smRes, appRes, revRes, dfRes, pfRes] =
         await Promise.all([
           supabase.from('tasks').select('*').eq('assignee_id', meId),
           supabase.from('departments').select('*').order('sort_order'),
@@ -109,8 +109,6 @@ export default function MyWorkPage() {
             .eq('member_id', meId)
             .order('created_at', { ascending: false })
             .limit(10),
-          supabase.from('duty_files').select('duty_id'),
-          supabase.from('duty_rows').select('duty_id'),
         ]);
 
       setTasks((taskRes.data ?? []) as Task[]);
@@ -132,20 +130,6 @@ export default function MyWorkPage() {
       const mine = new Set(depts.filter((d) => d.head_id === meId).map((d) => d.id));
       const myDepts = [...mine];
       setMyDeptIds(myDepts);
-
-      const counted: Record<string, number> = {};
-      for (const r of (dcRes.data ?? []) as { duty_id: string }[]) {
-        counted[r.duty_id] = (counted[r.duty_id] ?? 0) + 1;
-      }
-      setFileCount(counted);
-
-      /* 표에 몇 줄 쌓였는지 — 자료 개수와 나란히 칩으로 보여준다.
-         `duty_rows` 표가 아직 없는 DB 에서도 화면이 죽으면 안 되므로 실패는 조용히 0 이다 */
-      const rowed: Record<string, number> = {};
-      for (const r of (drRes.data ?? []) as { duty_id: string }[]) {
-        rowed[r.duty_id] = (rowed[r.duty_id] ?? 0) + 1;
-      }
-      setRowCount(rowed);
 
       /* ---- 받은 요청 --------------------------------------------------- */
       const reqs = (collabRes.data ?? []) as CollabRequest[];
@@ -446,8 +430,8 @@ export default function MyWorkPage() {
                         </p>
                         <ul>
                           {g.duties.map((n) => {
-                            const files = fileCount[n.duty.id] ?? 0;
-                            const lines = rowCount[n.duty.id] ?? 0;
+                            const files = counts.files[n.duty.id] ?? 0;
+                            const lines = counts.rows[n.duty.id] ?? 0;
                             return (
                               <li key={n.duty.id} className="flex items-center gap-1">
                                 {/* **역할 한 장으로 간다** — 목록·자료·바로가기가 거기 다 있다.

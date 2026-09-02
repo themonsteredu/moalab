@@ -221,6 +221,34 @@ console.log('\n[망가진 데이터]');
   eq('빈 부서도 그려진다', t[0].total, 0);
 }
 
+console.log('\n[평평한 역할 목록 검색 · 개수 세기]');
+{
+  /* `내 부서` 를 중분류별로 접기 시작했다 — 접힌 채로 0건처럼 보이면 안 되므로
+     검색이 걸리면 펼쳐야 하고, 그러려면 트리가 아닌 목록에도 검색이 걸려야 한다 */
+  const ref = (id, name, note, groupName, deptName = '영업마케팅부') => ({
+    duty: { id, group_id: 'g', name, note, owner_id: null, link: null, sort_order: 0, created_at: '' },
+    deptName, groupName,
+  });
+  const refs = [
+    ref('a', '청소년문화의집', '구·시군마다 있는 청소년 전용 공간', '신규발굴 청소년기관'),
+    ref('b', '지역아동센터', '방과후 돌봄', '신규발굴 아동·돌봄'),
+    ref('c', '명함제작', null, '홍보'),
+  ];
+  eq('빈 검색은 전부', O.filterRefs(refs, '  ').length, 3);
+  eq('이름에 걸린다', O.filterRefs(refs, '아동센터').map((r) => r.duty.id), ['b']);
+  eq('설명에도 걸린다', O.filterRefs(refs, '전용 공간').map((r) => r.duty.id), ['a']);
+  eq('중분류 이름에도 걸린다', O.filterRefs(refs, '홍보').map((r) => r.duty.id), ['c']);
+  eq('부서 이름에 걸리면 전부', O.filterRefs(refs, '영업').length, 3);
+  eq('대소문자를 안 가린다', O.filterRefs([ref('d', 'SNS 운영', null, '홍보')], 'sns').length, 1);
+  eq('설명이 null 이어도 안 죽는다', O.filterRefs(refs, '없는말').length, 0);
+
+  /* 줄·자료 개수 — 없는 역할은 키가 없어야 한다 (0 을 63개 채우면 뜻이 없다) */
+  const n = O.countByDuty([{ duty_id: 'a' }, { duty_id: 'a' }, { duty_id: 'b' }]);
+  eq('역할별로 센다', n, { a: 2, b: 1 });
+  eq('없는 역할은 키가 없다', 'c' in n, false);
+  eq('null 이어도 빈 것', O.countByDuty(null), {});
+}
+
 rmSync(out, { recursive: true, force: true });
 console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`);
 process.exit(fail === 0 ? 0 : 1);
