@@ -10,11 +10,13 @@ import { Icon } from '@/components/Icon';
 import { Collapsible, ConfirmDialog, EmptyState, ErrorBanner, Sheet, Skeleton } from '@/components/ui';
 import {
   COLUMN_KINDS,
+  PASTE_MAX,
   PRESETS,
   cellText,
   cleanCell,
   filterRows,
   nextOrder,
+  parsePasted,
   rowTitle,
   safeKind,
   statusCounts,
@@ -78,6 +80,11 @@ export function DutyTable({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [killing, setKilling] = useState<DutyRow | null>(null);
+
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [pasteBusy, setPasteBusy] = useState(false);
+  const [pasteError, setPasteError] = useState('');
 
   const [structOpen, setStructOpen] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -153,6 +160,46 @@ export function DutyTable({
       openRow(row);
     } catch (e) {
       setError(friendlyError(e, '줄을 추가하지 못했어요.'));
+    }
+  };
+
+  /**
+   * **여러 줄 한꺼번에 넣기.** 엑셀·한글 표에서 복사한 것을 붙여넣으면 줄이 된다.
+   * 기관 목록처럼 수백 줄짜리는 `+ 줄 추가` 를 수백 번 누를 수 없다.
+   *
+   * 저장은 **insert 한 번**(배열)이다 — 중간에 반만 들어가는 일이 없다
+   * (체크리스트 뿌리기·주제로 옮기기와 같은 규칙).
+   */
+  const runPaste = async () => {
+    if (pasted.rows.length === 0) return;
+    setPasteBusy(true);
+    setPasteError('');
+    try {
+      const base = nextOrder(rows);
+      const { data, error: e } = await supabase
+        .from('duty_rows')
+        .insert(
+          pasted.rows.map((cells, i) => ({
+            duty_id: dutyId,
+            cells,
+            sort_order: base + i,
+            updated_by: session?.id ?? null,
+          })),
+        )
+        .select();
+      if (e) throw e;
+      setRows((prev) => [...prev, ...((data ?? []) as DutyRow[])]);
+      logActivity(
+        session?.id,
+        `역할 표 여러 줄 넣기 — ${dutyName} (${pasted.rows.length}줄)`,
+        `duty:${dutyId}`,
+      );
+      setPasteOpen(false);
+      setPasteText('');
+    } catch (e) {
+      setPasteError(friendlyError(e, '줄을 넣지 못했어요.'));
+    } finally {
+      setPasteBusy(false);
     }
   };
 
@@ -282,6 +329,11 @@ export function DutyTable({
 
   const shown = useMemo(() => filterRows(cols ?? [], rows, q), [cols, rows, q]);
   const counts = useMemo(() => statusCounts(cols ?? [], rows), [cols, rows]);
+  /** 붙여넣은 것을 **저장하기 전에** 미리 보여준다 (뿌리기·말로 넣기와 같은 규칙) */
+  const pasted = useMemo(
+    () => parsePasted(cols ?? [], rows, pasteText),
+    [cols, rows, pasteText],
+  );
 
   /** 머리글은 늘 같은 자리다 — 안이 무엇이든(불러오는 중·양식 고르기·목록) 접었다 폈다 한다 */
   const shell = (badge: React.ReactNode, body: React.ReactNode) => (
@@ -503,9 +555,25 @@ export function DutyTable({
         </ul>
       )}
 
-      <button onClick={() => void addRow()} className="tap w-full gap-1.5 rounded-xl border border-dashed border-neutral-300 text-[13px] font-bold text-neutral-500">
-        <Icon name="plus" size={14} />줄 추가
-      </button>
+      {/* 한 줄씩 / 한꺼번에 — 둘을 한 줄에 나란히 둔다. 세로로 쌓으면 목록 아래가
+          44px 더 길어지는데, 하는 일이 같은 갈래라 나란히 놓는 게 읽기도 낫다 */}
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => void addRow()}
+          className="tap min-w-0 flex-1 gap-1.5 rounded-xl border border-dashed border-neutral-300 text-[13px] font-bold text-neutral-500"
+        >
+          <Icon name="plus" size={14} />줄 추가
+        </button>
+        <button
+          onClick={() => {
+            setPasteError('');
+            setPasteOpen(true);
+          }}
+          className="tap min-w-0 flex-1 gap-1.5 rounded-xl border border-dashed border-neutral-300 text-[13px] font-bold text-neutral-500"
+        >
+          <Icon name="copy" size={14} />여러 줄 넣기
+        </button>
+      </div>
 
       {/* ------------------------------------------------ 줄 고치기 (자동저장) */}
       <Sheet
@@ -553,6 +621,81 @@ export function DutyTable({
         onCancel={() => setKilling(null)}
         onConfirm={() => void removeRow()}
       />
+
+      {/* --------------------------------------- 여러 줄 한꺼번에 넣기 (미리보기 필수) */}
+      <Sheet
+        open={pasteOpen}
+        onClose={() => setPasteOpen(false)}
+        title="여러 줄 한꺼번에 넣기"
+        footer={
+          <button
+            onClick={() => void runPaste()}
+            disabled={pasteBusy || pasted.rows.length === 0}
+            className="btn-primary w-full"
+          >
+            {pasteBusy ? '넣는 중…' : pasted.rows.length === 0 ? '붙여넣어 주세요' : `${pasted.rows.length}줄 넣기`}
+          </button>
+        }
+      >
+        <div className="space-y-2.5">
+          <p className="text-[12.5px] leading-relaxed text-neutral-500">
+            엑셀·한글 표에서 <b className="text-neutral-700">복사해서 그대로 붙여넣으세요.</b>{' '}
+            <b className="text-neutral-700">한 줄이 한 개</b>가 됩니다. 표를 통째로 복사하면 칸까지
+            나뉘어 들어가고, 이름만 한 줄씩 붙여넣어도 됩니다.
+          </p>
+
+          {(cols ?? []).length > 1 && (
+            <p className="rounded-xl bg-neutral-50 px-3 py-2 text-[11.5px] leading-relaxed text-neutral-500">
+              칸 순서 — {(cols ?? []).map((c) => c.name).join(' · ')}
+            </p>
+          )}
+
+          <textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            rows={7}
+            aria-label="넣을 줄 붙여넣기"
+            placeholder={`${(cols ?? [])[0]?.name ?? '이름'}을 한 줄에 하나씩\n(엑셀에서 복사한 표를 그대로 붙여넣어도 돼요)`}
+            className="field h-auto py-2.5 text-[13px] leading-relaxed"
+          />
+
+          {/* **저장 전 미리보기.** 여러 건이 한꺼번에 생기는 동작이라, 잘못 넣으면
+              지우는 것도 여러 번이다 (뿌리기·말로 넣기와 같은 규칙) */}
+          {pasteText.trim() !== '' && (
+            <div className="rounded-xl border border-neutral-200 p-2.5">
+              <p className="text-[13px] font-bold text-neutral-800">
+                {pasted.rows.length}줄이 들어갑니다
+              </p>
+              {pasted.titles.length > 0 && (
+                <p className="mt-1 text-[11.5px] leading-snug text-neutral-500">
+                  {pasted.titles.slice(0, 5).join(' · ')}
+                  {pasted.titles.length > 5 && ` 외 ${pasted.titles.length - 5}개`}
+                </p>
+              )}
+              {(pasted.dup > 0 || pasted.blank > 0 || pasted.cut > 0 || pasted.over > 0) && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {pasted.dup > 0 && (
+                    <span className="chip bg-neutral-100 text-neutral-600">이미 있음 {pasted.dup}</span>
+                  )}
+                  {pasted.blank > 0 && (
+                    <span className="chip bg-neutral-100 text-neutral-600">이름 없음 {pasted.blank}</span>
+                  )}
+                  {pasted.over > 0 && (
+                    <span className="chip bg-amber-100 text-amber-800">칸이 남음 {pasted.over}</span>
+                  )}
+                  {pasted.cut > 0 && (
+                    <span className="chip bg-amber-100 text-amber-800">
+                      {PASTE_MAX}줄 넘어 잘림 {pasted.cut}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {pasteError && <ErrorBanner message={pasteError} />}
+        </div>
+      </Sheet>
 
       {/* ------------------------------------------------- 표 모양 (명시적 저장) */}
       <Sheet

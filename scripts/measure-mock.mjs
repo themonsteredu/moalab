@@ -226,11 +226,9 @@ await page.waitForTimeout(600);
 await measure('부서 하나 펼침');
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT.replace('.png', '-roles-dept.png') });
 
-await page.getByRole('button', { name: /담당자 미정/ }).click();
-await page.waitForTimeout(700);
-await measure('미정만 보기');
-await page.getByRole('button', { name: /담당자 미정/ }).click();
-await page.waitForTimeout(500);
+/* `담당자 미정만 보기` 는 34단계에서 사라졌다 — 역할에는 사람을 안 붙이고
+   부서(팀장)가 도맡기로 하면서 그 필터가 잴 대상이 없어졌다. 여기 남아 있던
+   클릭이 30초 타임아웃으로 죽어서 **그 아래 /roles/[dutyId] 를 영영 못 쟀다** */
 
 /* 검색이 걸리면 트리가 저절로 펼쳐져야 한다.
    defaultOpen 은 첫 값만 잡아서 실제로는 안 열렸다 — Collapsible 의 forceOpen 으로 고쳤다.
@@ -248,9 +246,11 @@ await page.waitForTimeout(700);
 const person = await measure('사람별');
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT.replace('.png', '-roles.png') });
 
-await page.getByRole('button', { name: '내 역할', exact: true }).click();
+/* 34단계에서 `내 역할` → **`내 부서`** 로 바뀌었다 (내가 팀장인 부서).
+   옛 이름을 누르고 있어서 여기서도 타임아웃으로 죽었다 */
+await page.getByRole('button', { name: '내 부서', exact: true }).click();
 await page.waitForTimeout(700);
-await measure('내 역할');
+await measure('내 부서');
 
 const worst = [...rolesTop.small, ...person.small];
 if (worst.length) {

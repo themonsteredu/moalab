@@ -273,6 +273,108 @@ export function rowTitle(cols: DutyColumn[], row: DutyRow): string {
   return t.trim() === '' ? '이름 없음' : t;
 }
 
+/* --------------------------------------------- 여러 줄 한꺼번에 넣기 */
+
+/**
+ * **목록은 손으로 한 줄씩 채우는 게 아니다.**
+ *
+ * 신규 기관 발굴만 해도 광주·전남에 청소년문화의집·지역아동센터·청년센터가
+ * 수백 곳이다. 폰에서 `+ 줄 추가` 를 수백 번 누르게 하면 아무도 시작을 못 한다
+ * (빈 표에서 열을 하나씩 만들라고 하지 않는 것과 같은 판단).
+ * 엑셀·한글 표에서 복사한 것을 그대로 붙여넣으면 줄이 된다.
+ *
+ * 규칙은 셋뿐이다 — **붙여넣기 전에 결과를 짐작할 수 있어야** 쓴다:
+ *
+ * · **한 줄이 한 개다.** 빈 줄은 조용히 넘긴다
+ * · 줄 안에 **탭이 있으면 칸 구분**으로 본다 (엑셀·한글 표를 복사하면 탭으로 온다).
+ *   **쉼표는 칸 구분으로 안 본다** — `광주 동구, 서구` 같은 값이 쪼개진다
+ * · **첫 칸이 비면 그 줄은 버린다.** 첫 칸이 줄의 제목이라, 비면 `이름 없음` 이 쌓여
+ *   목록에서 아무것도 못 찾게 된다 (`+ 줄 추가` 가 빈 새 줄을 걷어내는 것과 같은 이유)
+ *
+ * 이미 있는 이름, 그리고 **붙여넣기 안에서 겹치는 이름**은 건너뛴다 —
+ * 같은 기관이 두 줄이면 어느 쪽에 연락 기록을 적었는지 모르게 된다.
+ */
+export interface PastedPlan {
+  /** 넣을 줄들 — 열 id 를 열쇠로 한 값 (duty_rows.cells 에 그대로 들어간다) */
+  rows: Record<string, CellValue>[];
+  /** 미리보기에 쓸 제목 (첫 칸 값) */
+  titles: string[];
+  /** 첫 칸이 비어서 버린 줄 */
+  blank: number;
+  /** 이미 있거나 붙여넣기 안에서 겹쳐서 건너뛴 줄 */
+  dup: number;
+  /** 최대치를 넘어 잘린 줄 */
+  cut: number;
+  /** 표의 열보다 칸이 많아 뒤쪽을 버린 줄 */
+  over: number;
+}
+
+/**
+ * 한 번에 넣을 수 있는 최대 줄 수. 잘리면 **몇 줄이 잘렸는지 화면에 적는다** —
+ * 조용히 자르면 붙여넣은 것과 들어간 것이 다른 걸 아무도 모른다.
+ */
+export const PASTE_MAX = 300;
+
+/** 붙여넣기에서 `예/아니오` 칸에 적힌 글자. 체크박스와 달리 글자로 오기 때문에 따로 본다 */
+const YES = /^(예|y|yes|true|1|o|참|있음|완료)$/i;
+
+export function parsePasted(
+  cols: DutyColumn[],
+  existing: DutyRow[],
+  text: string,
+  max = PASTE_MAX,
+): PastedPlan {
+  const plan: PastedPlan = { rows: [], titles: [], blank: 0, dup: 0, cut: 0, over: 0 };
+  const first = cols[0];
+  if (!first) return plan;
+
+  /* 이미 있는 제목 — 겹치면 건너뛴다. 붙여넣기 안에서 겹치는 것도 같은 자루에 담는다 */
+  const seen = new Set(
+    existing
+      .map((r) => cellText(first, (r.cells ?? {})[first.id] ?? null).trim())
+      .filter((t) => t !== ''),
+  );
+
+  for (const raw of text.split(/\r?\n/)) {
+    /* ⚠️ **줄 전체를 trim 하면 안 된다.** 앞의 탭까지 털려서 `\t연락함\t10` 처럼
+       **첫 칸이 빈 줄**이 두 번째 칸을 제목으로 삼고 들어간다 (테스트가 잡았다).
+       끝의 공백만 털고, 칸을 가른 **뒤에** 칸마다 턴다 */
+    const line = raw.replace(/\s+$/, '');
+    if (line.trim() === '') continue;
+
+    const parts = (line.includes('\t') ? line.split('\t') : [line]).map((x) => x.trim());
+    const title = parts[0] ?? '';
+    if (title === '') {
+      plan.blank += 1;
+      continue;
+    }
+    if (seen.has(title)) {
+      plan.dup += 1;
+      continue;
+    }
+    if (plan.rows.length >= max) {
+      plan.cut += 1;
+      continue;
+    }
+    if (parts.length > cols.length) plan.over += 1;
+
+    seen.add(title);
+    const cells: Record<string, CellValue> = {};
+    cols.forEach((c, i) => {
+      const kind = safeKind(c.kind);
+      const s = parts[i] ?? '';
+      if (s === '') return;
+      // 안 적은 칸은 아예 안 넣는다 (`false`·`null` 을 넣으면 '안 적음' 과 섞인다)
+      const v = kind === 'check' ? YES.test(s) || null : cleanCell(kind, s);
+      if (v === null || v === false) return;
+      cells[c.id] = v;
+    });
+    plan.rows.push(cells);
+    plan.titles.push(title);
+  }
+  return plan;
+}
+
 /**
  * 검색 — 어느 칸에 걸려도 남긴다 (`filterOrg` 와 같은 갈래).
  * 열 이름으로도 걸린다 — "상태" 로 찾으면 상태 칸이 있는 줄이 나온다.
