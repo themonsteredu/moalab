@@ -185,6 +185,44 @@ await page.getByRole('button', { name: '닫기', exact: true }).last().click();
 await page.waitForTimeout(800);
 ok("'이름 없음' 이 목록에 안 남는다", db.duty_rows.length === rowsBefore, `${db.duty_rows.length}줄`);
 
+console.log('\n[여러 줄 한꺼번에 넣기]');
+{
+  /* 기관 발굴 목록은 광주·전남에 수백 곳이다. `+ 줄 추가` 를 수백 번 누르게 하면
+     아무도 시작을 못 한다. 여기서 막고 싶은 것:
+       · 미리보기 없이 여러 건이 한꺼번에 들어가는 것 (지우는 것도 여러 번이다)
+       · 같은 기관이 두 줄로 늘어 어느 쪽에 연락 기록을 적었는지 모르게 되는 것
+       · 줄마다 요청이 나가는 것 — 300줄이면 요청 300번이다 */
+  await page.getByRole('button', { name: /여러 줄 넣기/ }).click();
+  await page.waitForTimeout(600);
+  const box2 = page.getByLabel('넣을 줄 붙여넣기');
+  ok('붙여넣는 칸이 열린다', await box2.isVisible());
+  ok('칸 순서를 알려준다', await page.getByText(/칸 순서 —/).first().isVisible());
+  ok('붙여넣기 전에는 넣기 버튼이 안 눌린다',
+    await page.getByRole('button', { name: '붙여넣어 주세요' }).isDisabled());
+
+  // 세 줄 중 하나는 이미 있는 기관이다 — 건너뛰어야 한다
+  await box2.fill('광주청소년문화의집\t계약\n북구청소년문화의집\n광주중학교(본교)');
+  await page.waitForTimeout(500);
+  ok('저장 전에 몇 줄이 들어갈지 보여준다', await page.getByText('2줄이 들어갑니다').isVisible());
+  ok('이미 있는 것은 건너뛴다고 알려준다', await page.getByText('이미 있음 1').isVisible());
+
+  const posts = writes.filter((w) => w.table === 'duty_rows' && w.method === 'POST').length;
+  await page.getByRole('button', { name: '2줄 넣기' }).click();
+  await page.waitForTimeout(1200);
+
+  ok('요청 한 번으로 넣는다 (줄마다 보내지 않는다)',
+    writes.filter((w) => w.table === 'duty_rows' && w.method === 'POST').length === posts + 1);
+  ok('DB 에 두 줄이 늘었다', db.duty_rows.length === 3, `${db.duty_rows.length}줄`);
+  ok('탭으로 가른 칸이 제자리에 들어간다',
+    db.duty_rows[1].cells.c1 === '광주청소년문화의집' && db.duty_rows[1].cells.c2 === '계약',
+    JSON.stringify(db.duty_rows[1].cells));
+  ok('안 적은 칸은 아예 안 넣는다', db.duty_rows[2].cells.c2 === undefined,
+    JSON.stringify(db.duty_rows[2].cells));
+  ok('누가 넣었는지 남는다', db.duty_rows[2].updated_by === ME);
+  ok('넣고 나면 목록에 바로 보인다',
+    await page.getByText('북구청소년문화의집').first().isVisible());
+}
+
 console.log('\n[표의 모양(열)은 명시적 저장이다]');
 await page.getByRole('button', { name: '표 칸 고치기' }).click();
 await page.waitForTimeout(600);
