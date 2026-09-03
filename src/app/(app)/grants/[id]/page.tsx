@@ -9,11 +9,24 @@ import { GRANT_STATUS, isGrantConceptReady } from '@/lib/grants';
 import { useMembers } from '@/lib/useMembers';
 import { useSession } from '@/lib/session';
 import { friendlyError } from '@/lib/supabase';
+import { readCache, writeCache } from '@/lib/pageCache';
 import { logActivity } from '@/lib/log';
 import type { GrantCollaborator, GrantFile, GrantFileKind, GrantProject, GrantStatus } from '@/lib/types';
 
 const STATUS_ORDER: GrantStatus[] = ['discovered', 'concept_shared', 'writing', 'submitted', 'selected', 'not_selected', 'paused'];
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+/**
+ * 지난번에 본 내용을 먼저 그려 빈 화면을 없앤다 (src/lib/pageCache.ts).
+ * **첨부파일은 일부러 안 담는다** — 내려받기 주소가 1시간이면 만료되므로
+ * 낡은 주소를 눌러 실패하느니 파일 칸만 잠깐 비워두는 편이 낫다.
+ */
+const cacheKey = (id: string) => `grant.${id}.v1`;
+
+interface CachedGrant {
+  project: GrantProject;
+  collaboratorIds: string[];
+}
 
 export default function GrantDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,15 +52,29 @@ export default function GrantDetailPage() {
       if (!response.ok) throw new Error(result.error || '불러오기 실패');
       const found = result.project ?? null;
       if (!found) throw new Error('사업을 찾을 수 없습니다.');
+      const nextCollaboratorIds = (result.collaborators ?? []).map((row) => row.member_id);
       setProject(found);
-      setCollaboratorIds((result.collaborators ?? []).map((row) => row.member_id));
+      setCollaboratorIds(nextCollaboratorIds);
       setFiles(result.files ?? []);
+      if (session?.id) writeCache<CachedGrant>(cacheKey(id), session.id, { project: found, collaboratorIds: nextCollaboratorIds });
     } catch (caught) {
       setError(friendlyError(caught, '사업 내용을 불러오지 못했어요.'));
     } finally {
       setLoading(false);
     }
-  }, [id, session?.token]);
+  }, [id, session?.id, session?.token]);
+
+  // 첫 진입에만 지난번 내용을 얹는다. 아래 load 보다 **먼저** 선언해야 순서가 보장된다.
+  // 저장한 뒤 다시 불러올 때는 이 효과가 다시 돌지 않는다 —
+  // 방금 저장한 값 위로 옛 값이 덮이면 안 된다.
+  useEffect(() => {
+    if (!session?.id) return;
+    const cached = readCache<CachedGrant>(cacheKey(id), session.id);
+    if (!cached?.project) return;
+    setProject(cached.project);
+    setCollaboratorIds(cached.collaboratorIds ?? []);
+    setLoading(false);
+  }, [id, session?.id]);
 
   useEffect(() => { void load(); }, [load]);
 

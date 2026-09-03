@@ -10,11 +10,17 @@ import { daysUntil, GRANT_STATUS, grantProgress } from '@/lib/grants';
 import { useMembers } from '@/lib/useMembers';
 import { useSession } from '@/lib/session';
 import { friendlyError } from '@/lib/supabase';
+import { readCache, writeCache } from '@/lib/pageCache';
 import type { GrantCollaborator, GrantProject, GrantStatus } from '@/lib/types';
 
 type Filter = 'active' | 'mine' | 'submitted' | 'archive' | 'all';
-const CACHE_KEY = 'moalab.grants.cache.v1';
-const CACHE_TTL_MS = 5 * 60 * 1000;
+/** 지난번 목록을 먼저 그려놓고 뒤에서 새로 받는다 (src/lib/pageCache.ts) */
+const CACHE_KEY = 'grants.list.v1';
+
+interface CachedList {
+  projects: GrantProject[];
+  collaborators: GrantCollaborator[];
+}
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'active', label: '진행 중' },
@@ -41,26 +47,13 @@ export default function GrantsPage() {
   const load = useCallback(async () => {
     if (!session?.token) return;
     setError('');
-    let hasCachedList = false;
-    try {
-      const raw = window.sessionStorage.getItem(CACHE_KEY);
-      const cached = raw ? JSON.parse(raw) as {
-        memberId?: string;
-        cachedAt?: number;
-        projects?: GrantProject[];
-        collaborators?: GrantCollaborator[];
-      } : null;
-      if (cached?.memberId === session.id
-        && typeof cached.cachedAt === 'number'
-        && Date.now() - cached.cachedAt < CACHE_TTL_MS
-        && Array.isArray(cached.projects)
-        && Array.isArray(cached.collaborators)) {
-        setProjects(cached.projects);
-        setCollaborators(cached.collaborators);
-        hasCachedList = true;
-      }
-    } catch {
-      // 캐시가 깨져도 서버의 최신 목록을 읽으면 된다.
+    // 서버를 기다리지 않고 지난번 목록을 곧바로 그린다. 낡았어도 일단 보여주고
+    // 바로 아래에서 새로 받아 갈아끼운다 — 빈 화면이 제일 느리게 느껴진다.
+    const cached = readCache<CachedList>(CACHE_KEY, session.id);
+    const hasCachedList = Array.isArray(cached?.projects) && Array.isArray(cached?.collaborators);
+    if (hasCachedList) {
+      setProjects(cached!.projects);
+      setCollaborators(cached!.collaborators);
     }
     try {
       const response = await fetch('/api/grants', { headers: { 'x-session-token': session.token } });
@@ -70,16 +63,10 @@ export default function GrantsPage() {
       const nextCollaborators = result.collaborators ?? [];
       setProjects(nextProjects);
       setCollaborators(nextCollaborators);
-      try {
-        window.sessionStorage.setItem(CACHE_KEY, JSON.stringify({
-          memberId: session.id,
-          cachedAt: Date.now(),
-          projects: nextProjects,
-          collaborators: nextCollaborators,
-        }));
-      } catch {
-        // 저장 공간이 막혀도 화면 사용에는 영향이 없다.
-      }
+      writeCache<CachedList>(CACHE_KEY, session.id, {
+        projects: nextProjects,
+        collaborators: nextCollaborators,
+      });
     } catch (caught) {
       if (!hasCachedList) setProjects([]);
       setError(friendlyError(caught, '정부지원사업을 불러오지 못했어요.'));

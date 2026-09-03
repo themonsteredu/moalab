@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { clearCaches } from './pageCache';
 import type { Role } from './types';
 
 const KEY = 'moalab.session.v1';
@@ -69,6 +70,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(() => {
     window.localStorage.removeItem(KEY);
+    // 화면을 빨리 그리려고 받아둔 자료도 같이 지운다 — 남의 기기에 남으면 안 된다.
+    // 화면 설정(`moalab.open.*` 등)은 건드리지 않는다.
+    clearCaches();
     setSession(null);
   }, []);
 
