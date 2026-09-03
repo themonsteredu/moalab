@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
@@ -9,6 +10,7 @@ import { logActivity } from '@/lib/log';
 import { relTime } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { Collapsible, ConfirmDialog, EmptyState, ErrorBanner, Sheet, Skeleton } from '@/components/ui';
+import { parseDutyDocument } from '@/lib/dutyDocument';
 import {
   COLUMN_KINDS,
   PASTE_MAX,
@@ -371,6 +373,7 @@ export function DutyTable({
     () => parsePasted(cols ?? [], rows, pasteText),
     [cols, rows, pasteText],
   );
+  const editingDocument = editing ? parseDutyDocument((editing.cells ?? {}).__document) : null;
 
   /** 머리글은 늘 같은 자리다 — 안이 무엇이든(불러오는 중·양식 고르기·목록) 접었다 폈다 한다 */
   const shell = (badge: React.ReactNode, body: React.ReactNode) => (
@@ -703,6 +706,25 @@ export function DutyTable({
         }
       >
         <div className="space-y-3">
+          {editing && editingDocument && (
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-brand-200 bg-brand-50 p-2.5">
+              <Link
+                href={`/roles/${dutyId}/document?rowId=${editing.id}`}
+                className="btn-primary min-w-0 gap-1.5 px-2 text-[12.5px]"
+              >
+                <Icon name="doc" size={14} />문서로 열기
+              </Link>
+              <a
+                href={`/print/duty-document/${dutyId}/${editing.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-ghost min-w-0 gap-1.5 px-2 text-[12.5px]"
+              >
+                <Icon name="printer" size={14} />문서 보기·PDF
+              </a>
+            </div>
+          )}
+
           {(cols ?? []).map((c) => (
             <div key={c.id}>{field(c)}</div>
           ))}

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { planFor } from '@/lib/dutyTable';
+import { documentTemplatesFor } from '@/lib/dutyDocument';
 import { PageHeader } from '@/components/PageHeader';
 import { Icon } from '@/components/Icon';
 import { DutyFiles } from '@/components/DutyFiles';
@@ -97,6 +98,7 @@ export default function DutyPage() {
   const groupName = group?.name ?? '';
   const path = [deptName, groupName].filter(Boolean).join(' › ');
   const plan = planFor(duty.name, groupName);
+  const documentTemplates = documentTemplatesFor(duty.name, groupName);
   /** 앱에 자리가 있는 일인데 바로가기를 아직 안 걸어둔 경우, 갈 곳을 미리 알려준다 */
   const suggestHref = plan.mode === 'app' ? plan.href ?? null : null;
 
@@ -121,6 +123,33 @@ export default function DutyPage() {
         {error && <ErrorBanner message={error} onRetry={() => void load()} />}
 
         {duty.note && <p className="text-[13px] leading-relaxed text-neutral-500">{duty.note}</p>}
+
+        {documentTemplates.length > 0 && (
+          <section className="card overflow-hidden border-brand-200" aria-labelledby="duty-document-title">
+            <div className="flex items-center gap-2 border-b border-brand-100 bg-brand-50 px-3.5 py-3">
+              <span className="rounded-lg bg-surface p-1.5 text-brand">
+                <Icon name="doc" size={15} />
+              </span>
+              <h2 id="duty-document-title" className="text-[13.5px] font-bold text-brand-800">
+                문서 양식
+              </h2>
+            </div>
+            <div className="space-y-2 p-3">
+              {documentTemplates.map((template) => (
+                <Link
+                  key={template.key}
+                  href={`/roles/${duty.id}/document?template=${encodeURIComponent(template.key)}`}
+                  className="flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-brand-200 bg-surface px-3 py-2.5 text-left transition hover:border-brand-400 active:bg-brand-50"
+                >
+                  <span className="min-w-0 flex-1 text-[13.5px] font-bold text-neutral-800">
+                    {template.title} 작성
+                  </span>
+                  <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-brand" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* 이 일로 바로 가기 — 걸어둔 것이 먼저, 없으면 갈 만한 곳을 권한다.
             **자료를 옮기지 않는다. 길만 낸다.** */}
