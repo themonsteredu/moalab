@@ -12,15 +12,16 @@ const text = (value: unknown, max = 5000) => typeof value === 'string' ? value.t
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: '서버 설정이 아직 안 됐어요.' }, { status: 500 });
-  const actor = await actorFromToken(admin, tokenOf(req));
-  if (!actor) return NextResponse.json({ error: '다시 로그인해주세요.' }, { status: 401 });
   if (!UUID.test(params.id)) return NextResponse.json({ error: '잘못된 사업 주소예요.' }, { status: 400 });
 
-  const [project, collaborators, files] = await Promise.all([
+  // 신원 확인과 상세 자료 조회를 함께 시작해 직렬 DB 왕복을 없앤다.
+  const [actor, project, collaborators, files] = await Promise.all([
+    actorFromToken(admin, tokenOf(req)),
     admin.from('grant_projects').select('*').eq('id', params.id).maybeSingle(),
     admin.from('grant_collaborators').select('*').eq('grant_id', params.id),
     admin.from('grant_files').select('*').eq('grant_id', params.id).order('created_at', { ascending: false }),
   ]);
+  if (!actor) return NextResponse.json({ error: '다시 로그인해주세요.' }, { status: 401 });
   if (project.error || collaborators.error || files.error) return NextResponse.json({ error: '사업 내용을 불러오지 못했어요.' }, { status: 500 });
   if (!project.data) return NextResponse.json({ error: '사업을 찾을 수 없어요.' }, { status: 404 });
 

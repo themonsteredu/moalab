@@ -9,13 +9,13 @@ const text = (value: unknown, max = 500) => typeof value === 'string' ? value.tr
 export async function GET(req: Request) {
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: '서버 설정이 아직 안 됐어요.' }, { status: 500 });
-  const actor = await actorFromToken(admin, tokenOf(req));
-  if (!actor) return NextResponse.json({ error: '다시 로그인해주세요.' }, { status: 401 });
-
-  const [projects, collaborators] = await Promise.all([
+  // 신원 확인과 목록 조회는 서로 의존하지 않는다. 함께 시작해 DB 대기 시간을 겹친다.
+  const [actor, projects, collaborators] = await Promise.all([
+    actorFromToken(admin, tokenOf(req)),
     admin.from('grant_projects').select('*').order('updated_at', { ascending: false }),
     admin.from('grant_collaborators').select('*'),
   ]);
+  if (!actor) return NextResponse.json({ error: '다시 로그인해주세요.' }, { status: 401 });
   if (projects.error || collaborators.error) {
     return NextResponse.json({ error: '정부지원사업을 불러오지 못했어요.' }, { status: 500 });
   }
