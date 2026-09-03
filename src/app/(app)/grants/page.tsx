@@ -13,6 +13,8 @@ import { friendlyError } from '@/lib/supabase';
 import type { GrantCollaborator, GrantProject, GrantStatus } from '@/lib/types';
 
 type Filter = 'active' | 'mine' | 'submitted' | 'archive' | 'all';
+const CACHE_KEY = 'moalab.grants.cache.v1';
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'active', label: '진행 중' },
@@ -39,17 +41,50 @@ export default function GrantsPage() {
   const load = useCallback(async () => {
     if (!session?.token) return;
     setError('');
+    let hasCachedList = false;
+    try {
+      const raw = window.sessionStorage.getItem(CACHE_KEY);
+      const cached = raw ? JSON.parse(raw) as {
+        memberId?: string;
+        cachedAt?: number;
+        projects?: GrantProject[];
+        collaborators?: GrantCollaborator[];
+      } : null;
+      if (cached?.memberId === session.id
+        && typeof cached.cachedAt === 'number'
+        && Date.now() - cached.cachedAt < CACHE_TTL_MS
+        && Array.isArray(cached.projects)
+        && Array.isArray(cached.collaborators)) {
+        setProjects(cached.projects);
+        setCollaborators(cached.collaborators);
+        hasCachedList = true;
+      }
+    } catch {
+      // 캐시가 깨져도 서버의 최신 목록을 읽으면 된다.
+    }
     try {
       const response = await fetch('/api/grants', { headers: { 'x-session-token': session.token } });
       const result = await response.json() as { projects?: GrantProject[]; collaborators?: GrantCollaborator[]; error?: string };
       if (!response.ok) throw new Error(result.error || '불러오기 실패');
-      setProjects(result.projects ?? []);
-      setCollaborators(result.collaborators ?? []);
+      const nextProjects = result.projects ?? [];
+      const nextCollaborators = result.collaborators ?? [];
+      setProjects(nextProjects);
+      setCollaborators(nextCollaborators);
+      try {
+        window.sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+          memberId: session.id,
+          cachedAt: Date.now(),
+          projects: nextProjects,
+          collaborators: nextCollaborators,
+        }));
+      } catch {
+        // 저장 공간이 막혀도 화면 사용에는 영향이 없다.
+      }
     } catch (caught) {
-      setProjects([]);
+      if (!hasCachedList) setProjects([]);
       setError(friendlyError(caught, '정부지원사업을 불러오지 못했어요.'));
     }
-  }, [session?.token]);
+  }, [session?.id, session?.token]);
 
   useEffect(() => { void load(); }, [load]);
 
