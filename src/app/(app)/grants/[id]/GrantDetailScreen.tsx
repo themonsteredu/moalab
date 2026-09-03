@@ -30,7 +30,7 @@ interface CachedGrant {
 
 export default function GrantDetailScreen() {
   const { id } = useParams<{ id: string }>();
-  const { session } = useSession();
+  const { session, signOut } = useSession();
   const { members, nameOf } = useMembers();
   const toast = useToast();
   const [project, setProject] = useState<GrantProject | null>(null);
@@ -40,15 +40,31 @@ export default function GrantDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<GrantFileKind | null>(null);
   const [error, setError] = useState('');
+  /** 서버가 신원을 확인 못 하는 상태 — '다시' 를 눌러봐야 같은 실패가 반복된다 */
+  const [needRelogin, setNeedRelogin] = useState(false);
   const announcementRef = useRef<HTMLInputElement>(null);
   const finalRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    if (!session?.token) return;
+    if (!session) return;
+    // ⚠️ 목록 화면과 같은 이유로 **조용히 멈추면 안 된다** — `loading` 이 true 로 남아
+    // 스켈레톤이 영원히 돌고 원장은 "안 뜬다" 만 본다.
+    if (!session.token) {
+      setLoading(false);
+      setNeedRelogin(true);
+      setError('로그인 정보가 오래돼서 내용을 못 불러왔어요. 다시 로그인하면 바로 보입니다.');
+      return;
+    }
     setError('');
+    setNeedRelogin(false);
     try {
       const response = await fetch(`/api/grants/${id}`, { headers: { 'x-session-token': session.token } });
       const result = await response.json() as { project?: GrantProject; collaborators?: GrantCollaborator[]; files?: GrantFile[]; error?: string };
+      if (response.status === 401) {
+        setNeedRelogin(true);
+        setError('로그인 정보가 만료됐어요. 다시 로그인하면 바로 보입니다.');
+        return;
+      }
       if (!response.ok) throw new Error(result.error || '불러오기 실패');
       const found = result.project ?? null;
       if (!found) throw new Error('사업을 찾을 수 없습니다.');
@@ -62,7 +78,7 @@ export default function GrantDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, session?.id, session?.token]);
+  }, [id, session]);
 
   // 첫 진입에만 지난번 내용을 얹는다. 아래 load 보다 **먼저** 선언해야 순서가 보장된다.
   // 저장한 뒤 다시 불러올 때는 이 효과가 다시 돌지 않는다 —
@@ -156,7 +172,7 @@ export default function GrantDetailScreen() {
   };
 
   if (loading) return <><PageHeader title="정부지원사업" back="/grants" /><main className="px-4 py-4"><CardSkeleton rows={6} /></main></>;
-  if (!project) return <><PageHeader title="정부지원사업" back="/grants" /><main className="px-4 py-4"><ErrorBanner message={error || '사업을 찾을 수 없어요.'} /></main></>;
+  if (!project) return <><PageHeader title="정부지원사업" back="/grants" /><main className="px-4 py-4"><ErrorBanner message={error || '사업을 찾을 수 없어요.'} actionLabel={needRelogin ? '다시 로그인' : '다시'} onRetry={needRelogin ? signOut : () => void load()} /></main></>;
 
   const announcementFiles = files.filter((file) => file.kind === 'announcement');
   const finalFiles = files.filter((file) => file.kind === 'final_plan');
@@ -167,7 +183,13 @@ export default function GrantDetailScreen() {
     <>
       <PageHeader title={project.title} subtitle={GRANT_STATUS[project.status].label} back="/grants" />
       <main className="space-y-3 px-3 pb-28 pt-3 sm:px-4">
-        {error && <ErrorBanner message={error} onRetry={() => void load()} />}
+        {error && (
+          <ErrorBanner
+            message={error}
+            actionLabel={needRelogin ? '다시 로그인' : '다시'}
+            onRetry={needRelogin ? signOut : () => void load()}
+          />
+        )}
 
         <section className="card overflow-hidden">
           <div className="-mx-px overflow-x-auto p-3">

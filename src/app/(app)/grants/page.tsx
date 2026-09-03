@@ -32,7 +32,7 @@ const FILTERS: { value: Filter; label: string }[] = [
 
 export default function GrantsPage() {
   const router = useRouter();
-  const { session } = useSession();
+  const { session, signOut } = useSession();
   const { members, nameOf } = useMembers();
   const toast = useToast();
   const [projects, setProjects] = useState<GrantProject[] | null>(null);
@@ -42,11 +42,24 @@ export default function GrantsPage() {
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  /** 서버가 신원을 확인 못 하는 상태 — '다시' 를 눌러봐야 같은 실패가 반복된다 */
+  const [needRelogin, setNeedRelogin] = useState(false);
   const [form, setForm] = useState({ title: '', agency: '', announcementUrl: '', deadline: '' });
 
   const load = useCallback(async () => {
-    if (!session?.token) return;
+    if (!session) return;
+    // ⚠️ **조용히 멈추면 안 된다.** 토큰이 없으면 서버가 신원을 확인할 수 없는데,
+    // 예전엔 여기서 그냥 return 해서 `projects` 가 null 로 남았다 —
+    // 화면에는 **스켈레톤이 영원히 돌고 에러도 안 뜬다**. 원장이 폰에서 겪은
+    // "메뉴를 눌러도 안 뜬다" 가 이것이었다. 대화 화면(useChat)은 원래 이렇게 하고 있었다.
+    if (!session.token) {
+      setProjects([]);
+      setNeedRelogin(true);
+      setError('로그인 정보가 오래돼서 목록을 못 불러왔어요. 다시 로그인하면 바로 보입니다.');
+      return;
+    }
     setError('');
+    setNeedRelogin(false);
     // 서버를 기다리지 않고 지난번 목록을 곧바로 그린다. 낡았어도 일단 보여주고
     // 바로 아래에서 새로 받아 갈아끼운다 — 빈 화면이 제일 느리게 느껴진다.
     const cached = readCache<CachedList>(CACHE_KEY, session.id);
@@ -58,6 +71,13 @@ export default function GrantsPage() {
     try {
       const response = await fetch('/api/grants', { headers: { 'x-session-token': session.token } });
       const result = await response.json() as { projects?: GrantProject[]; collaborators?: GrantCollaborator[]; error?: string };
+      if (response.status === 401) {
+        // 토큰이 있어도 만료·무효일 수 있다. 이때도 '다시' 는 소용이 없다.
+        if (!hasCachedList) setProjects([]);
+        setNeedRelogin(true);
+        setError('로그인 정보가 만료됐어요. 다시 로그인하면 바로 보입니다.');
+        return;
+      }
       if (!response.ok) throw new Error(result.error || '불러오기 실패');
       const nextProjects = result.projects ?? [];
       const nextCollaborators = result.collaborators ?? [];
@@ -71,7 +91,7 @@ export default function GrantsPage() {
       if (!hasCachedList) setProjects([]);
       setError(friendlyError(caught, '정부지원사업을 불러오지 못했어요.'));
     }
-  }, [session?.id, session?.token]);
+  }, [session]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -140,7 +160,13 @@ export default function GrantsPage() {
           </div>
         </section>
 
-        {error && <ErrorBanner message={error} onRetry={() => void load()} />}
+        {error && (
+          <ErrorBanner
+            message={error}
+            actionLabel={needRelogin ? '다시 로그인' : '다시'}
+            onRetry={needRelogin ? signOut : () => void load()}
+          />
+        )}
 
         <div className="flex gap-2">
           <label className="relative min-w-0 flex-1">

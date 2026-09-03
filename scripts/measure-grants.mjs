@@ -29,6 +29,8 @@ const PHONE = { width: 375, height: 812 };
 const ME = '00000000-0000-0000-0000-000000000001';
 /** 서버가 잠에서 깨어 답하기까지 (서울이어도 남는 시간) */
 const API_DELAY_MS = Number(process.env.API_DELAY ?? 900);
+/** 0 이면 **토큰 없는 세션** — 서버가 신원을 확인 못 하는 상태를 재현한다 */
+const WITH_TOKEN = process.env.NO_TOKEN !== '1';
 
 const MEMBERS = [
   { id: ME, name: '강양희', role: 'admin', active: true, sort_order: 0 },
@@ -51,12 +53,14 @@ const NET = { down: 8 * 1024 * 1024 / 8, up: 2 * 1024 * 1024 / 8, latency: 120 }
 
 async function makeContext() {
   const ctx = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
-  await ctx.addInitScript(([me]) => {
+  await ctx.addInitScript(([me, withToken]) => {
     localStorage.setItem('moalab.session.v1', JSON.stringify({
-      id: me, name: '강양희', role: 'admin', token: '11111111-1111-1111-1111-111111111111',
+      id: me, name: '강양희', role: 'admin',
+      // 토큰이 없는 세션 = 이 칸이 생기기 전에 로그인했거나 발급이 실패한 경우
+      ...(withToken ? { token: '11111111-1111-1111-1111-111111111111' } : {}),
       expiresAt: Date.now() + 30 * 24 * 3600 * 1000,
     }));
-  }, [ME]);
+  }, [ME, WITH_TOKEN]);
 
   // 이 환경은 jsDelivr 이 막혀 있다. 실제 한글 폰트 무게(굵기당 FONT_KB)를
   // 그대로 흉내내서 폰이 얼마나 더 기다리는지 잰다. 0 이면 끊는다(= 폰트 없음).
@@ -114,13 +118,23 @@ async function run(label, ctx, { mode }) {
     await page.getByRole('link', { name: '정부지원사업' }).click();
   }
 
+  let notice = '';
   try {
     await page.getByText('2026 모두의 창업', { exact: false }).first().waitFor({ timeout: 20000 });
     shown = Date.now() - t0;
-  } catch { shown = null; }
+  } catch {
+    shown = null;
+    // 안 떴다면 — 안내라도 나왔나, 아니면 스켈레톤만 돌고 있나?
+    const banner = page.locator('text=다시 로그인').first();
+    notice = (await banner.count()) ? '안내 뜸 (다시 로그인 버튼)' : '아무 안내 없음 — 스켈레톤만';
+    if (!notice.startsWith('안내')) {
+      const spin = await page.locator('.animate-pulse').count();
+      notice = spin ? '아무 안내 없음 — 스켈레톤만 돎' : '아무것도 없음';
+    }
+  }
 
   await page.close();
-  return { label, shown, bytes: Math.round(bytes / 1024) };
+  return { label, shown, bytes: Math.round(bytes / 1024), notice };
 }
 
 const { ctx, fonts } = await makeContext();
@@ -132,7 +146,8 @@ await browser.close();
 const ms = (v) => v === null ? '안 뜸' : `${(v / 1000).toFixed(2)}초`;
 console.log(`\n서버 응답 지연을 ${API_DELAY_MS}ms 로 두고 잰 값 (폰 375px, 지연 ${NET.latency}ms)\n`);
 for (const r of [tapCold, tapWarm, boot]) {
-  console.log(`  ${r.label.padEnd(26)} 공고가 보일 때까지  ${ms(r.shown).padStart(7)}   내려받기 ${r.bytes}KB`);
+  const tail = r.shown === null ? `  → ${r.notice}` : `   내려받기 ${r.bytes}KB`;
+  console.log(`  ${r.label.padEnd(26)} 공고가 보일 때까지  ${ms(r.shown).padStart(7)}${tail}`);
 }
 console.log(`\n  외부 폰트 요청 ${fonts.length}건 (${[...new Set(fonts)].length}개 파일) — 이 환경에선 막혀 있어 끊었다`);
 for (const f of [...new Set(fonts)]) console.log(`     ${f.replace('https://cdn.jsdelivr.net/gh/fonts-archive/', '')}`);
