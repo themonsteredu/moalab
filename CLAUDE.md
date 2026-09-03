@@ -2482,6 +2482,40 @@ src/components/
 - 규칙은 `usableEnvelope()` 한 함수에 모여 있고 `scripts/page-cache.test.mjs` 가 지킨다
   (남의 것·낡은 것·시계가 미래로 틀어진 기기·깨진 캐시)
 
+#### 그리고 — 한 건을 여는 화면은 **서버를 아예 안 거친다** (서버 껍데기)
+
+원장이 폰으로 앱을 한 바퀴 돌아본 기록을 보니, 세 시간에 **서로 다른 화면 39개**였고
+정부지원사업은 그중 한 번뿐이었다. 느린 건 그 메뉴가 아니라 **한 건을 여는 화면 전부**였다.
+
+`/apps/[id]` · `/roles/[dutyId]` · `/chat/[roomId]` 처럼 주소에 id 가 든 화면 **11개**가
+`ƒ`(열 때마다 서버가 그림)였다. 그런데 이 화면들은 **전부 `'use client'`** 다 —
+내용은 브라우저가 Supabase 에서 직접 받으므로 **서버가 그리는 껍데기는 id 와 무관하게 늘 같다.**
+서울로 옮긴 뒤에도 한 건 열 때마다 서버 함수가 깨어나 같은 껍데기를 다시 그렸고,
+쓰는 사람이 다섯이라 그 함수는 거의 늘 잠들어 있었다. 폰에서는 그 대기가 곧 '느림' 이었다.
+
+**고친 방법 — 화면을 `page.tsx` 에서 `*Screen.tsx` 로 옮기고, `page.tsx` 는 서버 껍데기만 남긴다.**
+
+```tsx
+export const dynamicParams = true;
+export function generateStaticParams() { return []; }   // 처음 열릴 때 만들어져 캐시된다
+export default function Page() { return <RoleDetailScreen />; }
+```
+
+- ⚠️ **`'use client'` 파일에서는 `generateStaticParams` 를 못 내보낸다.** 그래서 껍데기를
+  따로 두는 것이고, `export const dynamic = 'force-static'` 만 붙여봐도 **조용히 무시된다**
+  (실제로 해보고 확인했다 — `ƒ` 그대로였다)
+- ⚠️ **안쪽에서 `useSearchParams()` 를 쓰는 화면은 `Suspense` 로 감싸야 한다.**
+  안 감싸면 그 화면만 **500** 이 난다 (`/print/expense` 가 이미 쓰던 방식).
+  지금 해당되는 건 셋 — `/chat/[roomId]` · `/revenue/[appId]` · `/print/[id]`
+- 결과: **서버를 거치는 페이지 11개 → 0개.** `ƒ` 는 `/api/*` 만 남는다
+  (그쪽은 잠가둔 표를 읽으니 서버를 거쳐야 맞다)
+- 회귀 확인은 **변경 전 커밋을 worktree 로 따로 빌드해서 같은 스크립트를 양쪽에 돌려** 비교했다
+  — `/apps/[id]` 1586px→2358px, `/roles/[dutyId]` 브라우저 검사 9건이 **양쪽 똑같다**
+  · ⚠️ **`measure-mock.mjs` 를 돌릴 땐 `NEXT_PUBLIC_*` 을 넣고 빌드해야 한다.**
+    이 값은 **빌드 때 박히므로** 빼고 빌드하면 가짜 데이터가 안 물려서 모든 화면이
+    812px 로 나온다 — '전부 한 화면' 이라는 거짓 결과다 (가짜 세션에 `expiresAt` 을
+    빼먹었을 때와 똑같은 함정이고, 실제로 한 번 속았다)
+
 ### 다음에 하면 좋을 것
 
 - [ ] **모의수업·강사양성은 뼈대만 만든 상태다.** 실제로 어떤 칸이 필요한지
