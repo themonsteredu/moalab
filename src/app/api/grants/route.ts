@@ -36,8 +36,9 @@ export async function POST(req: Request) {
     agency: text(body.agency, 200),
     announcement_url: text(body.announcementUrl, 2000),
     deadline: text(body.deadline, 10),
-    item_name: text(body.itemName, 200),
-    lead_id: actor.memberId,
+    // 공고를 등록한 사람과 기획 담당자는 다르다.
+    // lead_id 는 상세 화면에서 기획안을 가장 먼저 제출한 사람에게 배정한다.
+    lead_id: null,
     created_by: actor.memberId,
     updated_by: actor.memberId,
   }).select('*').single();

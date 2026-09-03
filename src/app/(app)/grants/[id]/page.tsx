@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
 import { Icon } from '@/components/Icon';
 import { CardSkeleton, ErrorBanner, useToast } from '@/components/ui';
-import { GRANT_STATUS } from '@/lib/grants';
+import { GRANT_STATUS, isGrantConceptReady } from '@/lib/grants';
 import { useMembers } from '@/lib/useMembers';
 import { useSession } from '@/lib/session';
 import { friendlyError } from '@/lib/supabase';
@@ -23,7 +23,6 @@ export default function GrantDetailPage() {
   const [project, setProject] = useState<GrantProject | null>(null);
   const [collaboratorIds, setCollaboratorIds] = useState<string[]>([]);
   const [files, setFiles] = useState<GrantFile[]>([]);
-  const [conceptShared, setConceptShared] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<GrantFileKind | null>(null);
@@ -41,7 +40,6 @@ export default function GrantDetailPage() {
       const found = result.project ?? null;
       if (!found) throw new Error('사업을 찾을 수 없습니다.');
       setProject(found);
-      setConceptShared(Boolean(found.concept_shared_at));
       setCollaboratorIds((result.collaborators ?? []).map((row) => row.member_id));
       setFiles(result.files ?? []);
     } catch (caught) {
@@ -60,6 +58,7 @@ export default function GrantDetailPage() {
   const save = async () => {
     if (!project || !session || saving) return;
     if (!project.title.trim()) { setError('공고명을 적어주세요.'); return; }
+    const submittingFirstConcept = !project.lead_id && isGrantConceptReady(project.item_name, project.concept_summary);
     setSaving(true);
     setError('');
     try {
@@ -76,19 +75,17 @@ export default function GrantDetailPage() {
           conceptSummary: project.concept_summary,
           differentiation: project.differentiation,
           supportNeeded: project.support_needed,
-          leadId: project.lead_id,
           status: project.status,
           duplicateChecked: project.duplicate_checked,
-          conceptShared,
           submittedAt: project.submitted_at,
           resultNote: project.result_note,
           collaboratorIds,
         }),
       });
-      const result = await response.json() as { error?: string };
+      const result = await response.json() as { project?: GrantProject; leadClaimed?: boolean; error?: string };
       if (!response.ok) throw new Error(result.error || '저장 실패');
-      logActivity(session.id, `정부지원사업 저장 — ${project.title}`, `grant:${id}`);
-      toast.show('저장했어요.');
+      logActivity(session.id, `${result.leadClaimed ? '정부지원사업 기획안 제출' : '정부지원사업 저장'} — ${project.title}`, `grant:${id}`);
+      toast.show(result.leadClaimed || submittingFirstConcept ? '기획안이 제출되어 담당자로 지정됐어요.' : '저장했어요.');
       await load();
     } catch (caught) {
       setError(friendlyError(caught, '사업 내용을 저장하지 못했어요.'));
@@ -136,6 +133,7 @@ export default function GrantDetailPage() {
 
   const announcementFiles = files.filter((file) => file.kind === 'announcement');
   const finalFiles = files.filter((file) => file.kind === 'final_plan');
+  const conceptReady = isGrantConceptReady(project.item_name, project.concept_summary);
   const toggleCollaborator = (memberId: string) => setCollaboratorIds((current) => current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId]);
 
   return (
@@ -149,7 +147,8 @@ export default function GrantDetailPage() {
             <div className="flex min-w-max gap-1.5">
               {STATUS_ORDER.map((status) => {
                 const meta = GRANT_STATUS[status];
-                return <button key={status} type="button" onClick={() => set('status', status)} className={`chip min-h-9 px-3 ${project.status === status ? meta.chip + ' ring-2 ring-current/15' : 'bg-neutral-50 text-neutral-400'}`}>{meta.label}</button>;
+                const disabled = !project.lead_id && status !== 'discovered';
+                return <button key={status} type="button" disabled={disabled} onClick={() => set('status', status)} className={`chip min-h-9 px-3 disabled:cursor-not-allowed disabled:opacity-40 ${project.status === status ? meta.chip + ' ring-2 ring-current/15' : 'bg-neutral-50 text-neutral-400'}`}>{meta.label}</button>;
               })}
             </div>
           </div>
@@ -173,6 +172,11 @@ export default function GrantDetailPage() {
             </Section>
 
             <Section title="2. 기획안">
+              {!project.lead_id && (
+                <div className="rounded-xl border border-brand-200 bg-brand-50 px-3 py-3 text-[12.5px] font-semibold leading-relaxed text-brand-800">
+                  지원 아이템과 기획 핵심 내용을 먼저 제출한 사람이 담당자가 됩니다.
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="지원 아이템"><input value={project.item_name ?? ''} onChange={(e) => set('item_name', e.target.value)} className="field" placeholder="어떤 아이템으로 도전하나요?" /></Field>
                 <Field label="대상·수혜자"><input value={project.target_audience ?? ''} onChange={(e) => set('target_audience', e.target.value)} className="field" placeholder="누구를 위한 사업인가요?" /></Field>
@@ -180,10 +184,7 @@ export default function GrantDetailPage() {
               <Field label="기획 핵심 내용"><textarea value={project.concept_summary ?? ''} onChange={(e) => set('concept_summary', e.target.value)} rows={6} className="field resize-y" placeholder="문제, 해결방법, 운영내용, 기대효과를 적어주세요." /></Field>
               <Field label="기존 사업·아이템과 다른 점"><textarea value={project.differentiation ?? ''} onChange={(e) => set('differentiation', e.target.value)} rows={3} className="field resize-y" /></Field>
               <Field label="필요한 협조"><textarea value={project.support_needed ?? ''} onChange={(e) => set('support_needed', e.target.value)} rows={3} className="field resize-y" placeholder="예: 앱 개발, 기술 검토, 예산 작성, 자료 조사" /></Field>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Check checked={project.duplicate_checked} onChange={(checked) => set('duplicate_checked', checked)} label="중복 아이템 지원 여부 확인" />
-                <Check checked={conceptShared} onChange={setConceptShared} label="팀에 기획안 공유 완료" />
-              </div>
+              <Check checked={project.duplicate_checked} onChange={(checked) => set('duplicate_checked', checked)} label="중복 아이템 지원 여부 확인" />
             </Section>
 
             <Section title="3. 최종 제출">
@@ -196,32 +197,37 @@ export default function GrantDetailPage() {
             </Section>
           </div>
 
-          <Section title="기획 주체·협업자" sticky>
-            <Field label="기획 주체">
-              <select value={project.lead_id ?? ''} onChange={(e) => set('lead_id', e.target.value || null)} className="field">
-                <option value="">미정</option>
-                {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-              </select>
-            </Field>
+          <Section title="담당자·협업자" sticky>
             <div>
-              <p className="label">함께 작성·개발하는 사람</p>
-              <div className="flex flex-wrap gap-2">
-                {members.filter((member) => member.id !== project.lead_id).map((member) => {
-                  const selected = collaboratorIds.includes(member.id);
-                  return <button key={member.id} type="button" onClick={() => toggleCollaborator(member.id)} className={`chip min-h-10 px-3 ${selected ? 'pick-on' : 'bg-neutral-100 text-neutral-600'}`}><span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${selected ? 'bg-current' : 'bg-neutral-300'}`} />{member.name}</button>;
-                })}
+              <p className="label">기획 담당자</p>
+              <div className={`rounded-xl border px-3 py-3 text-[13px] font-black ${project.lead_id ? 'border-brand-200 bg-brand-50 text-brand-800' : 'border-dashed border-neutral-300 bg-neutral-50 text-neutral-500'}`}>
+                {project.lead_id ? nameOf(project.lead_id) : '아직 정해지지 않았어요'}
               </div>
+              {!project.lead_id && <p className="mt-2 break-keep text-[11.5px] leading-relaxed text-neutral-500">기획안을 먼저 제출하면 자동으로 담당자가 되며, 다른 사람이 임의로 바꿀 수 없습니다.</p>}
             </div>
+            {project.lead_id ? (
+              <div>
+                <p className="label">함께 작성·개발하는 사람</p>
+                <div className="flex flex-wrap gap-2">
+                  {members.filter((member) => member.id !== project.lead_id).map((member) => {
+                    const selected = collaboratorIds.includes(member.id);
+                    return <button key={member.id} type="button" onClick={() => toggleCollaborator(member.id)} className={`chip min-h-10 px-3 ${selected ? 'pick-on' : 'bg-neutral-100 text-neutral-600'}`}><span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${selected ? 'bg-current' : 'bg-neutral-300'}`} />{member.name}</button>;
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-neutral-50 px-3 py-3 text-[12px] leading-relaxed text-neutral-500">담당자가 정해진 뒤 협업자를 추가할 수 있어요.</div>
+            )}
             <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-[12.5px] leading-relaxed text-neutral-600">
               <b className="text-neutral-800">현재 구성</b>
-              <p className="mt-1">주체 {nameOf(project.lead_id)} · 협업 {collaboratorIds.filter((id) => id !== project.lead_id).map(nameOf).join(', ') || '없음'}</p>
+              <p className="mt-1">담당자 {project.lead_id ? nameOf(project.lead_id) : '미정'} · 협업 {collaboratorIds.filter((id) => id !== project.lead_id).map(nameOf).join(', ') || '없음'}</p>
             </div>
           </Section>
         </div>
       </main>
 
       <div className="fixed inset-x-0 bottom-[56px] z-30 border-t border-neutral-200 bg-surface/95 px-3 py-2 backdrop-blur safe-bottom lg:bottom-0 lg:left-[232px]">
-        <div className="mx-auto max-w-[1000px]"><button type="button" onClick={() => void save()} disabled={saving || Boolean(uploading)} className="btn-primary w-full"><Icon name="check" size={16} />{saving ? '저장 중…' : '사업 내용 저장'}</button></div>
+        <div className="mx-auto max-w-[1000px]"><button type="button" onClick={() => void save()} disabled={saving || Boolean(uploading)} className="btn-primary w-full"><Icon name="check" size={16} />{saving ? '저장 중…' : !project.lead_id && conceptReady ? '기획안 제출하고 담당자 되기' : '사업 내용 저장'}</button></div>
       </div>
       {toast.node}
     </>

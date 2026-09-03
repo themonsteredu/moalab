@@ -29,6 +29,10 @@ eq('선정 진행률', G.grantProgress('selected'), 100);
 eq('미선정도 분석·보관 단계까지 도달', G.grantProgress('not_selected'), 100);
 eq('마감까지 남은 날', G.daysUntil('2026-09-10', new Date('2026-09-03T12:00:00Z')), 8);
 eq('마감 없음', G.daysUntil(null), null);
+eq('아이템만 쓰면 기획안 미제출', G.isGrantConceptReady('MOAKIT', null), false);
+eq('핵심 내용만 쓰면 기획안 미제출', G.isGrantConceptReady(null, '운영 기획'), false);
+eq('아이템과 핵심 내용이 있으면 기획안 제출', G.isGrantConceptReady('MOAKIT', '운영 기획'), true);
+eq('공백만 입력하면 기획안 미제출', G.isGrantConceptReady('  ', '운영 기획'), false);
 
 rmSync(out, { recursive: true, force: true });
 console.log(failed === 0 ? '\n전부 통과' : `\n${failed}건 실패`);

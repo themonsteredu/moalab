@@ -42,34 +42,65 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const title = text(body.title, 200);
   const status = typeof body.status === 'string' && STATUSES.has(body.status as GrantStatus) ? body.status : null;
   if (!title || !status) return NextResponse.json({ error: '공고명과 진행상태를 확인해주세요.' }, { status: 400 });
-  const leadId = typeof body.leadId === 'string' && UUID.test(body.leadId) ? body.leadId : null;
-  const conceptShared = body.conceptShared === true;
-  const current = await admin.from('grant_projects').select('concept_shared_at').eq('id', params.id).maybeSingle();
+  const itemName = text(body.itemName, 200);
+  const conceptSummary = text(body.conceptSummary, 12000);
+  const conceptReady = Boolean(itemName && conceptSummary);
+  const current = await admin.from('grant_projects').select('lead_id, concept_shared_at').eq('id', params.id).maybeSingle();
+  if (current.error) return NextResponse.json({ error: '사업 내용을 확인하지 못했어요.' }, { status: 500 });
   if (!current.data) return NextResponse.json({ error: '사업을 찾을 수 없어요.' }, { status: 404 });
 
-  const { data, error } = await admin.from('grant_projects').update({
+  const now = new Date().toISOString();
+  const sharedFields = {
     title,
     agency: text(body.agency, 200),
     announcement_url: text(body.announcementUrl, 2000),
     deadline: text(body.deadline, 10),
-    item_name: text(body.itemName, 200),
+    item_name: itemName,
     target_audience: text(body.targetAudience, 500),
-    concept_summary: text(body.conceptSummary, 12000),
+    concept_summary: conceptSummary,
     differentiation: text(body.differentiation, 6000),
     support_needed: text(body.supportNeeded, 6000),
-    lead_id: leadId,
-    status: conceptShared && status === 'discovered' ? 'concept_shared' : status,
     duplicate_checked: body.duplicateChecked === true,
-    concept_shared_at: conceptShared ? (current.data.concept_shared_at || new Date().toISOString()) : null,
     submitted_at: text(body.submittedAt, 10),
     result_note: text(body.resultNote, 8000),
     updated_by: actor.memberId,
-    updated_at: new Date().toISOString(),
-  }).eq('id', params.id).select('*').single();
-  if (error) return NextResponse.json({ error: error.message.slice(0, 160) }, { status: 500 });
+    updated_at: now,
+  };
+
+  let leadClaimed = false;
+  let data;
+  if (!current.data.lead_id && conceptReady) {
+    // 조건부 UPDATE라 동시에 제출해도 한 사람만 lead_id를 가져간다.
+    const claimed = await admin.from('grant_projects').update({
+      ...sharedFields,
+      lead_id: actor.memberId,
+      status: 'concept_shared',
+      concept_shared_at: now,
+    }).eq('id', params.id).is('lead_id', null).select('*').maybeSingle();
+    if (claimed.error) return NextResponse.json({ error: claimed.error.message.slice(0, 160) }, { status: 500 });
+    if (!claimed.data) {
+      return NextResponse.json({ error: '다른 팀원이 먼저 기획안을 제출했어요. 새 담당자를 확인해주세요.' }, { status: 409 });
+    }
+    data = claimed.data;
+    leadClaimed = true;
+  } else {
+    let saveQuery = admin.from('grant_projects').update({
+      ...sharedFields,
+      status: current.data.lead_id ? status : 'discovered',
+      ...(current.data.lead_id && conceptReady && !current.data.concept_shared_at ? { concept_shared_at: now } : {}),
+    }).eq('id', params.id);
+    // 담당자 없는 화면을 오래 열어둔 저장이 방금 제출된 첫 기획안을 덮지 못하게 한다.
+    if (!current.data.lead_id) saveQuery = saveQuery.is('lead_id', null);
+    const saved = await saveQuery.select('*').maybeSingle();
+    if (saved.error) return NextResponse.json({ error: saved.error.message.slice(0, 160) }, { status: 500 });
+    if (!saved.data) {
+      return NextResponse.json({ error: '기획 담당자가 방금 정해졌어요. 새 내용을 다시 확인해주세요.' }, { status: 409 });
+    }
+    data = saved.data;
+  }
 
   const ids = Array.isArray(body.collaboratorIds)
-    ? [...new Set(body.collaboratorIds.filter((id): id is string => typeof id === 'string' && UUID.test(id) && id !== leadId))]
+    ? [...new Set(body.collaboratorIds.filter((id): id is string => typeof id === 'string' && UUID.test(id) && Boolean(data.lead_id) && id !== data.lead_id))]
     : [];
   const cleared = await admin.from('grant_collaborators').delete().eq('grant_id', params.id);
   if (cleared.error) return NextResponse.json({ error: '협업자 저장에 실패했어요.' }, { status: 500 });
@@ -77,5 +108,5 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const inserted = await admin.from('grant_collaborators').insert(ids.map((memberId) => ({ grant_id: params.id, member_id: memberId })));
     if (inserted.error) return NextResponse.json({ error: '협업자 저장에 실패했어요.' }, { status: 500 });
   }
-  return NextResponse.json({ project: data, collaboratorIds: ids });
+  return NextResponse.json({ project: data, collaboratorIds: ids, leadClaimed });
 }

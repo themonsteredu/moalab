@@ -29,3 +29,8 @@ export function daysUntil(date: string | null, now = new Date()) {
   const end = new Date(`${date}T23:59:59`);
   return Math.ceil((end.getTime() - now.getTime()) / 86_400_000);
 }
+
+/** 아이템과 핵심 내용이 있어야 '기획안 제출'로 본다. */
+export function isGrantConceptReady(itemName: string | null, conceptSummary: string | null) {
+  return Boolean(itemName?.trim() && conceptSummary?.trim());
+}
