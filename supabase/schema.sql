@@ -1148,7 +1148,7 @@ alter table moalab.app_secrets add column if not exists meta jsonb;
 create table if not exists moalab.drive_uploads (
   id          uuid primary key default gen_random_uuid(),
   kind        text not null,          -- plan | receipt | photo | lecture
-  source_url  text not null,          -- 수파베이스 공개 URL (여기서 받아 드라이브로 넘긴다)
+  source_url  text not null,          -- 공개 첨부 URL 또는 서버 내부 duty-document 참조
   folder_path text not null,          -- '프로그램/미술/제과제빵' — 없으면 만들면서 내려간다
   file_name   text not null,
   mime_type   text,
@@ -1166,8 +1166,10 @@ create unique index if not exists drive_uploads_src_idx on moalab.drive_uploads(
 
 alter table moalab.drive_uploads enable row level security;
 drop policy if exists "internal_all" on moalab.drive_uploads;
-create policy "internal_all" on moalab.drive_uploads for all using (true) with check (true);
-grant all on moalab.drive_uploads to anon, authenticated, service_role;
+-- Drive 대기열은 원장 계정 OAuth로 외부 쓰기를 일으키므로 브라우저에서 직접 만지지 못한다.
+-- 모든 읽기·쓰기는 세션을 검증하는 서버 API의 service_role을 거친다.
+revoke all on moalab.drive_uploads from anon, authenticated;
+grant all on moalab.drive_uploads to service_role;
 
 -- ---------------------------------------------------------------------
 -- 24. 역할 자료함 — 그 역할로 만든 결과물을 역할에 붙인다

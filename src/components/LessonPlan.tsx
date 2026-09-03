@@ -235,7 +235,7 @@ export function LessonPlan({
       // 방금 올린 것이 안 보이면 안 된다 — 다른 갈래로 걸러져 있으면 전체로 되돌린다
       if (filter !== 'all' && filter !== pendingKind) setFilter('all');
       // 구글 드라이브에도 한 벌 (기다리지 않는다 — 연결 안 돼 있으면 서버가 조용히 넘긴다)
-      queueDrive(session?.id, { kind: 'plan', files: copied, topic, appTitle, prefix: appTitle });
+      queueDrive(session?.id, session?.token, { kind: 'plan', files: copied, topic, appTitle, prefix: appTitle });
       await load();
     }
   };
@@ -271,7 +271,7 @@ export function LessonPlan({
       );
       /* 드라이브에도 한 벌. **판 번호를 이름에 넣는다** — 안 넣으면 같은 이름이라
          드라이브에서 1판을 덮어쓰거나(같은 이름은 안 올린다) 뭐가 최신인지 모른다 */
-      queueDrive(session?.id, {
+      queueDrive(session?.id, session?.token, {
         kind: 'plan',
         files: [{ url: up.url, name: `${nextV}판_${up.name}` }],
         topic,

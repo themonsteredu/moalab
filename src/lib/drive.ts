@@ -25,6 +25,7 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
+const GOOGLE_DOCUMENT_MIME = 'application/vnd.google-apps.document';
 
 /** app_secrets 의 열쇠 이름 */
 export const DRIVE_KEY = 'google_drive';
@@ -162,21 +163,20 @@ async function findOrCreateFolder(access: string, parentId: string, name: string
     const found = await fetch(`${API}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`, {
       headers: { authorization: `Bearer ${access}` },
     });
-    if (found.ok) {
-      const j = (await found.json()) as { files?: { id: string }[] };
-      if (j.files?.[0]?.id) return j.files[0].id;
-    }
+    // 검색 자체가 실패한 것을 "폴더 없음"으로 보면 429/5xx 때 중복 폴더를 만들게 된다.
+    if (!found.ok) return null;
+    const j = (await found.json()) as { files?: { id: string }[] };
+    if (j.files?.[0]?.id) return j.files[0].id;
 
     // 정확히 같은 이름이 없으면 번호 붙은 것을 찾아본다 (`1_기획개발부`)
     const loose = `'${esc(parentId)}' in parents and name contains '${esc(name)}' and mimeType = '${FOLDER_MIME}' and trashed = false`;
     const alt = await fetch(`${API}/files?q=${encodeURIComponent(loose)}&fields=files(id,name)&pageSize=20`, {
       headers: { authorization: `Bearer ${access}` },
     });
-    if (alt.ok) {
-      const j = (await alt.json()) as { files?: { id: string; name: string }[] };
-      const hit = (j.files ?? []).find((f) => stripNo(f.name) === name);
-      if (hit) return hit.id;
-    }
+    if (!alt.ok) return null;
+    const altJson = (await alt.json()) as { files?: { id: string; name: string }[] };
+    const hit = (altJson.files ?? []).find((f) => stripNo(f.name) === name);
+    if (hit) return hit.id;
     const made = await fetch(`${API}/files?fields=id`, {
       method: 'POST',
       headers: { authorization: `Bearer ${access}`, 'content-type': 'application/json' },
@@ -196,10 +196,9 @@ export async function ensureRoot(access: string): Promise<string | null> {
     const res = await fetch(`${API}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`, {
       headers: { authorization: `Bearer ${access}` },
     });
-    if (res.ok) {
-      const j = (await res.json()) as { files?: { id: string }[] };
-      if (j.files?.[0]?.id) return j.files[0].id;
-    }
+    if (!res.ok) return null;
+    const j = (await res.json()) as { files?: { id: string }[] };
+    if (j.files?.[0]?.id) return j.files[0].id;
   } catch {
     return null;
   }
@@ -250,6 +249,24 @@ async function findFile(access: string, folderId: string, name: string): Promise
   }
 }
 
+/** 같은 이름의 Google 문서를 찾는다. 일반 HTML 파일과 섞이지 않게 MIME까지 제한한다. */
+async function findGoogleDocument(
+  access: string,
+  folderId: string,
+  name: string,
+): Promise<{ id: string | null } | { error: string }> {
+  const q = `'${esc(folderId)}' in parents and name = '${esc(name)}' and mimeType = '${GOOGLE_DOCUMENT_MIME}' and trashed = false`;
+  try {
+    const res = await fetch(`${API}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`, {
+      headers: { authorization: `Bearer ${access}` },
+    });
+    if (!res.ok) return { error: driveError(res.status, await res.text().catch(() => '')) };
+    return { id: ((await res.json()) as { files?: { id: string }[] }).files?.[0]?.id ?? null };
+  } catch {
+    return { error: '드라이브에서 기존 문서를 확인하지 못했어요.' };
+  }
+}
+
 /** 파일 한 개를 드라이브에 올린다. 올라간 파일 id 를 준다 */
 export async function uploadFile(
   access: string,
@@ -291,6 +308,61 @@ export async function uploadFile(
     if (!res.ok) return { error: driveError(res.status, await res.text().catch(() => '')) };
     const id = ((await res.json()) as { id?: string }).id;
     return id ? { id } : { error: '드라이브가 파일 번호를 안 줬어요.' };
+  } catch {
+    return { error: '드라이브에 닿지 못했어요. 인터넷이 불안정한 것 같아요.' };
+  }
+}
+
+/**
+ * HTML을 편집 가능한 Google 문서로 올린다.
+ *
+ * `existingId`가 있으면 그 문서의 내용과 이름만 바꾼다. 따라서 공유 링크는 유지되고,
+ * 사용자가 Drive에서 파일 이름을 직접 바꿔도 다음 저장 때 새 문서가 중복 생성되지 않는다.
+ */
+export async function uploadGoogleDocument(
+  access: string,
+  folderId: string,
+  name: string,
+  html: Blob,
+  existingId?: string | null,
+): Promise<{ id: string } | { error: string }> {
+  const lookup = existingId ? { id: existingId } : await findGoogleDocument(access, folderId, name);
+  if ('error' in lookup) return lookup;
+  const found = lookup.id;
+
+  const send = async (id?: string | null) => {
+    const boundary = `moalabdoc${Math.random().toString(36).slice(2)}`;
+    // 기존 Google 문서는 MIME과 부모를 바꿀 수 없다. 새 문서일 때만 변환 MIME과 폴더를 준다.
+    const meta = id
+      ? { name }
+      : { name, mimeType: GOOGLE_DOCUMENT_MIME, parents: [folderId] };
+    const head =
+      `--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n` +
+      `${JSON.stringify(meta)}\r\n` +
+      `--${boundary}\r\ncontent-type: text/html; charset=UTF-8\r\n\r\n`;
+    const body = new Blob([head, html, `\r\n--${boundary}--`]);
+    return fetch(
+      id
+        ? `${UPLOAD}/${encodeURIComponent(id)}?uploadType=multipart&fields=id`
+        : `${UPLOAD}?uploadType=multipart&fields=id`,
+      {
+        method: id ? 'PATCH' : 'POST',
+        headers: {
+          authorization: `Bearer ${access}`,
+          'content-type': `multipart/related; boundary=${boundary}`,
+        },
+        body,
+      },
+    );
+  };
+
+  try {
+    let res = await send(found);
+    // 사용자가 Drive에서 기존 문서를 지웠다면 남아 있는 id에 매달리지 않고 새로 만든다.
+    if (found && res.status === 404) res = await send(null);
+    if (!res.ok) return { error: driveError(res.status, await res.text().catch(() => '')) };
+    const id = ((await res.json()) as { id?: string }).id;
+    return id ? { id } : { error: '드라이브가 문서 번호를 안 줬어요.' };
   } catch {
     return { error: '드라이브에 닿지 못했어요. 인터넷이 불안정한 것 같아요.' };
   }

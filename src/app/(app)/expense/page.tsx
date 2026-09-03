@@ -667,7 +667,7 @@ function ExpenseForm({
         );
         /* 구글 드라이브에도 한 벌 — 달마다 정산자료 폴더에 쌓인다.
            연말에 폴더째로 회계에 넘기려고 만든 자리다 */
-        queueDrive(session?.id, {
+        queueDrive(session?.id, session?.token, {
           kind: 'receipt',
           files: uploaded.map((u) => ({ url: u.url, name: u.name })),
           month: (spentOn || '').slice(0, 7),

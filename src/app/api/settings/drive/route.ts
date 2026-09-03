@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { DRIVE_KEY, loadConfig, type DriveMeta } from '@/lib/drive';
 import { isDriveKind, type DriveKind } from '@/lib/drivePath';
+import { actorFromToken, tokenOf } from '@/lib/chatServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,13 +16,11 @@ export const dynamic = 'force-dynamic';
 async function requireAdmin(req: Request) {
   const admin = getAdminClient();
   if (!admin) return { error: '서버 설정이 아직 안 됐어요.', status: 500 as const, admin: null };
-  const actorId = req.headers.get('x-actor-id');
-  if (!actorId) return { error: '권한이 없어요.', status: 403 as const, admin: null };
-  const { data } = await admin.from('members').select('id,role,active').eq('id', actorId).maybeSingle();
-  if (!data || !data.active || data.role !== 'admin') {
+  const actor = await actorFromToken(admin, tokenOf(req));
+  if (!actor || actor.role !== 'admin') {
     return { error: '원장만 쓸 수 있어요.', status: 403 as const, admin: null };
   }
-  return { error: null, status: 200 as const, admin, actorId };
+  return { error: null, status: 200 as const, admin, actorId: actor.memberId };
 }
 
 export async function GET(req: Request) {

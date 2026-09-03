@@ -52,7 +52,11 @@ export function DriveCard() {
   const [backfilling, setBackfilling] = useState(false);
 
   const headers = useCallback(
-    () => ({ 'Content-Type': 'application/json', 'x-actor-id': session?.id ?? '' }),
+    () => ({
+      'Content-Type': 'application/json',
+      'x-actor-id': session?.id ?? '',
+      'x-session-token': session?.token ?? '',
+    }),
     [session],
   );
 
@@ -288,14 +292,17 @@ export function DriveCard() {
 
       {/* 2단계 — 구글 계정 동의 */}
       {status?.hasKeys && (
-        <a
-          href={`/api/settings/drive/start?actor=${session.id}`}
-          className={`tap mb-3 w-full rounded-xl text-[14px] font-bold ${
-            status.connected ? 'btn-ghost' : 'btn-primary'
-          }`}
-        >
-          {status.connected ? '구글 계정 다시 연결' : '2. 구글 계정 연결하기'}
-        </a>
+        <form action="/api/settings/drive/start" method="post" className="mb-3">
+          <input type="hidden" name="sessionToken" value={session.token ?? ''} />
+          <button
+            type="submit"
+            className={`tap w-full rounded-xl text-[14px] font-bold ${
+              status.connected ? 'btn-ghost' : 'btn-primary'
+            }`}
+          >
+            {status.connected ? '구글 계정 다시 연결' : '2. 구글 계정 연결하기'}
+          </button>
+        </form>
       )}
 
       {/* 연결 전에 올린 것 한 번에 보내기 */}

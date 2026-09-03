@@ -96,7 +96,7 @@ export default function AlbumPage() {
     if (ok > 0) {
       logActivity(session?.id, `${album?.school ?? ''} 앨범에 사진 ${ok}장 추가`, `album:${albumId}`);
       /* 구글 드라이브에도 — 앨범에 학교·날짜가 이미 있어서 사람이 폴더를 안 고른다 */
-      queueDrive(session?.id, {
+      queueDrive(session?.id, session?.token, {
         kind: 'photo',
         files: copied,
         date: album?.class_date ?? null,

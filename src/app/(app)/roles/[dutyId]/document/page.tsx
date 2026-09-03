@@ -23,6 +23,8 @@ import {
 } from '@/lib/dutyDocument';
 import type { Department, Duty, DutyColumn, DutyGroup, DutyRow } from '@/lib/types';
 
+type DriveState = 'idle' | 'syncing' | 'synced' | 'queued' | 'skipped' | 'failed';
+
 function blankValues(template: DutyDocumentTemplate): DocumentValues {
   return Object.fromEntries(
     allDocumentFields(template).map((field) => [field.key, field.kind === 'lineItems' ? blankLineItems() : field.kind === 'check' ? false : '']),
@@ -51,6 +53,7 @@ export default function DutyDocumentPage() {
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [driveState, setDriveState] = useState<DriveState>('idle');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -126,6 +129,7 @@ export default function DutyDocumentPage() {
   const setValue = (key: string, value: DocumentValues[string]) => {
     setValues((previous) => ({ ...previous, [key]: value }));
     setSaved(false);
+    setDriveState('idle');
   };
 
   const chooseTemplate = (next: DutyDocumentTemplate) => {
@@ -133,6 +137,7 @@ export default function DutyDocumentPage() {
     setTemplateKey(next.key);
     setValues(blankValues(next));
     setSaved(false);
+    setDriveState('idle');
     setError('');
     window.history.replaceState(null, '', `/roles/${dutyId}/document?template=${encodeURIComponent(next.key)}`);
   };
@@ -147,6 +152,35 @@ export default function DutyDocumentPage() {
       } else if (!stringValue(value).trim()) return `${field.label}을 적어주세요.`;
     }
     return '';
+  };
+
+  const syncDrive = async (rowId: string) => {
+    if (!session?.id || !session.token) { setDriveState('skipped'); return; }
+    setDriveState('syncing');
+    try {
+      const response = await fetch('/api/drive/duty-document', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-actor-id': session.id,
+          'x-session-token': session.token,
+        },
+        body: JSON.stringify({ dutyId, rowId }),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        status?: string;
+        skipped?: string;
+        error?: string | null;
+      };
+      if (!response.ok) throw new Error(result.error || '드라이브 전송 요청 실패');
+      if (result.skipped) setDriveState('skipped');
+      else if (result.status === 'done') setDriveState('synced');
+      else if (result.status === 'failed') setDriveState('failed');
+      else setDriveState('queued');
+    } catch {
+      // 앱 문서는 이미 저장됐다. Drive만 실패 상태로 보여주고 작성 작업은 막지 않는다.
+      setDriveState('failed');
+    }
   };
 
   const save = async () => {
@@ -195,6 +229,7 @@ export default function DutyDocumentPage() {
       }
       setRow(savedRow);
       setSaved(true);
+      void syncDrive(savedRow.id);
     } catch (caught) {
       setError(friendlyError(caught, '문서를 저장하지 못했어요.'));
     } finally {
@@ -208,6 +243,7 @@ export default function DutyDocumentPage() {
     setRow(null);
     setSavedId(null);
     setSaved(false);
+    setDriveState('idle');
     setError('');
     window.history.replaceState(null, '', `/roles/${dutyId}/document?template=${encodeURIComponent(template.key)}`);
   };
@@ -323,8 +359,15 @@ export default function DutyDocumentPage() {
         {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
         {template.reviewNotice && <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-bold leading-relaxed text-amber-800">검토용 초안 · {template.reviewNotice}</div>}
         {saved && (
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-green-50 px-3 py-2 text-[12px] font-bold text-green-700">
-            <span>문서가 저장됐어요.</span>
+          <div className={`mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-[12px] font-bold ${driveState === 'failed' || driveState === 'skipped' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-700'}`}>
+            <span>{
+              driveState === 'syncing' ? '앱에 저장됨 · 구글 드라이브 저장 중…'
+                : driveState === 'synced' ? '앱·구글 드라이브에 저장됐어요.'
+                  : driveState === 'queued' ? '앱에 저장됨 · 구글 드라이브 전송 대기 중'
+                    : driveState === 'skipped' ? '앱에 저장됨 · 구글 드라이브 연결을 확인해주세요.'
+                      : driveState === 'failed' ? '앱에 저장됨 · 관리 화면에서 드라이브 전송을 다시 시도해주세요.'
+                        : '문서가 저장됐어요.'
+            }</span>
             <a href={printUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">완성 문서 보기·PDF</a>
           </div>
         )}

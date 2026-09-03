@@ -8,8 +8,12 @@ import {
   loadConfig,
   saveMeta,
   uploadFile,
+  uploadGoogleDocument,
   type DriveMeta,
 } from '@/lib/drive';
+import { documentTemplateByKey, parseDutyDocument } from '@/lib/dutyDocument';
+import { buildDutyDocumentHtml } from '@/lib/dutyDocumentExport';
+import { actorFromToken, tokenOf } from '@/lib/chatServer';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -20,6 +24,12 @@ const BATCH = 12;
 const MAX_TRIES = 4;
 /** 드라이브에 올릴 파일 크기 한도 (수업 사진 수백 장이 서버 메모리를 먹지 않게) */
 const MAX_BYTES = 25 * 1024 * 1024;
+
+function dutyDocumentIds(source: string): { dutyId: string; rowId: string } | null {
+  if (!source.startsWith('duty-document:')) return null;
+  const [dutyId, rowId, ...rest] = source.slice('duty-document:'.length).split(':');
+  return dutyId && rowId && rest.length === 0 ? { dutyId, rowId } : null;
+}
 
 /**
  * 줄 서 있는 파일을 실제로 드라이브에 올린다.
@@ -32,6 +42,11 @@ export async function POST(req: Request) {
   if (!admin) return NextResponse.json({ skipped: '서버 설정 없음' });
 
   const retry = new URL(req.url).searchParams.get('retry') === '1';
+  const actor = await actorFromToken(admin, tokenOf(req));
+  if (!actor) return NextResponse.json({ error: '다시 로그인해주세요.' }, { status: 401 });
+  if (retry && actor.role !== 'admin') {
+    return NextResponse.json({ error: '원장만 다시 시도할 수 있어요.' }, { status: 403 });
+  }
 
   const cfg = await loadConfig(admin);
   if (!cfg) return NextResponse.json({ skipped: '드라이브 연결 안 됨' });
@@ -64,8 +79,26 @@ export async function POST(req: Request) {
   let failed = 0;
 
   for (const row of rows) {
+    /* 같은 pending 행을 서버 두 대가 동시에 집어 새 파일을 두 벌 만드는 일을 막는다.
+       별도 processing 상태 없이 tries를 낙관적 잠금값으로 써서 기존 DB 구조를 유지한다. */
+    const claimedTries = (row.tries ?? 0) + 1;
+    const { data: claimed } = await admin
+      .from('drive_uploads')
+      .update({ status: 'failed', error: '드라이브로 보내는 중…', tries: claimedTries })
+      .eq('id', row.id)
+      .eq('status', row.status)
+      .eq('tries', row.tries ?? 0)
+      .select('id')
+      .maybeSingle();
+    if (!claimed) continue;
+
     const fin = async (patch: Record<string, unknown>) => {
-      await admin.from('drive_uploads').update({ ...patch, tries: (row.tries ?? 0) + 1 }).eq('id', row.id);
+      await admin
+        .from('drive_uploads')
+        .update(patch)
+        .eq('id', row.id)
+        .eq('status', 'failed')
+        .eq('tries', claimedTries);
     };
     try {
       const folderId = await ensurePath(access, meta.rootId!, row.folder_path, meta.folders!);
@@ -75,27 +108,75 @@ export async function POST(req: Request) {
         continue;
       }
 
-      /* 수파베이스에서 파일을 받아 그대로 드라이브로 넘긴다 */
-      const src = await fetch(row.source_url);
-      if (!src.ok) {
-        failed += 1;
-        await fin({ status: 'failed', error: `앱에서 파일을 못 읽었어요 (${src.status})` });
-        continue;
+      /*
+       * 일반 첨부파일은 기존 URL에서 받고, 업무 문서는 DB의 최신 값을 서버에서 HTML로
+       * 만든다. 계약서·연락처가 든 문서를 공개 Storage에 잠깐이라도 두지 않기 위해서다.
+       */
+      const documentIds = dutyDocumentIds(row.source_url);
+      let blob: Blob;
+      if (documentIds) {
+        const [{ data: dutyRow }, { data: duty }] = await Promise.all([
+          admin
+            .from('duty_rows')
+            .select('id,duty_id,cells')
+            .eq('id', documentIds.rowId)
+            .eq('duty_id', documentIds.dutyId)
+            .maybeSingle(),
+          admin.from('duties').select('id,name,group_id').eq('id', documentIds.dutyId).maybeSingle(),
+        ]);
+        if (!dutyRow || !duty) {
+          failed += 1;
+          await fin({ status: 'failed', error: '저장된 업무 문서를 찾을 수 없어요.' });
+          continue;
+        }
+        const { data: group } = await admin
+          .from('duty_groups')
+          .select('id,name,dept_id')
+          .eq('id', duty.group_id)
+          .maybeSingle();
+        const { data: department } = group
+          ? await admin.from('departments').select('id,name').eq('id', group.dept_id).maybeSingle()
+          : { data: null };
+        const payload = parseDutyDocument((dutyRow.cells as Record<string, unknown> | null)?.__document);
+        const template = payload && group
+          ? documentTemplateByKey(duty.name, group.name, payload.templateKey)
+          : null;
+        if (!payload || !template || !group) {
+          failed += 1;
+          await fin({ status: 'failed', error: '업무 문서 양식을 읽을 수 없어요.' });
+          continue;
+        }
+        const exported = buildDutyDocumentHtml(template, payload.values, {
+          departmentName: department?.name,
+          groupName: group.name,
+          dutyName: duty.name,
+          rowId: dutyRow.id,
+        });
+        blob = new Blob([exported.html], { type: exported.mediaType });
+      } else {
+        const src = await fetch(row.source_url);
+        if (!src.ok) {
+          failed += 1;
+          await fin({ status: 'failed', error: `앱에서 파일을 못 읽었어요 (${src.status})` });
+          continue;
+        }
+        blob = await src.blob();
       }
-      const blob = await src.blob();
       if (blob.size > MAX_BYTES) {
         failed += 1;
         await fin({ status: 'failed', error: `파일이 너무 커요 (${Math.round(blob.size / 1024 / 1024)}MB)` });
         continue;
       }
 
-      const up = await uploadFile(
-        access,
-        folderId,
-        row.file_name,
-        row.mime_type || blob.type || 'application/octet-stream',
-        blob,
-      );
+      const up = documentIds
+        ? await uploadGoogleDocument(access, folderId, row.file_name, blob, row.drive_id)
+        : await uploadFile(
+          access,
+          folderId,
+          row.file_name,
+          row.mime_type || blob.type || 'application/octet-stream',
+          blob,
+        );
       if ('error' in up) {
         failed += 1;
         await fin({ status: 'failed', error: up.error });
@@ -125,10 +206,8 @@ export async function GET(req: Request) {
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: '서버 설정이 아직 안 됐어요.' }, { status: 500 });
 
-  const actorId = req.headers.get('x-actor-id');
-  if (!actorId) return NextResponse.json({ error: '권한이 없어요.' }, { status: 403 });
-  const { data: me } = await admin.from('members').select('role,active').eq('id', actorId).maybeSingle();
-  if (!me || !me.active || me.role !== 'admin') {
+  const actor = await actorFromToken(admin, tokenOf(req));
+  if (!actor || actor.role !== 'admin') {
     return NextResponse.json({ error: '원장만 볼 수 있어요.' }, { status: 403 });
   }
 

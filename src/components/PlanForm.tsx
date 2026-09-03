@@ -307,7 +307,7 @@ export function PlanForm({
       void (async () => {
         try {
           const up = await uploadBlob('moalab-plans', blob, fileName, `app-${appId}`);
-          queueDrive(session?.id, {
+          queueDrive(session?.id, session?.token, {
             kind: 'lecture',
             files: [{ url: up.url, name: fileName, mime: 'application/hwp+zip' }],
             topic,
