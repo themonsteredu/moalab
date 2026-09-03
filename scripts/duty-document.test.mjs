@@ -51,30 +51,34 @@ const keysFor = (dutyName, groupName = '') =>
 console.log('\n[영업마케팅 업무별 실제 문서]');
 {
   const duties = [
-    ['제안서 작성·발송', '학교·기관 영업', ['institution-proposal']],
-    ['견적·계약', '학교·기관 영업', ['quotation', 'service-contract']],
-    ['신규 기관 발굴', '학교·기관 영업', ['sales-lead']],
-    ['SNS·블로그 운영', '홍보', ['content-copy']],
-    ['브로셔만들기[A4버전]', '홍보', ['brochure-copy']],
-    ['수업 사진 정리', '홍보', ['photo-log']],
-    ['브로셔만들기[영상]', '홍보', ['video-storyboard']],
-    ['브로셔만들기[링크]', '홍보', ['landing-copy']],
-    ['명함제작', '홍보', ['business-card-proof']],
-    ['담당 교사 응대', '고객 관리', ['contact-log']],
-    ['만족도 조사', '고객 관리', ['satisfaction-survey']],
-    ['재출강·재계약', '고객 관리', ['renewal-proposal']],
-    ['기관리스트관리', '고객 관리', ['institution-card']],
+    ['제안서 작성·발송', '학교·기관 영업', ['one-page-proposal', 'school-proposal', 'public-proposal', 'institution-proposal']],
+    ['견적·계약', '학교·기관 영업', ['simple-quotation', 'quotation', 'service-contract', 'cooperation-mou']],
+    ['신규 기관 발굴', '학교·기관 영업', ['institution-research', 'first-call-script', 'visit-consultation', 'sales-lead']],
+    ['SNS·블로그 운영', '홍보', ['instagram-copy', 'naver-blog-copy', 'content-copy', 'press-release']],
+    ['브로셔만들기[A4버전]', '홍보', ['one-page-flyer', 'brochure-copy', 'print-production-checklist']],
+    ['수업 사진 정리', '홍보', ['class-photo-shot-list', 'photo-log', 'photo-selection-delivery']],
+    ['브로셔만들기[영상]', '홍보', ['shorts-script', 'video-storyboard', 'interview-video']],
+    ['브로셔만들기[링크]', '홍보', ['landing-copy', 'campaign-link-checklist', 'qr-tracking-sheet']],
+    ['명함제작', '홍보', ['business-card-proof', 'business-card-order']],
+    ['담당 교사 응대', '고객 관리', ['contact-log', 'teacher-meeting-minutes', 'complaint-response']],
+    ['만족도 조사', '고객 관리', ['satisfaction-survey', 'student-satisfaction-survey', 'satisfaction-result-report']],
+    ['재출강·재계약', '고객 관리', ['renewal-followup', 'institution-performance-summary', 'renewal-proposal']],
+    ['기관리스트관리', '고객 관리', ['institution-card', 'institution-contact-history', 'sales-pipeline-review']],
   ];
 
   for (const [dutyName, groupName, keys] of duties) {
     eq(`${dutyName} 문서`, keysFor(dutyName, groupName), keys);
   }
-  eq('견적·계약은 견적서와 계약서를 따로 고른다',
+  eq('견적·계약은 상황별 문서를 따로 고른다',
     D.documentTemplatesFor('견적·계약', '학교·기관 영업').map((t) => t.title),
-    ['교육 프로그램 견적서', '교육 프로그램 출강 계약서']);
+    ['간편 견적서', '교육 프로그램 견적서', '교육 프로그램 출강 계약서', '업무협약서(MOU)']);
+  const allTemplates = duties.flatMap(([dutyName, groupName]) => D.documentTemplatesFor(dutyName, groupName));
+  eq('핵심 업무 양식은 총 42개다', allTemplates.length, 42);
+  eq('핵심 업무 안에서 양식 키가 겹치지 않는다', new Set(allTemplates.map((template) => template.key)).size, 42);
+  eq('각 업무에는 상황별 양식이 2개 이상 있다', duties.every(([dutyName, groupName]) => keysFor(dutyName, groupName).length >= 2), true);
   eq('모르는 업무에는 임의 양식을 붙이지 않는다', keysFor('외부 자문 회의록', '기타'), []);
   eq('직접 지정된 업무가 신규발굴 규칙보다 우선한다',
-    keysFor('제안서 작성·발송', '신규발굴 학교'), ['institution-proposal']);
+    keysFor('제안서 작성·발송', '신규발굴 학교'), ['one-page-proposal', 'school-proposal', 'public-proposal', 'institution-proposal']);
 }
 
 console.log('\n[신규발굴 15개 갈래]');
@@ -91,8 +95,14 @@ console.log('\n[신규발굴 15개 갈래]');
   for (const [groupName, duties] of outreach) {
     for (const dutyName of duties) {
       const templates = D.documentTemplatesFor(dutyName, groupName);
-      eq(`${groupName} › ${dutyName} 키`, templates.map((t) => t.key), [`sales-lead-${dutyName}`]);
-      eq(`${groupName} › ${dutyName} 제목`, templates[0]?.title, `${dutyName} 기관 영업 기록지`);
+      eq(`${groupName} › ${dutyName} 양식 수`, templates.length, 4);
+      eq(`${groupName} › ${dutyName} 키`, templates.map((t) => t.key), [
+        `institution-research-${dutyName}`,
+        `first-call-script-${dutyName}`,
+        `visit-consultation-${dutyName}`,
+        `sales-lead-${dutyName}`,
+      ]);
+      eq(`${groupName} › ${dutyName} 제목`, templates[0]?.title, `${dutyName} 기관 사전조사표`);
       eq(`${groupName} › ${dutyName} 키로 다시 찾기`,
         D.documentTemplateByKey(dutyName, groupName, `sales-lead-${dutyName}`)?.key,
         `sales-lead-${dutyName}`);
