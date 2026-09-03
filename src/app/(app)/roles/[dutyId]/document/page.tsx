@@ -54,6 +54,7 @@ export default function DutyDocumentPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [driveState, setDriveState] = useState<DriveState>('idle');
+  const [driveId, setDriveId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -157,6 +158,7 @@ export default function DutyDocumentPage() {
   const syncDrive = async (rowId: string) => {
     if (!session?.id || !session.token) { setDriveState('skipped'); return; }
     setDriveState('syncing');
+    setDriveId(null);
     try {
       const response = await fetch('/api/drive/duty-document', {
         method: 'POST',
@@ -171,8 +173,10 @@ export default function DutyDocumentPage() {
         status?: string;
         skipped?: string;
         error?: string | null;
+        driveId?: string | null;
       };
       if (!response.ok) throw new Error(result.error || '드라이브 전송 요청 실패');
+      if (result.driveId) setDriveId(result.driveId);
       if (result.skipped) setDriveState('skipped');
       else if (result.status === 'done') setDriveState('synced');
       else if (result.status === 'failed') setDriveState('failed');
@@ -244,6 +248,7 @@ export default function DutyDocumentPage() {
     setSavedId(null);
     setSaved(false);
     setDriveState('idle');
+    setDriveId(null);
     setError('');
     window.history.replaceState(null, '', `/roles/${dutyId}/document?template=${encodeURIComponent(template.key)}`);
   };
@@ -368,7 +373,14 @@ export default function DutyDocumentPage() {
                       : driveState === 'failed' ? '앱에 저장됨 · 관리 화면에서 드라이브 전송을 다시 시도해주세요.'
                         : '문서가 저장됐어요.'
             }</span>
-            <a href={printUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">완성 문서 보기·PDF</a>
+            <span className="flex items-center gap-3">
+              {driveId && (
+                <a href={`https://drive.google.com/open?id=${encodeURIComponent(driveId)}`} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+                  Drive에서 열기
+                </a>
+              )}
+              <a href={printUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">완성 문서 보기·PDF</a>
+            </span>
           </div>
         )}
 

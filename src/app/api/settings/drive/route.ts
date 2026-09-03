@@ -56,6 +56,7 @@ export async function GET(req: Request) {
     connected,
     hasKeys,
     email: meta.email ?? null,
+    rootId: meta.rootId ?? null,
     kinds: meta.kinds ?? null, // null = 전부 켜짐
     pending: pend.count ?? 0,
     failed: fail.count ?? 0,
