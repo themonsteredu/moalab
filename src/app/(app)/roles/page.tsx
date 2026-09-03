@@ -637,8 +637,7 @@ export default function RolesPage() {
                 <div className="hidden overflow-hidden rounded-2xl border border-neutral-200 bg-surface shadow-sm lg:grid lg:grid-cols-[0.8fr_1fr_1.35fr]">
                   <section className="flex min-h-[520px] flex-col border-r border-neutral-200">
                     <div className="border-b border-neutral-100 px-4 py-3">
-                      <p className="text-[11px] font-bold tracking-wide text-neutral-400">1단계</p>
-                      <h2 className="mt-0.5 text-[14px] font-bold">부서</h2>
+                      <h2 className="text-[14px] font-bold">부서</h2>
                     </div>
                     <div className="max-h-[calc(100vh-250px)] flex-1 overflow-y-auto p-2">
                       {shown.map((d) => (
@@ -663,8 +662,7 @@ export default function RolesPage() {
                   <section className="flex min-h-[520px] flex-col border-r border-neutral-200">
                     <div className="flex items-center border-b border-neutral-100 px-4 py-3">
                       <div className="min-w-0 flex-1">
-                        <p className="text-[11px] font-bold tracking-wide text-neutral-400">2단계</p>
-                        <h2 className="mt-0.5 truncate text-[14px] font-bold">{selectedDept.dept.name}</h2>
+                        <h2 className="truncate text-[14px] font-bold">{selectedDept.dept.name}</h2>
                       </div>
                       <button
                         onClick={() => {
@@ -734,8 +732,7 @@ export default function RolesPage() {
 
                   <section className="flex min-h-[520px] flex-col">
                     <div className="border-b border-neutral-100 px-4 py-3">
-                      <p className="text-[11px] font-bold tracking-wide text-neutral-400">3단계 · 실제 업무</p>
-                      <h2 className="mt-0.5 truncate text-[14px] font-bold">
+                      <h2 className="truncate text-[14px] font-bold">
                         {selectedGroup?.group.name ?? '중분류를 선택하세요'}
                       </h2>
                     </div>
@@ -808,7 +805,7 @@ export default function RolesPage() {
                   {treeDepth === 'groups' && (
                     <div>
                       <div className="flex items-center border-b border-neutral-100 px-3 py-2">
-                        <span className="min-w-0 flex-1 text-[13px] font-bold text-neutral-600">업무 묶음을 선택하세요</span>
+                        <span className="min-w-0 flex-1 text-[13px] font-bold text-neutral-600">{selectedDept.dept.name}</span>
                         <button
                           onClick={() => {
                             setDeptSheet(selectedDept.dept);
