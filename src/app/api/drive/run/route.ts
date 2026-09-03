@@ -31,6 +31,11 @@ function dutyDocumentIds(source: string): { dutyId: string; rowId: string } | nu
   return dutyId && rowId && rest.length === 0 ? { dutyId, rowId } : null;
 }
 
+function grantFileId(source: string): string | null {
+  const id = source.startsWith('grant-file:') ? source.slice('grant-file:'.length) : '';
+  return /^[0-9a-f-]{36}$/i.test(id) ? id : null;
+}
+
 /**
  * 줄 서 있는 파일을 실제로 드라이브에 올린다.
  *
@@ -113,6 +118,7 @@ export async function POST(req: Request) {
        * 만든다. 계약서·연락처가 든 문서를 공개 Storage에 잠깐이라도 두지 않기 위해서다.
        */
       const documentIds = dutyDocumentIds(row.source_url);
+      const privateGrantFileId = grantFileId(row.source_url);
       let blob: Blob;
       if (documentIds) {
         const [{ data: dutyRow }, { data: duty }] = await Promise.all([
@@ -153,6 +159,24 @@ export async function POST(req: Request) {
           rowId: dutyRow.id,
         });
         blob = new Blob([exported.html], { type: exported.mediaType });
+      } else if (privateGrantFileId) {
+        const { data: grantFile } = await admin
+          .from('grant_files')
+          .select('file_path,mime_type')
+          .eq('id', privateGrantFileId)
+          .maybeSingle();
+        if (!grantFile) {
+          failed += 1;
+          await fin({ status: 'failed', error: '저장된 정부지원사업 파일을 찾을 수 없어요.' });
+          continue;
+        }
+        const downloaded = await admin.storage.from('moalab-grants').download(grantFile.file_path);
+        if (downloaded.error || !downloaded.data) {
+          failed += 1;
+          await fin({ status: 'failed', error: '비공개 사업 파일을 읽지 못했어요.' });
+          continue;
+        }
+        blob = downloaded.data;
       } else {
         const src = await fetch(row.source_url);
         if (!src.ok) {
