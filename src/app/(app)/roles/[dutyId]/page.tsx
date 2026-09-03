@@ -146,8 +146,6 @@ export default function DutyPage() {
 
         {/* **주인공이 갈래마다 다르다.** 줄이 쌓이는 일이면 목록이 위, 결과물이 파일인
             일이면 자료가 위다. 순서만 바꾼다 — 둘 다 늘 있고, 접힘도 각자 기억한다 */}
-        <p className="text-[12px] leading-relaxed text-neutral-400">{plan.why}</p>
-
         <div className="flex flex-col">
           <div className={plan.mode === 'table' ? 'order-1' : 'order-2'}>
             <DutyTable
