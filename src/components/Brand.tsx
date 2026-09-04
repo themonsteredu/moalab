@@ -42,18 +42,14 @@ export function BrandLogo({ width = 150, tagline = false }: { width?: number; ta
 }
 
 /** 이름 첫 글자 아바타. 이름마다 색이 고정된다. */
-/**
- * 사람 구분용 색. **채도를 낮춰 잡았다** — 어두운 바탕에서 형광색 동그라미가
- * 여럿 뜨면 그것부터 눈에 들어온다. 이름은 글자로 읽지 색으로 읽지 않는다.
- */
 const AVATAR_COLORS = [
-  'bg-[#A85536]',
-  'bg-[#3D658F]',
-  'bg-[#2F7259]',
-  'bg-[#61539B]',
-  'bg-[#8F4560]',
-  'bg-[#2B6E78]',
-  'bg-[#7D6231]',
+  'bg-[#F26522]',
+  'bg-[#2E7DD1]',
+  'bg-[#12A67A]',
+  'bg-[#A855F7]',
+  'bg-[#E0397A]',
+  'bg-[#0EA5B7]',
+  'bg-[#C2801B]',
 ];
 
 /**
@@ -88,7 +84,7 @@ export function Avatar({
       aria-hidden
       style={{ width: size, height: size, fontSize: size * 0.4 }}
       className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold leading-none text-white
-                  ${avatarColor(name, index)} ${ring ? 'ring-2 ring-neutral-300' : ''}`}
+                  ${avatarColor(name, index)} ${ring ? 'ring-4 ring-neutral-300/70' : ''}`}
     >
       {name.slice(0, 1)}
     </span>

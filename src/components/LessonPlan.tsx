@@ -91,11 +91,11 @@ function FileBadge({ name, size = 36 }: { name: string; size?: number }) {
       : ['hwp', 'hwpx', 'doc', 'docx'].includes(ext)
         ? 'bg-blue-50 text-blue-600'
         : ['ppt', 'pptx'].includes(ext)
-          ? 'bg-brand-100 text-brand-700'
+          ? 'bg-orange-50 text-orange-600'
           : ['xls', 'xlsx', 'csv'].includes(ext)
             ? 'bg-green-50 text-green-700'
             : IMAGE_EXT.includes(ext)
-              ? 'bg-violet-100 text-violet-700'
+              ? 'bg-purple-50 text-purple-600'
               : 'bg-neutral-100 text-neutral-500';
   return (
     <span

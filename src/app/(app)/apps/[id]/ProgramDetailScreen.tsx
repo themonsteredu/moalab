@@ -599,8 +599,8 @@ export default function ProgramDetailScreen() {
         }
       >
         <div className="space-y-3">
-          <div className="rounded-xl bg-amber-100 px-3.5 py-3">
-            <p className="text-[13px] leading-relaxed text-amber-800">
+          <div className="rounded-xl bg-yellow-50 px-3.5 py-3">
+            <p className="text-[13px] leading-relaxed text-yellow-900">
               지금까지의 검증 체크가 모두 <b>미확인</b>으로 리셋돼요. 이전 라운드 기록은 그대로 남습니다.
             </p>
           </div>

@@ -120,12 +120,12 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-dvh flex-col overflow-hidden bg-canvas">
+    <main className="relative flex min-h-dvh flex-col overflow-hidden bg-[#FFF9F5]">
       {/* 배경 — 브랜드 컬러가 은은하게 번지는 느낌 */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-24 -top-28 h-72 w-72 rounded-full bg-brand/[.07] blur-3xl" />
-        <div className="absolute -right-20 top-40 h-64 w-64 rounded-full bg-violet-500/[.06] blur-3xl" />
-        <div className="absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-brand/[.05] blur-3xl" />
+        <div className="absolute -left-24 -top-28 h-72 w-72 rounded-full bg-brand/25 blur-3xl" />
+        <div className="absolute -right-20 top-40 h-64 w-64 rounded-full bg-amber-300/25 blur-3xl" />
+        <div className="absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-brand/15 blur-3xl" />
       </div>
 
       <div className="relative flex w-full flex-1 flex-col items-center justify-center px-5 py-10">
@@ -133,7 +133,7 @@ export default function LoginPage() {
           {/* 로고 — 모아킷 로고는 어두운 배경 기준으로 만들어져 있어서
               앱 아이콘과 같은 검은 판 위에 올린다 (밝은 배경에 teal 만 두면 붕 뜬다) */}
           <div className="mb-8 flex flex-col items-center">
-            <span className="flex h-[84px] w-[84px] items-center justify-center rounded-[22px] border border-neutral-200 bg-black">
+            <span className="flex h-[84px] w-[84px] items-center justify-center rounded-[22px] bg-black shadow-[0_10px_28px_-10px_rgba(0,0,0,.55)]">
               <BrandMark size={54} />
             </span>
             <h1 className="mt-3.5 text-[26px] font-black leading-none tracking-tight text-neutral-900">
@@ -156,7 +156,7 @@ export default function LoginPage() {
                   ))}
                 </div>
               ) : members.length === 0 ? (
-                <div className="rounded-2xl border border-neutral-200 bg-surface p-7 text-center">
+                <div className="rounded-3xl border border-neutral-200/80 bg-surface/80 p-7 text-center backdrop-blur">
                   <p className="text-[14px] leading-relaxed text-neutral-600">
                     {loadError || '등록된 멤버가 없어요.'}
                   </p>
@@ -177,10 +177,10 @@ export default function LoginPage() {
                       }}
                       style={{ animationDelay: `${i * 45}ms` }}
                       className="group relative flex animate-fade-up flex-col items-center gap-2.5 rounded-2xl
-                                 border border-neutral-200 bg-surface px-3 py-5
-                                 transition-colors duration-100
-                                 hover:border-neutral-300 hover:bg-neutral-100
-                                 active:bg-neutral-50"
+                                 border border-white/80 bg-white/85 px-3 py-5 shadow-[0_2px_16px_-6px_rgba(120,70,40,.18)]
+                                 backdrop-blur transition
+                                 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-[0_10px_26px_-10px_rgba(242,101,34,.45)]
+                                 active:translate-y-0 active:scale-[.98]"
                     >
                       {m.role === 'admin' && (
                         <span className="absolute right-2.5 top-2.5 rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold text-brand-700">

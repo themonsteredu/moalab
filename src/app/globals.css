@@ -45,28 +45,8 @@
 @tailwind utilities;
 
 @layer base {
-  /* 화면(다크) 기본값. 인쇄에서는 아래 @media print 가 이 값을 밝게 되돌린다 */
-  :root {
-    --c-canvas: 8 9 10;
-    --c-surface: 14 15 17;
-    --c-raised: 20 21 23;
-    --n-50: 18 19 22;
-    --n-100: 23 24 27;
-    --n-200: 33 34 38;
-    --n-300: 43 45 49;
-    --n-400: 88 92 99;
-    --n-500: 122 127 135;
-    --n-600: 143 148 156;
-    --n-700: 174 178 185;
-    --n-800: 211 214 218;
-    --n-900: 242 243 245;
-  }
-
   html {
     -webkit-text-size-adjust: 100%;
-    /* ⚠️ 다크에서 이걸 빼면 `input[type=date]` 달력·기본 스크롤바가
-       흰 판으로 튀어나온다. 이 앱은 날짜 입력이 많아 눈에 바로 띈다. */
-    color-scheme: dark;
   }
   body {
     @apply bg-canvas text-neutral-900 antialiased;
@@ -90,10 +70,7 @@
     height: 9px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-neutral-200;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-neutral-300;
+    @apply rounded-full bg-neutral-300;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
@@ -106,55 +83,44 @@
     @apply min-h-[44px] inline-flex items-center justify-center;
   }
   .btn {
-    @apply tap gap-1.5 rounded-lg px-3.5 text-[14px] font-semibold transition-colors duration-100
-           disabled:opacity-40;
+    @apply tap gap-1.5 rounded-xl px-4 text-[15px] font-semibold transition active:scale-[.98]
+           disabled:opacity-40 disabled:active:scale-100;
   }
-  /* 꽉 채우는 유일한 자리. 리니어처럼 **후광(그림자)을 걷어냈다** —
-     어두운 바탕에서는 번지는 빛이 더 지저분하다. */
   .btn-primary {
-    @apply btn bg-brand text-white hover:bg-brand-600;
+    @apply btn bg-brand text-white shadow-[0_4px_10px_-6px_rgba(242,101,34,.35)] hover:bg-brand-600;
   }
-  /* 보조 버튼은 칠하지 않는다. 1px 실선과 글자색만으로 존재를 지운다 */
   .btn-ghost {
-    @apply btn border border-neutral-200 bg-transparent text-neutral-800 hover:bg-neutral-100 hover:border-neutral-300;
+    @apply btn border border-neutral-300 bg-surface text-neutral-700 hover:bg-neutral-50;
   }
   .btn-danger {
-    @apply btn bg-red-500 text-white hover:bg-red-600;
+    @apply btn bg-red-600 text-white hover:bg-red-700;
   }
-  /* 카드는 **그림자를 쓰지 않는다.** 어두운 바탕에서 그림자는 안 보이고
-     번짐만 남는다 — 층은 1px 실선과 아주 작은 밝기 차이로만 나눈다. */
   .card {
-    @apply rounded-xl border border-neutral-200 bg-surface;
+    @apply rounded-2xl border border-neutral-200 bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)];
   }
   .card-raised {
-    @apply rounded-xl border border-neutral-300 bg-raised;
+    @apply rounded-2xl border border-neutral-200 bg-surface shadow-[0_8px_24px_-16px_rgba(16,24,40,.35)];
   }
   .field {
-    @apply w-full min-h-[44px] rounded-lg border border-neutral-200 bg-raised px-3 py-2 text-[15px]
-           text-neutral-900 outline-none transition-colors duration-100
-           hover:border-neutral-300
-           focus:border-brand-400 focus:ring-1 focus:ring-brand-400/40;
+    @apply w-full min-h-[44px] rounded-xl border border-neutral-300 bg-surface px-3 py-2 text-[15px]
+           text-neutral-900 outline-none transition
+           focus:border-brand focus:ring-2 focus:ring-brand-100;
   }
   .label {
-    @apply mb-1.5 block text-[12px] font-semibold tracking-wide text-neutral-500;
+    @apply mb-1.5 block text-[13px] font-semibold text-neutral-500;
   }
   /* **고른 것** 표시 — 꽉 채우지 않고 옅게 물들인다.
      필터·부서·중요도처럼 **한 화면에 여러 개가 동시에 켜지는 자리**라
      저마다 통째로 주황이면 화면이 주황 덩어리가 된다 (원장이 "눈아파" 라고 한 그것이다).
-     테두리 + 글자색이 '켜짐' 을 지고, 칠은 가장 옅은 단계만 쓴다.
-     꽉 찬 주황은 **한 화면에 하나뿐인 것**에만 남긴다 —
-     주 버튼(.btn-primary) · 작은 뱃지·체크표시. */
+     테두리(border-brand) + 글자색(text-brand-700) 이 '켜짐' 을 대신 지고,
+     칠은 가장 옅은 단계만 쓴다. 꽉 찬 주황은 **한 화면에 하나뿐인 것**에만 남긴다 —
+     주 버튼(.btn-primary) · PC 사이드바의 지금 화면 · 작은 뱃지·체크표시.
+     ※ 작은 체크네모(20px)는 그대로 꽉 채운다 — 흰 체크가 보이려면 바탕이 진해야 한다. */
   .pick-on {
-    @apply border-brand-400 bg-brand-100 text-brand-700;
+    @apply border-brand bg-brand-100 text-brand-700;
   }
-  /* 리니어의 상태 표시는 **작고 조용하다.** 알약을 꽉 채우지 않는다 */
   .chip {
-    @apply inline-flex items-center rounded-md px-2 py-0.5 text-[11.5px] font-semibold;
-  }
-  /* 촘촘한 한 줄 목록 — 카드 대신 행으로 쌓을 때 (리니어의 기본 단위) */
-  .row {
-    @apply flex min-h-[52px] items-center gap-3 border-b border-neutral-200 px-3
-           transition-colors duration-100 hover:bg-neutral-50 last:border-b-0;
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold;
   }
   .skeleton {
     @apply animate-pulse rounded-lg bg-neutral-200/80;
@@ -185,27 +151,9 @@
     size: A4;
     margin: 14mm 12mm;
   }
-  /* 종이는 흰색이다. **변수만 밝은 값으로 되돌리면** 인쇄 화면 여섯 개가
-     한꺼번에 라이트로 돌아온다 — 화면 코드는 한 줄도 안 고친다. */
-  :root {
-    --c-canvas: 255 255 255;
-    --c-surface: 255 255 255;
-    --c-raised: 250 250 250;
-    --n-50: 250 250 250;
-    --n-100: 245 245 245;
-    --n-200: 229 229 229;
-    --n-300: 212 212 212;
-    --n-400: 163 163 163;
-    --n-500: 115 115 115;
-    --n-600: 82 82 82;
-    --n-700: 64 64 64;
-    --n-800: 38 38 38;
-    --n-900: 23 23 23;
-  }
   html,
   body {
     background: #fff !important;
-    color-scheme: light;
     /* 화면용 어두운 배경/그림자가 잉크를 먹지 않게 */
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -236,14 +184,6 @@
   .print-a4-sheet {
     transform: none !important;
     margin-left: 0 !important;
-  }
-  /* 인쇄 화면이 쓰는 상태색은 빨강 둘뿐이다 — 종이에서 읽히게 되돌린다
-     (영수증 없는 지출·담당자 미정을 빨간 칸으로 싣는 자리) */
-  .text-red-700 {
-    color: #b42318 !important;
-  }
-  .border-red-400 {
-    border-color: #d92d20 !important;
   }
   a {
     text-decoration: none;

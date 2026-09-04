@@ -48,7 +48,7 @@ interface AppLite {
 
 const BUCKETS: { key: keyof TaskBuckets; label: string; tone: string }[] = [
   { key: 'overdue', label: '기한 지남', tone: 'text-red-700' },
-  { key: 'today', label: '오늘', tone: 'text-brand-700' },
+  { key: 'today', label: '오늘', tone: 'text-orange-700' },
   { key: 'soon', label: '이번 주', tone: 'text-neutral-600' },
   { key: 'later', label: '나중에', tone: 'text-neutral-500' },
 ];

@@ -430,13 +430,13 @@ export default function HomePage() {
       {/* --------------------------------------------------------- 인사
           PC 에서는 인사·요약을 한 줄로 눕혀 맨 윗줄에 통째로 보이게 한다.
           (두 줄이면 조금만 스크롤해도 반쯤 잘려 보여서 지저분했다) */}
-      <div className="card mb-4 overflow-hidden p-4 lg:flex lg:items-center lg:gap-4 lg:px-5 lg:py-3.5">
+      <div className="mb-4 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-400 via-brand to-brand-600 p-4 lg:flex lg:items-center lg:gap-4 lg:px-5 lg:py-3.5">
         <div className="flex items-center justify-between gap-3 lg:shrink-0">
           <div className="min-w-0">
-            <p className="text-[17px] font-bold leading-tight text-neutral-900 lg:text-[18px]">
+            <p className="text-[18px] font-black leading-tight text-white lg:text-[19px]">
               안녕하세요 {greeting}
             </p>
-            <p className="mt-0.5 text-[12.5px] text-neutral-500">{korDateFull(todayStr)}</p>
+            <p className="mt-0.5 text-[12.5px] text-white/75">{korDateFull(todayStr)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2 lg:hidden">
             {session && <Avatar name={session.name} size={40} ring />}
@@ -464,7 +464,7 @@ export default function HomePage() {
 
         <button
           onClick={signOut}
-          className="hidden shrink-0 text-[12.5px] font-semibold text-neutral-500 hover:text-neutral-800 lg:block"
+          className="hidden shrink-0 text-[12.5px] font-semibold text-white/70 hover:text-white lg:block"
         >
           로그아웃
         </button>
@@ -740,7 +740,7 @@ export default function HomePage() {
                       >
                         <span
                           className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 transition ${
-                            t.done ? 'border-green-500 bg-green-500 text-white' : 'border-neutral-300'
+                            t.done ? 'border-green-600 bg-green-600 text-white' : 'border-neutral-300'
                           }`}
                         >
                           {t.done && <Icon name="check" size={13} strokeWidth={3} />}
@@ -887,9 +887,9 @@ export default function HomePage() {
 
 function HeroChip({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' }) {
   return (
-    <span className="flex items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-50 px-2.5 py-1.5">
-      <span className="text-[11px] text-neutral-500">{label}</span>
-      <span className={`text-[13px] font-bold ${tone === 'warn' ? 'text-amber-700' : 'text-neutral-900'}`}>
+    <span className="flex items-center gap-1.5 rounded-lg bg-black/20 px-2.5 py-1.5 backdrop-blur">
+      <span className="text-[11px] text-white/70">{label}</span>
+      <span className={`text-[13px] font-black ${tone === 'warn' ? 'text-yellow-900' : 'text-white'}`}>
         {value}
       </span>
     </span>

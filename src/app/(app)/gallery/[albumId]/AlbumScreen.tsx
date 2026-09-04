@@ -241,7 +241,7 @@ export default function AlbumScreen() {
             <Info label="참여 인원" value={album.headcount ? `${album.headcount}명` : '-'} />
           </div>
           {faceCount > 0 && (
-            <p className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
+            <p className="mt-3 rounded-lg bg-yellow-50 px-3 py-2 text-[12px] leading-relaxed text-yellow-900">
               얼굴이 나온 사진 {faceCount}장이 있어요. 외부 자료로 쓸 땐 <b>얼굴 없는 것만 받기</b>를 쓰세요.
             </p>
           )}

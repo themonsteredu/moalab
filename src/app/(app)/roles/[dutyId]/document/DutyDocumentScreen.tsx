@@ -281,12 +281,12 @@ export default function DutyDocumentScreen() {
                   {lineItems.length > 1 && <button type="button" onClick={() => removeLineItem(index)} className="text-[11px] font-bold text-red-500">삭제</button>}
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-                  <input aria-label={`품목 ${index + 1}`} placeholder="품목" value={item.item} onChange={(e) => updateLineItem(index, 'item', e.target.value)} className="field col-span-2 sm:col-span-2" />
-                  <input aria-label={`세부내용 ${index + 1}`} placeholder="세부내용" value={item.detail} onChange={(e) => updateLineItem(index, 'detail', e.target.value)} className="field col-span-2 sm:col-span-2" />
-                  <input aria-label={`수량 ${index + 1}`} type="number" placeholder="수량" value={item.quantity} onChange={(e) => updateLineItem(index, 'quantity', e.target.value)} className="field" />
-                  <input aria-label={`단위 ${index + 1}`} placeholder="단위" value={item.unit} onChange={(e) => updateLineItem(index, 'unit', e.target.value)} className="field" />
-                  <input aria-label={`단가 ${index + 1}`} type="number" placeholder="단가" value={item.unitPrice} onChange={(e) => updateLineItem(index, 'unitPrice', e.target.value)} className="field col-span-2 sm:col-span-2" />
-                  <div className="col-span-2 flex items-center justify-end rounded-lg bg-raised px-3 text-[13px] font-black text-neutral-800 sm:col-span-4">
+                  <input aria-label={`품목 ${index + 1}`} placeholder="품목" value={item.item} onChange={(e) => updateLineItem(index, 'item', e.target.value)} className="field col-span-2 bg-white sm:col-span-2" />
+                  <input aria-label={`세부내용 ${index + 1}`} placeholder="세부내용" value={item.detail} onChange={(e) => updateLineItem(index, 'detail', e.target.value)} className="field col-span-2 bg-white sm:col-span-2" />
+                  <input aria-label={`수량 ${index + 1}`} type="number" placeholder="수량" value={item.quantity} onChange={(e) => updateLineItem(index, 'quantity', e.target.value)} className="field bg-white" />
+                  <input aria-label={`단위 ${index + 1}`} placeholder="단위" value={item.unit} onChange={(e) => updateLineItem(index, 'unit', e.target.value)} className="field bg-white" />
+                  <input aria-label={`단가 ${index + 1}`} type="number" placeholder="단가" value={item.unitPrice} onChange={(e) => updateLineItem(index, 'unitPrice', e.target.value)} className="field col-span-2 bg-white sm:col-span-2" />
+                  <div className="col-span-2 flex items-center justify-end rounded-lg bg-white px-3 text-[13px] font-black text-neutral-800 sm:col-span-4">
                     {money((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}
                   </div>
                 </div>
@@ -315,14 +315,14 @@ export default function DutyDocumentScreen() {
           {field.label}{field.required && <span className="ml-1 text-brand">*</span>}
         </label>
         {field.kind === 'textarea' ? (
-          <textarea id={`document-${field.key}`} rows={4} placeholder={field.placeholder} value={stringValue(value)} onChange={(event) => setValue(field.key, event.target.value)} className="field min-h-[104px] resize-y" />
+          <textarea id={`document-${field.key}`} rows={4} placeholder={field.placeholder} value={stringValue(value)} onChange={(event) => setValue(field.key, event.target.value)} className="field min-h-[104px] resize-y bg-white" />
         ) : field.kind === 'select' ? (
-          <select id={`document-${field.key}`} value={stringValue(value)} onChange={(event) => setValue(field.key, event.target.value)} className="field">
+          <select id={`document-${field.key}`} value={stringValue(value)} onChange={(event) => setValue(field.key, event.target.value)} className="field bg-white">
             <option value="">선택하세요</option>
             {(field.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         ) : (
-          <input id={`document-${field.key}`} type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'} placeholder={field.placeholder} value={stringValue(value)} onChange={(event) => setValue(field.key, event.target.value)} className="field" />
+          <input id={`document-${field.key}`} type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'} placeholder={field.placeholder} value={stringValue(value)} onChange={(event) => setValue(field.key, event.target.value)} className="field bg-white" />
         )}
       </div>
     );
@@ -354,7 +354,7 @@ export default function DutyDocumentScreen() {
         {templates.length > 1 && !savedId && (
           <div className="mb-3 grid grid-cols-2 gap-2">
             {templates.map((item) => (
-              <button key={item.key} type="button" onClick={() => chooseTemplate(item)} className={`rounded-xl border px-3 py-3 text-left text-[13px] font-black ${item.key === template.key ? 'pick-on' : 'border-neutral-200 bg-surface text-neutral-600'}`}>
+              <button key={item.key} type="button" onClick={() => chooseTemplate(item)} className={`rounded-xl border px-3 py-3 text-left text-[13px] font-black ${item.key === template.key ? 'border-brand bg-orange-50 text-brand' : 'border-neutral-200 bg-white text-neutral-600'}`}>
                 {item.title}
               </button>
             ))}
@@ -384,7 +384,7 @@ export default function DutyDocumentScreen() {
           </div>
         )}
 
-        <article className="overflow-hidden rounded-xl border border-neutral-300 bg-surface">
+        <article className="overflow-hidden rounded-2xl border border-neutral-300 bg-white shadow-sm">
           <header className="border-b-[3px] border-neutral-900 px-5 py-6 text-center sm:px-8">
             <p className="text-[10px] tracking-wide text-neutral-400">{path}</p>
             <h1 className="mt-2 text-[24px] font-black tracking-tight text-neutral-950 sm:text-[29px]">{template.title}</h1>

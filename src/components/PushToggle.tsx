@@ -59,7 +59,7 @@ export function PushToggle() {
   if (on) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-raised px-3.5 py-2">
-        <Icon name="megaphone" size={13} className="shrink-0 text-neutral-500" />
+        <Icon name="megaphone" size={13} className="shrink-0 text-green-600" />
         <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-neutral-600">
           푸시 알림 켜짐
         </p>
@@ -93,10 +93,10 @@ export function PushToggle() {
           onClick={() => void (on ? disable() : enable())}
           disabled={busy}
           aria-pressed={on}
-          className={`tap shrink-0 rounded-lg border px-3 text-[13px] font-bold transition-colors duration-100 ${
+          className={`tap shrink-0 rounded-xl border px-3 text-[13px] font-bold transition ${
             on
-              ? 'border-neutral-200 bg-transparent text-neutral-500'
-              : 'border-brand bg-brand text-white'
+              ? 'border-neutral-300 bg-surface text-neutral-500'
+              : 'border-green-600 bg-green-600 text-white'
           } disabled:opacity-40`}
         >
           {busy ? '…' : on ? '끄기' : '켜기'}

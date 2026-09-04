@@ -202,7 +202,7 @@ export function AiKeyCard() {
       )}
 
       {status.missing && (
-        <p className="mt-2.5 rounded-lg bg-amber-100 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
+        <p className="mt-2.5 rounded-lg bg-yellow-50 px-3 py-2 text-[12px] leading-relaxed text-yellow-900">
           키를 담을 표가 아직 없어요. <b>supabase/schema.sql</b> 을 한 번 실행해주세요.
         </p>
       )}

@@ -337,7 +337,7 @@ export function Collapsible({
           />
           <span
             className={`truncate ${
-              dense ? 'text-[12px] font-semibold text-neutral-500' : 'text-[13.5px] font-semibold text-neutral-700'
+              dense ? 'text-[12.5px] font-bold text-neutral-500' : 'text-[15px] font-bold text-neutral-800'
             }`}
           >
             {title}
