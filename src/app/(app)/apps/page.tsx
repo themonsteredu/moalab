@@ -525,10 +525,6 @@ export default function AppsPage() {
             </span>
           </a>
 
-          <p className="text-[12px] leading-relaxed text-neutral-400">
-            열린 화면에서 인쇄하거나 <b>PDF로 저장</b> 하면 돼요. 프로그램 하나만 뽑을 땐
-            그 프로그램 화면의 <b>인쇄 / PDF 저장</b> 을 쓰세요.
-          </p>
         </div>
       </Sheet>
 

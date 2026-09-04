@@ -602,8 +602,6 @@ export function LessonPlan({
         {newVerFor && (
           <div className="space-y-3">
             <p className="rounded-lg bg-raised px-3 py-2 text-[12.5px] leading-relaxed text-neutral-600">
-              <b>{newVerFor.versions[0].file_name}</b> 의 다음 판으로 올라가요.
-              <br />
               지금 판({newVerFor.versions[0].version}판)은 지워지지 않고 &lsquo;지난 판&rsquo; 에 남아요.
             </p>
 

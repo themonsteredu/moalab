@@ -370,9 +370,6 @@ export function TaskTemplateManager({
           aria-label="체크리스트 이름"
           className="field"
         />
-        <p className="mt-2 text-[12px] leading-relaxed text-neutral-500">
-          이름을 바꿔도 <b>이미 뿌린 업무는 그대로</b>예요. 뿌린 순간 사진처럼 굳습니다.
-        </p>
       </Sheet>
 
       <ConfirmDialog
