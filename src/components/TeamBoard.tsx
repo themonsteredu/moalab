@@ -181,7 +181,7 @@ export function TeamBoard({ work, meId }: { work: MemberWork[]; meId: string }) 
                   <Link
                     key={`f-${a.id}`}
                     href={`/apps/${a.id}`}
-                    className="flex items-center gap-1 rounded-md bg-orange-50 px-1.5 py-1 text-[11px] font-semibold text-orange-700"
+                    className="flex items-center gap-1 rounded-md bg-brand-100 px-1.5 py-1 text-[11px] font-semibold text-brand-700"
                   >
                     <Icon name="wrench" size={10} />
                     {a.title} 수정
