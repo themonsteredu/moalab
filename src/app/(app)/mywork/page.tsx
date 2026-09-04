@@ -429,12 +429,6 @@ export default function MyWorkPage() {
                       전체 ›
                     </Link>
                   </div>
-                  <p className="mb-2 text-[12px] leading-relaxed text-neutral-400">
-                    역할을 누르면 <b className="text-neutral-500">그 일을 하는 자리가 열려요</b> — 목록·자료·바로가기.
-                    올린 파일은
-                    구글 드라이브 <code className="text-neutral-500">업무분장/{d.dept.name}</code> 에도 들어갑니다.
-                  </p>
-
                   <div className="divide-y divide-neutral-100">
                     {d.groups.map((g) => (
                       <div key={g.group.id} className="py-2 first:pt-0 last:pb-0">
