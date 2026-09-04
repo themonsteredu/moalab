@@ -847,9 +847,6 @@ function ExpenseForm({
           {/* 영수증 */}
           <div>
             <label className="label">영수증 첨부</label>
-            <p className="mb-2 text-[12px] leading-relaxed text-neutral-500">
-              카드전표·간이영수증 여러 장 다 됩니다. 사진은 자동으로 줄여서 저장돼요.
-            </p>
 
             {existing.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-2">
@@ -1035,15 +1032,12 @@ function PrintSheet({
       }
     >
       <div className="space-y-2">
-        <p className="text-[13px] leading-relaxed text-neutral-500">
-          넣을 것을 고르세요. 새 창에서 열리고, 거기서 <b>인쇄 / PDF 저장</b> 을 누르면 됩니다.
-          {(extra.category || extra.member) && (
-            <>
-              <br />
-              지금 걸어둔 필터가 그대로 적용됩니다.
-            </>
-          )}
-        </p>
+        {/* 필터가 걸려 있을 때만 알린다 — 부분 문서가 전체로 오해되면 안 된다 */}
+        {(extra.category || extra.member) && (
+          <p className="text-[13px] leading-relaxed text-neutral-500">
+            지금 걸어둔 필터가 그대로 적용됩니다.
+          </p>
+        )}
         {EXPENSE_PRINT_PARTS.map((p) => {
           const on = parts.includes(p.key);
           return (

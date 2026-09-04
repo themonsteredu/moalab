@@ -138,15 +138,11 @@ export function TopicMove({
       }
     >
       <div className="space-y-3">
-        <p className="text-[13px] leading-relaxed text-neutral-500">
-          옮길 프로그램을 체크하고, 아래에서 주제를 골라 <b>옮기기</b> 를 누르세요.
-          {topics.length === 0 && (
-            <>
-              <br />
-              <b className="text-red-600">먼저 주제 관리에서 주제를 하나 만들어주세요.</b>
-            </>
-          )}
-        </p>
+        {topics.length === 0 && (
+          <p className="text-[13px] font-bold leading-relaxed text-red-600">
+            먼저 주제 관리에서 주제를 하나 만들어주세요.
+          </p>
+        )}
 
         {groups.map((g) => {
           const ids = g.list.map((i) => i.app.id);

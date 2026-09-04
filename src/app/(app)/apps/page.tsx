@@ -510,9 +510,6 @@ export default function AppsPage() {
               <Icon name="doc" size={16} className="text-brand" />
               강의계획서 전체 인쇄
             </span>
-            <span className="mt-1 block text-[12px] leading-relaxed text-neutral-500">
-              강의계획서를 쓴 프로그램 전부를 한 장씩 이어서 뽑아요. 안 쓴 프로그램은 빠져요.
-            </span>
           </a>
 
           <a
@@ -525,9 +522,6 @@ export default function AppsPage() {
             <span className="flex items-center gap-2 text-[14.5px] font-bold text-neutral-900">
               <Icon name="checkCircle" size={16} className="text-green-600" />
               검증 현황 표 인쇄
-            </span>
-            <span className="mt-1 block text-[12px] leading-relaxed text-neutral-500">
-              검증 완료 / 미완료로 나눈 표예요. 미완료엔 상태(수정 필요·다시확인·진행 중)도 실려요.
             </span>
           </a>
 

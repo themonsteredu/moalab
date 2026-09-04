@@ -657,12 +657,9 @@ export default function MyWorkPage() {
               /* 문장 안에 링크를 그냥 두면 탭 면이 19px 이다. 패딩으로 키우고
                  마진으로 되돌려 **줄 높이는 그대로** 둔다 (일정 화면과 같은 처리) */
               <div className="flex items-center gap-2 px-1">
-                <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-neutral-400">
-                  남에게 나눠주는 것은 업무배분에서 해요.
-                </p>
                 <Link
                   href="/task"
-                  className="-my-3 flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
+                  className="-my-3 ml-auto flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
                 >
                   업무배분 ›
                 </Link>

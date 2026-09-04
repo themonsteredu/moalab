@@ -1089,10 +1089,6 @@ export default function RolesPage() {
           (프로그램 인쇄·지출결의서 인쇄와 같은 방식) */}
       <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="부서업무 인쇄">
         <div className="space-y-3">
-          <p className="text-[13px] leading-relaxed text-neutral-500">
-            넣을 것을 고르고 <b>인쇄 화면 열기</b> 를 누르세요. 새 창에서 열립니다.
-          </p>
-
           <ul className="overflow-hidden rounded-xl border border-neutral-200">
             {ROLE_PRINT_PARTS.map((part, i) => {
               const on = printParts.includes(part.key);
@@ -1126,8 +1122,7 @@ export default function RolesPage() {
           </ul>
 
           <p className="text-[11.5px] leading-relaxed text-neutral-400">
-            <b>사람별</b> 은 한 사람이 한 쪽입니다 — 뽑아서 그대로 건네라고 그렇게 했어요.
-            {totals.unassigned > 0 && ` 지금 담당자 미정이 ${totals.unassigned}건 있습니다.`}
+            {totals.unassigned > 0 && `담당자 미정이 ${totals.unassigned}건 있습니다.`}
           </p>
 
           <a

@@ -274,11 +274,6 @@ export function PlanForm({
           <p className="mt-1.5 text-[13.5px] font-semibold text-neutral-600">
             강의계획서를 아직 안 만들었어요
           </p>
-          <p className="mt-0.5 text-[11.5px] leading-relaxed text-neutral-400">
-            한글 양식 그대로 채우고 그대로 인쇄할 수 있어요.
-            <br />
-            도입·마무리는 늘 쓰는 문구가 미리 들어가 있어요.
-          </p>
           <button onClick={() => void start()} disabled={saving} className="btn-primary mt-3 px-4">
             <Icon name="plus" size={15} />
             {saving ? '만드는 중…' : '강의계획서 만들기'}

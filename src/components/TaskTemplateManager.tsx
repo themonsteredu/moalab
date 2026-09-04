@@ -196,10 +196,6 @@ export function TaskTemplateManager({
         {/* ---------------------------------------------- 템플릿 고르기 */}
         {!current ? (
           <div className="space-y-3">
-            <p className="text-[12.5px] leading-relaxed text-neutral-500">
-              매번 비슷하게 나눠주는 일을 한 벌로 묶어둡니다. 한 번 만들어두면
-              <b> 기준일만 정해서 통째로 배정</b>할 수 있어요.
-            </p>
 
             <div className="flex gap-2">
               <input
