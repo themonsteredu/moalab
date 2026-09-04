@@ -15,32 +15,6 @@ const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      /**
-       * 리니어(Linear) 를 참고해 **모서리를 얕게** 다시 잡았다.
-       * 여기서 한 번 줄이면 화면 292곳이 같이 따라온다 — 클래스는 안 고친다.
-       */
-      borderRadius: {
-        md: '5px',
-        lg: '6px',
-        xl: '8px',
-        '2xl': '10px',
-        '3xl': '14px',
-      },
-      /**
-       * **굵기도 한 단계씩 낮춰 잡았다.** 화면의 `font-black`(62곳)·`font-bold`(394곳)을
-       * 하나씩 고치지 않고 값만 내린다. 리니어는 굵기로 소리치지 않는다 —
-       * 위계는 굵기가 아니라 **밝기 차이**로 준다.
-       * 폰트는 400·600·700·900 네 벌만 받으므로 그 안에서만 고른다
-       * (굵기를 늘리면 한글 폰트가 굵기당 1.5MB 씩 더 내려온다).
-       */
-      fontWeight: {
-        normal: '400',
-        medium: '400',
-        semibold: '600',
-        bold: '600',
-        extrabold: '700',
-        black: '700',
-      },
       colors: {
         /** 본문은 밝게, 왼쪽 사이드바만 어둡게 */
         canvas: '#F5F7FA',   // 페이지 바탕
@@ -117,10 +91,10 @@ const config: Config = {
         },
       },
       animation: {
-        'slide-up': 'slide-up .14s cubic-bezier(.32,.72,0,1)',
-        'fade-up': 'fade-up .2s cubic-bezier(.32,.72,0,1) both',
+        'slide-up': 'slide-up .18s ease-out',
+        'fade-up': 'fade-up .35s cubic-bezier(.22,1,.36,1) both',
         shake: 'shake .4s ease-in-out',
-        pop: 'pop .12s cubic-bezier(.32,.72,0,1)',
+        pop: 'pop .16s cubic-bezier(.34,1.56,.64,1)',
         grow: 'grow .5s cubic-bezier(.22,1,.36,1) both',
       },
     },

@@ -83,11 +83,11 @@
     @apply min-h-[44px] inline-flex items-center justify-center;
   }
   .btn {
-    @apply tap gap-1.5 rounded-lg px-4 text-[15px] font-semibold transition-colors duration-100
-           disabled:opacity-40;
+    @apply tap gap-1.5 rounded-xl px-4 text-[15px] font-semibold transition active:scale-[.98]
+           disabled:opacity-40 disabled:active:scale-100;
   }
   .btn-primary {
-    @apply btn bg-brand text-white hover:bg-brand-600;
+    @apply btn bg-brand text-white shadow-[0_4px_10px_-6px_rgba(242,101,34,.35)] hover:bg-brand-600;
   }
   .btn-ghost {
     @apply btn border border-neutral-300 bg-surface text-neutral-700 hover:bg-neutral-50;
@@ -96,10 +96,10 @@
     @apply btn bg-red-600 text-white hover:bg-red-700;
   }
   .card {
-    @apply rounded-xl border border-neutral-200 bg-surface;
+    @apply rounded-2xl border border-neutral-200 bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04)];
   }
   .card-raised {
-    @apply rounded-xl border border-neutral-300 bg-surface;
+    @apply rounded-2xl border border-neutral-200 bg-surface shadow-[0_8px_24px_-16px_rgba(16,24,40,.35)];
   }
   .field {
     @apply w-full min-h-[44px] rounded-xl border border-neutral-300 bg-surface px-3 py-2 text-[15px]
