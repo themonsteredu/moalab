@@ -75,6 +75,7 @@ export const NAV: NavGroup[] = [
     items: [
       { href: '/apps', label: '프로그램계획', icon: 'doc' },
       { href: '/verify', label: '프로그램검증', icon: 'checkCircle' },
+      { href: '/proposal', label: '제안서', icon: 'present' },
     ],
   },
   {

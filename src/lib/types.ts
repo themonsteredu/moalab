@@ -827,3 +827,31 @@ export interface RoomSummary {
   lastAt: string | null;
   lastFrom: string | null;
 }
+
+/* ------------------------------------------------------------ 설정 · 회사 정보 */
+
+/**
+ * **우리 회사 정보** — 제안서·견적서 맨 끝에 찍히는 것.
+ * 코드에 박아넣지 않는다 (강의계획서 로고를 올리는 칸으로 둔 것과 같은 판단 —
+ * 대표·전화·주소는 바뀌고, 바뀔 때마다 배포할 일이 아니다).
+ * `moalab.settings` 의 `org` 줄에 jsonb 로 들어간다.
+ */
+export interface OrgProfile {
+  name: string;
+  ceo: string;
+  tel: string;
+  email: string;
+  address: string;
+  /** 사업자등록번호 — 견적서에 필요하다 */
+  bizNo: string;
+}
+
+export const EMPTY_ORG: OrgProfile = { name: '', ceo: '', tel: '', email: '', address: '', bizNo: '' };
+
+/** 설정 한 줄 — 열쇠 하나에 jsonb 하나 (`org` 처럼) */
+export interface SettingRow {
+  key: string;
+  value: Record<string, unknown>;
+  updated_by: string | null;
+  updated_at: string;
+}

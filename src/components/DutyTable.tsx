@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
+import Link from 'next/link';
+import { contactCol } from '@/lib/sales';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
 import { logActivity } from '@/lib/log';
@@ -613,6 +615,17 @@ export function DutyTable({
             <p className="text-[11.5px] text-neutral-400">
               마지막으로 {nameOf(editing.updated_by)} 님이 고쳤어요 · {relTime(editing.updated_at)}
             </p>
+          )}
+
+          {/* 기관 표(연락일 칸이 있는 표)에서는 이 줄로 바로 제안서를 만든다 —
+              이름·담당·연락처를 다시 치게 하면 안 만든다 */}
+          {editing && contactCol(cols ?? []) && (
+            <Link
+              href={`/proposal?duty=${dutyId}&row=${editing.id}`}
+              className="tap w-full gap-1.5 rounded-xl border border-brand-300 text-[13px] font-bold text-brand-700"
+            >
+              <Icon name="present" size={14} />이 기관에 제안서 만들기
+            </Link>
           )}
 
           {/* 지우는 것만은 확인을 거친다 — 되돌릴 수 없는 것은 그대로 명시적이다 */}
