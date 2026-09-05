@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { DRIVE_KEY, type DriveMeta } from '@/lib/drive';
 import { fileNameFor, pathFor, type DriveKind } from '@/lib/drivePath';
+import { actorFromToken, tokenOf } from '@/lib/chatServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,12 +32,11 @@ export async function POST(req: Request) {
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: '서버 설정이 아직 안 됐어요.' }, { status: 500 });
 
-  const actorId = req.headers.get('x-actor-id');
-  if (!actorId) return NextResponse.json({ error: '권한이 없어요.' }, { status: 403 });
-  const { data: me } = await admin.from('members').select('role,active').eq('id', actorId).maybeSingle();
-  if (!me || !me.active || me.role !== 'admin') {
+  const actor = await actorFromToken(admin, tokenOf(req));
+  if (!actor || actor.role !== 'admin') {
     return NextResponse.json({ error: '원장만 쓸 수 있어요.' }, { status: 403 });
   }
+  const actorId = actor.memberId;
 
   /* 연결이 안 돼 있으면 아무것도 안 한다 — 줄만 쌓여도 올라가지 않는다 */
   const { data: sec } = await admin.from('app_secrets').select('value, meta').eq('key', DRIVE_KEY).maybeSingle();
@@ -221,7 +221,7 @@ export async function POST(req: Request) {
   if (fresh.length > 0) {
     void fetch(`${new URL(req.url).origin}/api/drive/run`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-actor-id': actorId },
+      headers: { 'content-type': 'application/json', 'x-session-token': tokenOf(req) ?? '' },
     }).catch(() => null);
   }
 

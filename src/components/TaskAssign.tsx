@@ -183,10 +183,6 @@ export function TaskAssign({
       }
     >
       <div className="space-y-3">
-        <p className="text-[13px] leading-relaxed text-neutral-500">
-          넘길 업무를 체크하고, 아래에서 사람을 골라 <b>넘기기</b> 를 누르세요. 알림은{' '}
-          <b>사람당 한 통</b>만 갑니다.
-        </p>
 
         {groups.length === 0 ? (
           <p className="rounded-xl bg-neutral-50 px-3 py-4 text-center text-[13px] text-neutral-400">

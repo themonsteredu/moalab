@@ -111,7 +111,7 @@ export function DutyFiles({
       /* 구글 드라이브에도 한 벌 — 업무분장/{부서}/{중분류} 폴더로.
          파일 이름 앞에 **역할명**을 붙여 무엇을 하다 나온 자료인지 알아보게 한다
          (연결 안 돼 있으면 서버가 조용히 넘긴다) */
-      queueDrive(session?.id, { kind: 'dept', files: copied, deptName, groupName, prefix: dutyName });
+      queueDrive(session?.id, session?.token, { kind: 'dept', files: copied, deptName, groupName, prefix: dutyName });
       await load();
     }
   };

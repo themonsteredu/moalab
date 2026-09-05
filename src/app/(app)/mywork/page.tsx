@@ -429,12 +429,6 @@ export default function MyWorkPage() {
                       전체 ›
                     </Link>
                   </div>
-                  <p className="mb-2 text-[12px] leading-relaxed text-neutral-400">
-                    역할을 누르면 <b className="text-neutral-500">그 일을 하는 자리가 열려요</b> — 목록·자료·바로가기.
-                    올린 파일은
-                    구글 드라이브 <code className="text-neutral-500">업무분장/{d.dept.name}</code> 에도 들어갑니다.
-                  </p>
-
                   <div className="divide-y divide-neutral-100">
                     {d.groups.map((g) => (
                       <div key={g.group.id} className="py-2 first:pt-0 last:pb-0">
@@ -663,12 +657,9 @@ export default function MyWorkPage() {
               /* 문장 안에 링크를 그냥 두면 탭 면이 19px 이다. 패딩으로 키우고
                  마진으로 되돌려 **줄 높이는 그대로** 둔다 (일정 화면과 같은 처리) */
               <div className="flex items-center gap-2 px-1">
-                <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-neutral-400">
-                  남에게 나눠주는 것은 업무배분에서 해요.
-                </p>
                 <Link
                   href="/task"
-                  className="-my-3 flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
+                  className="-my-3 ml-auto flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
                 >
                   업무배분 ›
                 </Link>

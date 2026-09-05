@@ -11,6 +11,7 @@ interface Status {
   connected: boolean;
   hasKeys: boolean;
   email?: string | null;
+  rootId?: string | null;
   kinds?: DriveKind[] | null;
   pending: number;
   failed: number;
@@ -52,7 +53,11 @@ export function DriveCard() {
   const [backfilling, setBackfilling] = useState(false);
 
   const headers = useCallback(
-    () => ({ 'Content-Type': 'application/json', 'x-actor-id': session?.id ?? '' }),
+    () => ({
+      'Content-Type': 'application/json',
+      'x-actor-id': session?.id ?? '',
+      'x-session-token': session?.token ?? '',
+    }),
     [session],
   );
 
@@ -199,6 +204,9 @@ export function DriveCard() {
   }
 
   const on = status?.kinds ?? DRIVE_KINDS.map((d) => d.value);
+  const driveUrl = status.rootId
+    ? `https://drive.google.com/drive/folders/${encodeURIComponent(status.rootId)}`
+    : 'https://drive.google.com/drive/my-drive';
 
   /* 이미 연결돼 있으면 한 줄로 접는다 — 다 끝난 설정이 큰 카드로 자리를 먹으면 안 된다
      (PushToggle·AiKeyCard 와 같은 판단) */
@@ -209,6 +217,14 @@ export function DriveCard() {
         <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-neutral-600">
           구글 드라이브 연결됨{status.email ? ` · ${status.email}` : ''}
         </p>
+        <a
+          href={driveUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="tap -my-3 shrink-0 px-1 text-[12.5px] font-bold text-brand"
+        >
+          Drive 열기
+        </a>
         <button
           onClick={() => setEditing(true)}
           className="tap -my-3 shrink-0 px-1 text-[12.5px] font-bold text-neutral-400"
@@ -233,7 +249,9 @@ export function DriveCard() {
           </p>
         </div>
         {status?.connected && (
-          <span className="chip shrink-0 bg-green-100 text-green-800">연결됨</span>
+          <a href={driveUrl} target="_blank" rel="noopener noreferrer" className="chip shrink-0 bg-green-100 text-green-800">
+            Drive 열기
+          </a>
         )}
       </div>
 
@@ -288,14 +306,17 @@ export function DriveCard() {
 
       {/* 2단계 — 구글 계정 동의 */}
       {status?.hasKeys && (
-        <a
-          href={`/api/settings/drive/start?actor=${session.id}`}
-          className={`tap mb-3 w-full rounded-xl text-[14px] font-bold ${
-            status.connected ? 'btn-ghost' : 'btn-primary'
-          }`}
-        >
-          {status.connected ? '구글 계정 다시 연결' : '2. 구글 계정 연결하기'}
-        </a>
+        <form action="/api/settings/drive/start" method="post" className="mb-3">
+          <input type="hidden" name="sessionToken" value={session.token ?? ''} />
+          <button
+            type="submit"
+            className={`tap w-full rounded-xl text-[14px] font-bold ${
+              status.connected ? 'btn-ghost' : 'btn-primary'
+            }`}
+          >
+            {status.connected ? '구글 계정 다시 연결' : '2. 구글 계정 연결하기'}
+          </button>
+        </form>
       )}
 
       {/* 연결 전에 올린 것 한 번에 보내기 */}

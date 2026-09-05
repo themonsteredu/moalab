@@ -40,6 +40,7 @@ import {
 import type { Department, Duty, DutyGroup, DutyHelper } from '@/lib/types';
 
 type View = 'dept' | 'person' | 'me';
+type TreeDepth = 'departments' | 'groups' | 'duties';
 
 /**
  * 부서업무 — 부서 › 중분류 › 소분류, 그리고 그 역할을 누가 맡나.
@@ -57,14 +58,13 @@ type View = 'dept' | 'person' | 'me';
  *   · **지우기만 원장이다.** 부서를 지우면 그 안의 중분류·역할이 `cascade` 로
  *     통째로 사라진다 — 되돌릴 수 없는 것과 만드는 것은 갈래가 다르다
  *
- * **트리는 두 단계가 다 접힌다.** 부서만 접으면 부서 하나를 열었을 때
- * 소분류가 전부 쏟아져서(1499px) 세로 스크롤이 감당이 안 됐다.
+ * **부서별 트리는 접어 펼치지 않는다.** PC 는 부서·중분류·소분류를 세 칸에
+ * 나란히 두고, 폰은 폴더처럼 한 단계씩 들어간다. 항목이 늘어도 페이지 전체가
+ * 아래로 길어지지 않는다.
  */
 export default function RolesPage() {
   const { session, isAdmin } = useSession();
   const { members, nameOf } = useMembers();
-  /** 역할마다 줄·자료가 몇 개인지 — `내 업무` 와 같은 훅이다 (두 벌로 들지 않는다) */
-  const counts = useDutyCounts();
   const toast = useToast();
 
   const [depts, setDepts] = useState<Department[] | null>(null);
@@ -78,12 +78,22 @@ export default function RolesPage() {
      역할이 생긴 뒤로는 원래대로 `내 역할` 이다. */
   const [view, setView] = useState<View>(isAdmin ? 'dept' : 'me');
   const [viewPinned, setViewPinned] = useState(false);
+  /** 부서별 트리는 개수 합계를 펼쳐 보이지 않는다. 원장 첫 화면에서 모든 표의 줄·파일을
+      통째로 읽던 두 요청을 없애고, 사람별·내 부서에서만 필요할 때 읽는다. */
+  const counts = useDutyCounts(view !== 'dept');
   /** 인쇄 고르기 — 기본은 전부 넣는다 */
   const [printOpen, setPrintOpen] = useState(false);
   const [printParts, setPrintParts] = useState<RolePrintPart[]>(
     ROLE_PRINT_PARTS.map((p) => p.key),
   );
   const [q, setQ] = useState('');
+  /**
+   * 부서별 보기는 아코디언을 없애고 폴더 탐색기처럼 움직인다.
+   * PC 는 세 단계를 나란히, 폰은 한 단계씩 화면을 바꾼다.
+   */
+  const [selectedDeptId, setSelectedDeptId] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [treeDepth, setTreeDepth] = useState<TreeDepth>('departments');
 
   /** 역할 시트 */
   /* 부서·중분류 이름을 같이 들고 다닌다 — `DutyFiles` 가 드라이브 폴더
@@ -137,6 +147,38 @@ export default function RolesPage() {
 
   /** 트리에는 검색만 건다 */
   const shown = useMemo(() => filterOrg(tree, q), [tree, q]);
+
+  /** 검색으로 현재 선택이 사라지거나 첫 진입한 경우, 화면에 있는 첫 갈래를 고른다. */
+  const selectedDept = useMemo(
+    () => shown.find((d) => d.dept.id === selectedDeptId) ?? shown[0] ?? null,
+    [shown, selectedDeptId],
+  );
+  const selectedGroup = useMemo(
+    () =>
+      selectedDept?.groups.find((g) => g.group.id === selectedGroupId) ??
+      selectedDept?.groups[0] ??
+      null,
+    [selectedDept, selectedGroupId],
+  );
+
+  useEffect(() => {
+    if (!selectedDept) return;
+    if (selectedDept.dept.id !== selectedDeptId) setSelectedDeptId(selectedDept.dept.id);
+    if (selectedGroup && selectedGroup.group.id !== selectedGroupId) {
+      setSelectedGroupId(selectedGroup.group.id);
+    }
+  }, [selectedDept, selectedGroup, selectedDeptId, selectedGroupId]);
+
+  const chooseDept = (d: DeptNode, nextDepth: TreeDepth = 'groups') => {
+    setSelectedDeptId(d.dept.id);
+    setSelectedGroupId(d.groups[0]?.group.id ?? '');
+    setTreeDepth(nextDepth);
+  };
+
+  const chooseGroup = (g: GroupNode, nextDepth: TreeDepth = 'duties') => {
+    setSelectedGroupId(g.group.id);
+    setTreeDepth(nextDepth);
+  };
 
 
   /** 검색이 걸린 동안에는 트리를 강제로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다 */
@@ -587,128 +629,247 @@ export default function RolesPage() {
               />
               </div>
 
-            {shown.length === 0 ? (
+            {shown.length === 0 || !selectedDept ? (
               <EmptyState icon="search" title="찾는 역할이 없어요" desc="다른 말로 찾아보세요." />
             ) : (
-              /* PC 는 두 칸으로 흘린다 (grid 가 아니라 columns) —
-                 grid 로 깔면 펼친 부서 옆이 통째로 비어 화면이 덜 만든 것처럼 보인다 */
-              <div className="space-y-2.5 lg:columns-2 lg:gap-2.5 lg:space-y-0">
-                {shown.map((d) => (
-                  <section key={d.dept.id} className="card mb-2.5 break-inside-avoid p-3.5 lg:mb-2.5">
-                    <Collapsible
-                      id={`roles.dept.${d.dept.id}`}
-                      title={d.dept.name}
-                      /* 검색·미정 필터가 걸리면 저절로 펼친다 — 접힌 채로 0건처럼 보이면 안 된다.
-                         defaultOpen 으로는 안 된다 (첫 값만 잡는다) — Collapsible 의 forceOpen 참고 */
-                      forceOpen={forceOpen}
-                      badge={
-                        <span className="flex items-center gap-1">
-                          <span className="chip bg-neutral-100 text-neutral-500">역할 {d.total}</span>
-                          {d.unassigned > 0 && (
-                            <span className="chip bg-red-100 text-red-700">미정 {d.unassigned}</span>
-                          )}
-                        </span>
-                      }
-                      right={
+              <>
+                {/* PC: 세 단계가 같은 높이 안에서 옆으로 이동한다. 아래로 펼치지 않는다. */}
+                <div className="hidden overflow-hidden rounded-2xl border border-neutral-200 bg-surface shadow-sm lg:grid lg:grid-cols-[0.8fr_1fr_1.35fr]">
+                  <section className="flex min-h-[520px] flex-col border-r border-neutral-200">
+                    <div className="border-b border-neutral-100 px-4 py-3">
+                      <h2 className="text-[14px] font-bold">부서</h2>
+                    </div>
+                    <div className="max-h-[calc(100vh-250px)] flex-1 overflow-y-auto p-2">
+                      {shown.map((d) => (
                         <button
-                          onClick={() => {
-                            setDeptSheet(d.dept);
-                            setNameDraft(d.dept.name);
-                            setHeadDraft(d.dept.head_id ?? '');
-                            setSheetErr('');
-                          }}
-                          aria-label={`${d.dept.name} 고치기`}
-                          className="tap w-9 shrink-0 text-neutral-400"
+                          key={d.dept.id}
+                          onClick={() => chooseDept(d, 'groups')}
+                          className={`mb-1 flex min-h-[52px] w-full items-center gap-2 rounded-xl px-3 text-left transition ${
+                            selectedDept.dept.id === d.dept.id
+                              ? 'bg-brand-50 text-brand-800'
+                              : 'text-neutral-700 hover:bg-raised'
+                          }`}
                         >
-                          <Icon name="dots" size={16} />
+                          <Icon name="tree" size={16} className="shrink-0" />
+                          <span className="min-w-0 flex-1 truncate text-[13.5px] font-bold">{d.dept.name}</span>
+                          <span className="chip shrink-0 bg-neutral-100 text-neutral-500">{d.total}</span>
+                          <Icon name="chevronDown" size={12} className="-rotate-90 text-neutral-300" />
                         </button>
-                      }
-                    >
-                      {d.dept.head_id && (
-                        <p className="mb-2 flex items-center gap-1.5 text-[12px] text-neutral-500">
-                          <Avatar name={nameOf(d.dept.head_id)} size={18} />
-                          부서장 {nameOf(d.dept.head_id)}
-                        </p>
-                      )}
+                      ))}
+                    </div>
+                  </section>
 
-                      {d.groups.length === 0 ? (
-                        <p className="text-[12.5px] text-neutral-400">중분류가 아직 없어요.</p>
-                      ) : (
-                        /* 왼쪽 선으로 트리의 세로줄을 그린다 — 들여쓰기가 없으면
-                           중분류가 부서와 같은 층으로 읽힌다 (높이는 안 늘어난다) */
-                        <div className="space-y-1.5 border-l border-neutral-200 pl-2.5">
-                          {d.groups.map((g) => (
-                            <Collapsible
-                              key={g.group.id}
-                              id={`roles.group.${g.group.id}`}
-                              dense
-                              title={g.group.name}
-                              forceOpen={forceOpen}
-                              /* 중분류가 하나뿐이면 열어둔다 — 누를 게 없는 단계를 만들지 않는다 */
-                              defaultOpen={d.groups.length === 1}
-                              badge={
-                                <span className="flex shrink-0 items-center gap-1">
-                                  <span className="chip bg-neutral-100 text-neutral-500">{g.duties.length}</span>
-                                  {g.unassigned > 0 && (
-                                    <span className="chip bg-red-100 text-red-700">미정 {g.unassigned}</span>
-                                  )}
-                                </span>
-                              }
-                              right={
-                                <button
-                                  onClick={() => {
-                                    setGroupSheet({ group: g.group, deptId: d.dept.id, deptName: d.dept.name });
-                                    setNameDraft(g.group.name);
-                                    setSheetErr('');
-                                  }}
-                                  aria-label={`${g.group.name} 고치기`}
-                                  className="tap w-8 shrink-0 text-neutral-300"
-                                >
-                                  <Icon name="dots" size={14} />
-                                </button>
-                              }
-                            >
-                              <ul className="divide-y divide-neutral-100 border-t border-neutral-100">
-                                {g.duties.map((n) => dutyRow(n, d.dept.head_id))}
-                              </ul>
-                              {/* 역할 추가는 전원에게 — 자기가 맡을 일은 자기가 적는 게 빠르다 */}
-                              <button
-                                onClick={() =>
-                                  setEditing({
-                                    duty: null,
-                                    groupId: g.group.id,
-                                    label: `${d.dept.name} › ${g.group.name}`,
-                                    deptName: d.dept.name,
-                                    groupName: g.group.name,
-                                  })
-                                }
-                                className="-my-3 flex min-h-[44px] items-center gap-1 text-[12.5px] font-bold text-brand"
-                              >
-                                <Icon name="plus" size={13} />
-                                역할 추가
-                              </button>
-                            </Collapsible>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* 중분류 추가도 전원에게 — 일하는 사람이 칸을 쪼개는 게 빠르다 */}
+                  <section className="flex min-h-[520px] flex-col border-r border-neutral-200">
+                    <div className="flex items-center border-b border-neutral-100 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <h2 className="truncate text-[14px] font-bold">{selectedDept.dept.name}</h2>
+                      </div>
                       <button
                         onClick={() => {
-                          setGroupSheet({ group: null, deptId: d.dept.id, deptName: d.dept.name });
+                          setDeptSheet(selectedDept.dept);
+                          setNameDraft(selectedDept.dept.name);
+                          setHeadDraft(selectedDept.dept.head_id ?? '');
+                          setSheetErr('');
+                        }}
+                        aria-label={`${selectedDept.dept.name} 고치기`}
+                        className="tap w-9 shrink-0 text-neutral-400"
+                      >
+                        <Icon name="dots" size={16} />
+                      </button>
+                    </div>
+                    {selectedDept.dept.head_id && (
+                      <p className="flex items-center gap-1.5 border-b border-neutral-100 px-4 py-2 text-[12px] text-neutral-500">
+                        <Avatar name={nameOf(selectedDept.dept.head_id)} size={18} />
+                        부서장 {nameOf(selectedDept.dept.head_id)}
+                      </p>
+                    )}
+                    <div className="max-h-[calc(100vh-300px)] flex-1 overflow-y-auto p-2">
+                      {selectedDept.groups.length === 0 ? (
+                        <p className="p-3 text-[12.5px] text-neutral-400">중분류가 아직 없어요.</p>
+                      ) : (
+                        selectedDept.groups.map((g) => (
+                          <div key={g.group.id} className="mb-1 flex items-center gap-1">
+                            <button
+                              onClick={() => chooseGroup(g, 'duties')}
+                              className={`flex min-h-[52px] min-w-0 flex-1 items-center gap-2 rounded-xl px-3 text-left transition ${
+                                selectedGroup?.group.id === g.group.id
+                                  ? 'bg-brand-50 text-brand-800'
+                                  : 'text-neutral-700 hover:bg-raised'
+                              }`}
+                            >
+                              <Icon name="list" size={15} />
+                              <span className="min-w-0 flex-1 truncate text-[13.5px] font-bold">{g.group.name}</span>
+                              <span className="chip shrink-0 bg-neutral-100 text-neutral-500">{g.duties.length}</span>
+                              <Icon name="chevronDown" size={12} className="-rotate-90 text-neutral-300" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setGroupSheet({ group: g.group, deptId: selectedDept.dept.id, deptName: selectedDept.dept.name });
+                                setNameDraft(g.group.name);
+                                setSheetErr('');
+                              }}
+                              aria-label={`${g.group.name} 고치기`}
+                              className="tap w-8 shrink-0 text-neutral-300"
+                            >
+                              <Icon name="dots" size={14} />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setGroupSheet({ group: null, deptId: selectedDept.dept.id, deptName: selectedDept.dept.name });
+                        setNameDraft('');
+                        setSheetErr('');
+                      }}
+                      className="m-3 flex min-h-[44px] items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-bold text-neutral-500"
+                    >
+                      <Icon name="plus" size={13} />
+                      중분류 추가
+                    </button>
+                  </section>
+
+                  <section className="flex min-h-[520px] flex-col">
+                    <div className="border-b border-neutral-100 px-4 py-3">
+                      <h2 className="truncate text-[14px] font-bold">
+                        {selectedGroup?.group.name ?? '중분류를 선택하세요'}
+                      </h2>
+                    </div>
+                    <div className="max-h-[calc(100vh-250px)] flex-1 overflow-y-auto px-4 py-2">
+                      {!selectedGroup ? (
+                        <p className="py-3 text-[12.5px] text-neutral-400">왼쪽에서 중분류를 선택하세요.</p>
+                      ) : selectedGroup.duties.length === 0 ? (
+                        <p className="py-3 text-[12.5px] text-neutral-400">역할이 아직 없어요.</p>
+                      ) : (
+                        <ul className="divide-y divide-neutral-100">
+                          {selectedGroup.duties.map((n) => dutyRow(n, selectedDept.dept.head_id))}
+                        </ul>
+                      )}
+                    </div>
+                    {selectedGroup && (
+                      <button
+                        onClick={() =>
+                          setEditing({
+                            duty: null,
+                            groupId: selectedGroup.group.id,
+                            label: `${selectedDept.dept.name} › ${selectedGroup.group.name}`,
+                            deptName: selectedDept.dept.name,
+                            groupName: selectedGroup.group.name,
+                          })
+                        }
+                        className="m-3 flex min-h-[44px] items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-bold text-brand"
+                      >
+                        <Icon name="plus" size={13} />
+                        역할 추가
+                      </button>
+                    )}
+                  </section>
+                </div>
+
+                {/* 폰: 한 화면에는 한 단계만. 위에서 아래로 펼치지 않고 다음 화면으로 간다. */}
+                <section className="card overflow-hidden lg:hidden">
+                  <nav aria-label="현재 업무 위치" className="flex min-h-[44px] items-center gap-1 overflow-x-auto border-b border-neutral-100 px-3">
+                    <button onClick={() => setTreeDepth('departments')} className="shrink-0 text-[12px] font-bold text-brand">
+                      부서
+                    </button>
+                    {treeDepth !== 'departments' && (
+                      <>
+                        <Icon name="chevronDown" size={11} className="-rotate-90 text-neutral-300" />
+                        <button onClick={() => setTreeDepth('groups')} className="shrink-0 text-[12px] font-bold text-brand">
+                          {selectedDept.dept.name}
+                        </button>
+                      </>
+                    )}
+                    {treeDepth === 'duties' && selectedGroup && (
+                      <>
+                        <Icon name="chevronDown" size={11} className="-rotate-90 text-neutral-300" />
+                        <span className="shrink-0 text-[12px] font-bold text-neutral-600">{selectedGroup.group.name}</span>
+                      </>
+                    )}
+                  </nav>
+
+                  {treeDepth === 'departments' && (
+                    <div className="divide-y divide-neutral-100 px-3 py-1">
+                      {shown.map((d) => (
+                        <button key={d.dept.id} onClick={() => chooseDept(d)} className="flex min-h-[56px] w-full items-center gap-2 text-left">
+                          <span className="rounded-xl bg-brand-50 p-2 text-brand"><Icon name="tree" size={16} /></span>
+                          <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-neutral-800">{d.dept.name}</span>
+                          <span className="chip bg-neutral-100 text-neutral-500">역할 {d.total}</span>
+                          <Icon name="chevronDown" size={13} className="-rotate-90 text-neutral-300" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {treeDepth === 'groups' && (
+                    <div>
+                      <div className="flex items-center border-b border-neutral-100 px-3 py-2">
+                        <span className="min-w-0 flex-1 text-[13px] font-bold text-neutral-600">{selectedDept.dept.name}</span>
+                        <button
+                          onClick={() => {
+                            setDeptSheet(selectedDept.dept);
+                            setNameDraft(selectedDept.dept.name);
+                            setHeadDraft(selectedDept.dept.head_id ?? '');
+                            setSheetErr('');
+                          }}
+                          aria-label={`${selectedDept.dept.name} 고치기`}
+                          className="tap w-9 text-neutral-400"
+                        ><Icon name="dots" size={16} /></button>
+                      </div>
+                      <div className="divide-y divide-neutral-100 px-3 py-1">
+                        {selectedDept.groups.map((g) => (
+                          <div key={g.group.id} className="flex items-center gap-1">
+                            <button onClick={() => chooseGroup(g)} className="flex min-h-[56px] min-w-0 flex-1 items-center gap-2 text-left">
+                              <span className="rounded-xl bg-raised p-2 text-neutral-500"><Icon name="list" size={16} /></span>
+                              <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-neutral-800">{g.group.name}</span>
+                              <span className="chip bg-neutral-100 text-neutral-500">{g.duties.length}</span>
+                              <Icon name="chevronDown" size={13} className="-rotate-90 text-neutral-300" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setGroupSheet({ group: g.group, deptId: selectedDept.dept.id, deptName: selectedDept.dept.name });
+                                setNameDraft(g.group.name);
+                                setSheetErr('');
+                              }}
+                              aria-label={`${g.group.name} 고치기`}
+                              className="tap w-8 shrink-0 text-neutral-300"
+                            ><Icon name="dots" size={14} /></button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setGroupSheet({ group: null, deptId: selectedDept.dept.id, deptName: selectedDept.dept.name });
                           setNameDraft('');
                           setSheetErr('');
                         }}
-                        className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-bold text-neutral-500"
-                      >
-                        <Icon name="plus" size={13} />
-                        중분류 추가
-                      </button>
+                        className="m-3 flex min-h-[44px] items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-bold text-neutral-500"
+                      ><Icon name="plus" size={13} />중분류 추가</button>
+                    </div>
+                  )}
 
-                    </Collapsible>
-                  </section>
-                ))}
-              </div>
+                  {treeDepth === 'duties' && selectedGroup && (
+                    <div>
+                      <ul className="divide-y divide-neutral-100 px-3 py-1">
+                        {selectedGroup.duties.map((n) => dutyRow(n, selectedDept.dept.head_id))}
+                      </ul>
+                      <button
+                        onClick={() =>
+                          setEditing({
+                            duty: null,
+                            groupId: selectedGroup.group.id,
+                            label: `${selectedDept.dept.name} › ${selectedGroup.group.name}`,
+                            deptName: selectedDept.dept.name,
+                            groupName: selectedGroup.group.name,
+                          })
+                        }
+                        className="m-3 flex min-h-[44px] items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-bold text-brand"
+                      ><Icon name="plus" size={13} />역할 추가</button>
+                    </div>
+                  )}
+                </section>
+              </>
             )}
           </>
         )}
@@ -928,10 +1089,6 @@ export default function RolesPage() {
           (프로그램 인쇄·지출결의서 인쇄와 같은 방식) */}
       <Sheet open={printOpen} onClose={() => setPrintOpen(false)} title="부서업무 인쇄">
         <div className="space-y-3">
-          <p className="text-[13px] leading-relaxed text-neutral-500">
-            넣을 것을 고르고 <b>인쇄 화면 열기</b> 를 누르세요. 새 창에서 열립니다.
-          </p>
-
           <ul className="overflow-hidden rounded-xl border border-neutral-200">
             {ROLE_PRINT_PARTS.map((part, i) => {
               const on = printParts.includes(part.key);
@@ -965,8 +1122,7 @@ export default function RolesPage() {
           </ul>
 
           <p className="text-[11.5px] leading-relaxed text-neutral-400">
-            <b>사람별</b> 은 한 사람이 한 쪽입니다 — 뽑아서 그대로 건네라고 그렇게 했어요.
-            {totals.unassigned > 0 && ` 지금 담당자 미정이 ${totals.unassigned}건 있습니다.`}
+            {totals.unassigned > 0 && `담당자 미정이 ${totals.unassigned}건 있습니다.`}
           </p>
 
           <a

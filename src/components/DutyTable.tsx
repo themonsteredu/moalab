@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { supabase, friendlyError } from '@/lib/supabase';
-import Link from 'next/link';
 import { contactCol } from '@/lib/sales';
 import { useSession } from '@/lib/session';
 import { useMembers } from '@/lib/useMembers';
@@ -11,6 +11,7 @@ import { logActivity } from '@/lib/log';
 import { relTime } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { Collapsible, ConfirmDialog, EmptyState, ErrorBanner, Sheet, Skeleton } from '@/components/ui';
+import { parseDutyDocument } from '@/lib/dutyDocument';
 import {
   COLUMN_KINDS,
   PASTE_MAX,
@@ -93,6 +94,13 @@ export function DutyTable({
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteError, setPasteError] = useState('');
 
+  /** 목록으로 돌아가 `줄 추가`를 다시 누르지 않고 여러 건을 이어서 입력한다. */
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [entryValues, setEntryValues] = useState<Values>({});
+  const [entryBusy, setEntryBusy] = useState(false);
+  const [entryError, setEntryError] = useState('');
+  const [entryCount, setEntryCount] = useState(0);
+
   const [structOpen, setStructOpen] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [structBusy, setStructBusy] = useState(false);
@@ -152,21 +160,46 @@ export function DutyTable({
 
   /* ---------------------------------------------------------- 줄 */
 
-  const addRow = async () => {
-    setError('');
+  const openEntry = () => {
+    setEntryValues({});
+    setEntryError('');
+    setEntryCount(0);
+    setEntryOpen(true);
+  };
+
+  /** 한 건을 저장하고 닫거나, 입력칸만 비워 다음 건을 바로 받는다. */
+  const saveEntry = async (keepOpen: boolean) => {
+    const first = (cols ?? [])[0];
+    const title = first ? cleanCell(safeKind(first.kind), entryValues[first.id]) : null;
+    if (title === null || title === '' || title === false) {
+      setEntryError(`${first?.name ?? '첫 칸'}을 적어주세요.`);
+      return;
+    }
+    const cells = Object.fromEntries(
+      (cols ?? []).map((c) => [c.id, cleanCell(safeKind(c.kind), entryValues[c.id])]),
+    );
+    setEntryBusy(true);
+    setEntryError('');
     try {
       const { data, error: e } = await supabase
         .from('duty_rows')
-        .insert({ duty_id: dutyId, cells: {}, sort_order: nextOrder(rows), updated_by: session?.id ?? null })
+        .insert({ duty_id: dutyId, cells, sort_order: nextOrder(rows), updated_by: session?.id ?? null })
         .select()
         .single();
       if (e) throw e;
       const row = data as DutyRow;
       setRows((prev) => [...prev, row]);
-      freshRef.current = row.id;
-      openRow(row);
+      logActivity(session?.id, `역할 표 입력 — ${dutyName}`, `duty:${dutyId}`);
+      if (keepOpen) {
+        setEntryValues({});
+        setEntryCount((n) => n + 1);
+      } else {
+        setEntryOpen(false);
+      }
     } catch (e) {
-      setError(friendlyError(e, '줄을 추가하지 못했어요.'));
+      setEntryError(friendlyError(e, '내용을 저장하지 못했어요.'));
+    } finally {
+      setEntryBusy(false);
     }
   };
 
@@ -341,6 +374,7 @@ export function DutyTable({
     () => parsePasted(cols ?? [], rows, pasteText),
     [cols, rows, pasteText],
   );
+  const editingDocument = editing ? parseDutyDocument((editing.cells ?? {}).__document) : null;
 
   /** 머리글은 늘 같은 자리다 — 안이 무엇이든(불러오는 중·양식 고르기·목록) 접었다 폈다 한다 */
   const shell = (badge: React.ReactNode, body: React.ReactNode) => (
@@ -376,11 +410,7 @@ export function DutyTable({
       <span className="chip bg-neutral-100 text-neutral-400">아직 없음</span>,
       <div className="space-y-2.5">
         {error && <ErrorBanner message={error} onRetry={() => void load()} />}
-        <p className="text-[12.5px] leading-relaxed text-neutral-500">
-          이 일로 <b className="text-neutral-700">줄이 쌓이면</b> 표를 만들어두세요. 학교 명단·재고처럼
-          계속 고쳐가며 보는 것이요. 결과물이 파일 한 벌이면 아래 <b className="text-neutral-700">만든 자료</b>에
-          올리기만 해도 됩니다.
-        </p>
+        <p className="text-[12.5px] text-neutral-500">이 일에 사용할 양식을 선택하세요.</p>
         <div className="space-y-2">
           {PRESETS.map((p) => (
             <button
@@ -469,6 +499,50 @@ export function DutyTable({
     );
   };
 
+  /** 새 내용 입력은 저장 버튼을 누를 때 한 번에 넣는다. 기존 줄 수정만 자동저장이다. */
+  const entryField = (c: DutyColumn) => {
+    const kind = safeKind(c.kind);
+    const value = entryValues[c.id] ?? null;
+    if (kind === 'check') {
+      return (
+        <label className="tap -my-1.5 flex w-full items-center justify-between gap-2 py-1.5 text-left">
+          <span className="text-[13px] font-semibold text-neutral-700">{c.name}</span>
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(e) => setEntryValues((prev) => ({ ...prev, [c.id]: e.target.checked }))}
+            className="h-5 w-5 shrink-0 accent-[#F26522]"
+          />
+        </label>
+      );
+    }
+    return (
+      <div>
+        <label className="label" htmlFor={`new-${c.id}`}>{c.name}</label>
+        {kind === 'select' ? (
+          <select
+            id={`new-${c.id}`}
+            value={value === null ? '' : String(value)}
+            onChange={(e) => setEntryValues((prev) => ({ ...prev, [c.id]: e.target.value }))}
+            className="field"
+          >
+            <option value="">안 고름</option>
+            {(c.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : (
+          <input
+            id={`new-${c.id}`}
+            type={kind === 'date' ? 'date' : 'text'}
+            inputMode={kind === 'number' ? 'numeric' : undefined}
+            value={value === null ? '' : String(value)}
+            onChange={(e) => setEntryValues((prev) => ({ ...prev, [c.id]: e.target.value }))}
+            className="field"
+          />
+        )}
+      </div>
+    );
+  };
+
   return shell(
     <span className="chip bg-neutral-100 text-neutral-600">{rows.length}줄</span>,
     <div className="space-y-2.5">
@@ -531,7 +605,7 @@ export function DutyTable({
         <EmptyState
           icon="list"
           title={q ? '찾는 줄이 없어요' : '아직 비어 있어요'}
-          desc={q ? '다른 말로 찾아보세요.' : '아래 버튼으로 한 줄씩 채워보세요.'}
+          desc={q ? '다른 말로 찾아보세요.' : '새 내용을 입력하거나 목록을 한꺼번에 넣으세요.'}
         />
       ) : (
         <ul className="divide-y divide-neutral-100">
@@ -570,25 +644,51 @@ export function DutyTable({
         </ul>
       )}
 
-      {/* 한 줄씩 / 한꺼번에 — 둘을 한 줄에 나란히 둔다. 세로로 쌓으면 목록 아래가
-          44px 더 길어지는데, 하는 일이 같은 갈래라 나란히 놓는 게 읽기도 낫다 */}
+      {/* 직접 연속 입력 / 복사한 목록 한꺼번에 입력 */}
       <div className="flex gap-1.5">
         <button
-          onClick={() => void addRow()}
-          className="tap min-w-0 flex-1 gap-1.5 rounded-xl border border-dashed border-neutral-300 text-[13px] font-bold text-neutral-500"
+          onClick={openEntry}
+          className="btn-primary min-w-0 flex-1 gap-1.5 text-[13px]"
         >
-          <Icon name="plus" size={14} />줄 추가
+          <Icon name="plus" size={14} />새 내용 입력
         </button>
         <button
           onClick={() => {
             setPasteError('');
             setPasteOpen(true);
           }}
-          className="tap min-w-0 flex-1 gap-1.5 rounded-xl border border-dashed border-neutral-300 text-[13px] font-bold text-neutral-500"
+          className="btn-ghost min-w-0 flex-1 gap-1.5 text-[13px]"
         >
-          <Icon name="copy" size={14} />여러 줄 넣기
+          <Icon name="copy" size={14} />목록 한꺼번에
         </button>
       </div>
+
+      {/* ------------------------------------------------ 새 내용 연속 입력 */}
+      <Sheet
+        open={entryOpen}
+        onClose={() => setEntryOpen(false)}
+        title="새 내용 입력"
+        footer={
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => void saveEntry(false)} disabled={entryBusy} className="btn-ghost">
+              저장하고 닫기
+            </button>
+            <button onClick={() => void saveEntry(true)} disabled={entryBusy} className="btn-primary">
+              {entryBusy ? '저장 중…' : '저장 후 다음 건'}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {entryCount > 0 && (
+            <p className="rounded-xl bg-green-50 px-3 py-2 text-[12px] font-bold text-green-700">
+              {entryCount}건 저장됨 · 다음 내용을 이어서 입력하세요
+            </p>
+          )}
+          {(cols ?? []).map((c) => <div key={c.id}>{entryField(c)}</div>)}
+          {entryError && <ErrorBanner message={entryError} />}
+        </div>
+      </Sheet>
 
       {/* ------------------------------------------------ 줄 고치기 (자동저장) */}
       <Sheet
@@ -607,6 +707,25 @@ export function DutyTable({
         }
       >
         <div className="space-y-3">
+          {editing && editingDocument && (
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-brand-200 bg-brand-50 p-2.5">
+              <Link
+                href={`/roles/${dutyId}/document?rowId=${editing.id}`}
+                className="btn-primary min-w-0 gap-1.5 px-2 text-[12.5px]"
+              >
+                <Icon name="doc" size={14} />문서로 열기
+              </Link>
+              <a
+                href={`/print/duty-document/${dutyId}/${editing.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-ghost min-w-0 gap-1.5 px-2 text-[12.5px]"
+              >
+                <Icon name="printer" size={14} />문서 보기·PDF
+              </a>
+            </div>
+          )}
+
           {(cols ?? []).map((c) => (
             <div key={c.id}>{field(c)}</div>
           ))}
@@ -664,11 +783,7 @@ export function DutyTable({
         }
       >
         <div className="space-y-2.5">
-          <p className="text-[12.5px] leading-relaxed text-neutral-500">
-            엑셀·한글 표에서 <b className="text-neutral-700">복사해서 그대로 붙여넣으세요.</b>{' '}
-            <b className="text-neutral-700">한 줄이 한 개</b>가 됩니다. 표를 통째로 복사하면 칸까지
-            나뉘어 들어가고, 이름만 한 줄씩 붙여넣어도 됩니다.
-          </p>
+          <p className="text-[12.5px] text-neutral-500">엑셀·한글 표를 복사해 그대로 붙여넣으세요.</p>
 
           {(cols ?? []).length > 1 && (
             <p className="rounded-xl bg-neutral-50 px-3 py-2 text-[11.5px] leading-relaxed text-neutral-500">

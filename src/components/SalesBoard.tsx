@@ -91,19 +91,22 @@ export function SalesBoard({ inputs, today }: { inputs: SalesInput[]; today: str
           </div>
         )}
 
-        {/* 오늘 연락할 곳 — 오래 지난 것부터. 보류·완료는 안 뜬다 */}
-        <h3 className="mt-3 text-[13px] font-bold text-neutral-800">
-          오늘 연락할 곳
-          {board.due.length > 0 && <span className="ml-1.5 text-neutral-400">{board.due.length}</span>}
-        </h3>
-        {board.due.length === 0 ? (
-          <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-400">
-            {board.total === 0
-              ? '아직 기관이 없어요. 아래 갈래를 열어 “여러 줄 넣기” 로 붙여넣으세요.'
-              : '오늘 연락할 곳이 없어요. 기관 줄에 다음 연락일을 적어두면 그날 여기 모여요.'}
+        {/* 오늘 연락할 곳 — 오래 지난 것부터. 보류·완료는 안 뜬다.
+            **없으면 제목까지 통째로 안 그린다** — "없어요" 안내가 자리를 먹으면
+            정작 볼 것이 밀린다 (이 문서의 '빈 섹션은 아예 그리지 않는다' 규칙).
+            단 기관이 0곳일 때만은 남긴다 — 그건 시작하는 방법을 알려주는 말이다. */}
+        {board.total === 0 && (
+          <p className="mt-3 text-[12.5px] leading-relaxed text-neutral-400">
+            아직 기관이 없어요. 아래 갈래를 열어 “여러 줄 넣기” 로 붙여넣으세요.
           </p>
-        ) : (
-          <ul className="divide-y divide-neutral-100">
+        )}
+        {board.due.length > 0 && (
+          <>
+            <h3 className="mt-3 text-[13px] font-bold text-neutral-800">
+              오늘 연락할 곳
+              <span className="ml-1.5 text-neutral-400">{board.due.length}</span>
+            </h3>
+            <ul className="divide-y divide-neutral-100">
             {dueShown.map((d) => (
               <li key={d.rowId}>
                 <Link href={`/roles/${d.dutyId}?q=${encodeURIComponent(d.title)}`} className={rowLink}>
@@ -125,12 +128,13 @@ export function SalesBoard({ inputs, today }: { inputs: SalesInput[]; today: str
                 </Link>
               </li>
             ))}
-          </ul>
-        )}
-        {board.due.length > DUE_SHOWN && !showAll && (
-          <button onClick={() => setShowAll(true)} className="tap w-full text-[12.5px] font-bold text-brand">
-            {board.due.length - DUE_SHOWN}건 더 보기
-          </button>
+            </ul>
+            {board.due.length > DUE_SHOWN && !showAll && (
+              <button onClick={() => setShowAll(true)} className="tap w-full text-[12.5px] font-bold text-brand">
+                {board.due.length - DUE_SHOWN}건 더 보기
+              </button>
+            )}
+          </>
         )}
 
         {/* 갈래별 — 접어둔다. 바로 아래 `내 부서` 에 같은 이름이 또 있어서, 여기서는

@@ -254,6 +254,62 @@ export interface RevenueShareMemberSnapshot {
   name: string;
 }
 
+/* ------------------------------------------------------------- 정부지원사업 */
+
+export type GrantStatus =
+  | 'discovered'
+  | 'concept_shared'
+  | 'writing'
+  | 'submitted'
+  | 'selected'
+  | 'not_selected'
+  | 'paused';
+
+export interface GrantProject {
+  id: string;
+  title: string;
+  agency: string | null;
+  announcement_url: string | null;
+  deadline: string | null;
+  item_name: string | null;
+  target_audience: string | null;
+  concept_summary: string | null;
+  differentiation: string | null;
+  support_needed: string | null;
+  lead_id: string | null;
+  status: GrantStatus;
+  duplicate_checked: boolean;
+  concept_shared_at: string | null;
+  submitted_at: string | null;
+  result_note: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GrantCollaborator {
+  grant_id: string;
+  member_id: string;
+  created_at: string;
+}
+
+export type GrantFileKind = 'announcement' | 'final_plan';
+
+export interface GrantFile {
+  id: string;
+  grant_id: string;
+  kind: GrantFileKind;
+  file_path: string;
+  /** API가 짧게 발급한 비공개 열람 주소 */
+  signed_url?: string | null;
+  file_name: string;
+  file_size: number | null;
+  mime_type: string | null;
+  member_id: string | null;
+  created_at: string;
+}
+
 /** 프로젝트 한 개의 한 달 수익배분 계산 스냅샷. */
 export interface RevenueProjectMonth {
   id: string;

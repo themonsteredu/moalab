@@ -1024,6 +1024,75 @@ create or replace view moalab.members_public as
 
 grant select on moalab.members_public to anon, authenticated;
 
+-- ---------------------------------------------------------------------
+-- 정부지원사업 — 공고·기획안·협업자·최종 제출본을 한 사업 단위로 보관
+-- ---------------------------------------------------------------------
+create table if not exists moalab.grant_projects (
+  id                 uuid primary key default gen_random_uuid(),
+  title              text not null,
+  agency             text,
+  announcement_url   text,
+  deadline           date,
+  item_name          text,
+  target_audience    text,
+  concept_summary    text,
+  differentiation    text,
+  support_needed     text,
+  lead_id            uuid references moalab.members(id) on delete set null,
+  status             text not null default 'discovered'
+    check (status in ('discovered','concept_shared','writing','submitted','selected','not_selected','paused')),
+  duplicate_checked  boolean not null default false,
+  concept_shared_at  timestamptz,
+  submitted_at       date,
+  result_note        text,
+  created_by         uuid references moalab.members(id) on delete set null,
+  updated_by         uuid references moalab.members(id) on delete set null,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+create index if not exists grant_projects_status_idx on moalab.grant_projects(status, deadline, updated_at desc);
+create index if not exists grant_projects_lead_idx on moalab.grant_projects(lead_id);
+create index if not exists grant_projects_created_by_idx on moalab.grant_projects(created_by);
+create index if not exists grant_projects_updated_by_idx on moalab.grant_projects(updated_by);
+
+create table if not exists moalab.grant_collaborators (
+  grant_id uuid not null references moalab.grant_projects(id) on delete cascade,
+  member_id uuid not null references moalab.members(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (grant_id, member_id)
+);
+create index if not exists grant_collaborators_member_idx on moalab.grant_collaborators(member_id, grant_id);
+
+create table if not exists moalab.grant_files (
+  id uuid primary key default gen_random_uuid(),
+  grant_id uuid not null references moalab.grant_projects(id) on delete cascade,
+  kind text not null check (kind in ('announcement','final_plan')),
+  file_path text not null,
+  file_name text not null,
+  file_size bigint,
+  mime_type text,
+  member_id uuid references moalab.members(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists grant_files_grant_idx on moalab.grant_files(grant_id, kind, created_at desc);
+create index if not exists grant_files_member_idx on moalab.grant_files(member_id);
+
+-- 사업계획서는 비공개. 로그인 세션을 확인한 서버 API만 업로드·열람한다.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('moalab-grants', 'moalab-grants', false, 26214400)
+on conflict (id) do update set public = false, file_size_limit = 26214400;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['grant_projects','grant_collaborators','grant_files'] loop
+    execute format('alter table moalab.%I enable row level security', t);
+    execute format('drop policy if exists "internal_all" on moalab.%I', t);
+    execute format('revoke all on moalab.%I from anon, authenticated', t);
+    execute format('grant all on moalab.%I to service_role', t);
+  end loop;
+end $$;
+
 do $$
 declare t text;
 begin
@@ -1149,7 +1218,7 @@ alter table moalab.app_secrets add column if not exists meta jsonb;
 create table if not exists moalab.drive_uploads (
   id          uuid primary key default gen_random_uuid(),
   kind        text not null,          -- plan | receipt | photo | lecture
-  source_url  text not null,          -- 수파베이스 공개 URL (여기서 받아 드라이브로 넘긴다)
+  source_url  text not null,          -- 공개 첨부 URL 또는 서버 내부 duty-document 참조
   folder_path text not null,          -- '프로그램/미술/제과제빵' — 없으면 만들면서 내려간다
   file_name   text not null,
   mime_type   text,
@@ -1167,8 +1236,10 @@ create unique index if not exists drive_uploads_src_idx on moalab.drive_uploads(
 
 alter table moalab.drive_uploads enable row level security;
 drop policy if exists "internal_all" on moalab.drive_uploads;
-create policy "internal_all" on moalab.drive_uploads for all using (true) with check (true);
-grant all on moalab.drive_uploads to anon, authenticated, service_role;
+-- Drive 대기열은 원장 계정 OAuth로 외부 쓰기를 일으키므로 브라우저에서 직접 만지지 못한다.
+-- 모든 읽기·쓰기는 세션을 검증하는 서버 API의 service_role을 거친다.
+revoke all on moalab.drive_uploads from anon, authenticated;
+grant all on moalab.drive_uploads to service_role;
 
 -- ---------------------------------------------------------------------
 -- 24. 역할 자료함 — 그 역할로 만든 결과물을 역할에 붙인다

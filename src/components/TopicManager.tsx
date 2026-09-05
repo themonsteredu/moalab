@@ -138,11 +138,6 @@ export function TopicManager({
     <>
       <Sheet open={open} onClose={onClose} title="주제 관리">
         <div className="space-y-3">
-          <p className="text-[13px] leading-relaxed text-neutral-500">
-            여기서 만든 주제를 프로그램에서 골라 쓰면 돼요.
-            <br />
-            이름을 고치면 그 주제를 쓰는 프로그램 전부에 한 번에 반영돼요.
-          </p>
 
           {/* 새 주제 */}
           <div className="flex gap-2">

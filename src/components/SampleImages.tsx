@@ -118,9 +118,6 @@ export function SampleImages({ appId, appSlug }: { appId: string; appSlug: strin
           <span className="mt-1.5 text-[13px] font-semibold text-neutral-500">
             {uploading || '예시 작품 사진을 올려주세요'}
           </span>
-          <span className="mt-0.5 text-[11.5px] leading-relaxed text-neutral-400">
-            제안서·블로그에 바로 쓸 사진이에요
-          </span>
         </label>
       ) : (
         <>

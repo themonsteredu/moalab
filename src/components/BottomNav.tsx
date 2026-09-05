@@ -76,6 +76,7 @@ export const NAV: NavGroup[] = [
       { href: '/apps', label: '프로그램계획', icon: 'doc' },
       { href: '/verify', label: '프로그램검증', icon: 'checkCircle' },
       { href: '/proposal', label: '제안서', icon: 'present' },
+      { href: '/grants', label: '정부지원사업', icon: 'briefcase' },
     ],
   },
   {

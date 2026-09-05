@@ -39,7 +39,8 @@ export type IconName =
   | 'present'
   | 'dots'
   | 'tree'
-  | 'printer';
+  | 'printer'
+  | 'briefcase';
 
 const P: Record<IconName, React.ReactNode> = {
   check: <path d="m4.5 12.5 5 5 10-11" />,
@@ -190,6 +191,12 @@ const P: Record<IconName, React.ReactNode> = {
       <path d="M7 9V4h10v5" />
       <path d="M5 9h14a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 19 17h-2v3H7v-3H5a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 5 9z" />
       <path d="M7 13.5h10" />
+    </>
+  ),
+  briefcase: (
+    <>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M8.5 7V5.5A1.5 1.5 0 0 1 10 4h4a1.5 1.5 0 0 1 1.5 1.5V7M3 12h18M10 12v2h4v-2" />
     </>
   ),
 };

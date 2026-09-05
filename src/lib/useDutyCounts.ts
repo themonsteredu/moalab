@@ -22,7 +22,7 @@ export interface DutyCounts {
   files: Record<string, number>;
 }
 
-export function useDutyCounts(): DutyCounts & { reload: () => Promise<void> } {
+export function useDutyCounts(enabled = true): DutyCounts & { reload: () => Promise<void> } {
   const [rows, setRows] = useState<Record<string, number>>({});
   const [files, setFiles] = useState<Record<string, number>>({});
 
@@ -36,11 +36,12 @@ export function useDutyCounts(): DutyCounts & { reload: () => Promise<void> } {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     void reload().catch(() => {
       setRows({});
       setFiles({});
     });
-  }, [reload]);
+  }, [enabled, reload]);
 
   return { rows, files, reload };
 }
