@@ -199,6 +199,46 @@ ok('제안서: 사진 0장·회사 정보 없음이어도 만들어진다', pBar
 ok('제안서: 사진 0장이면 binDataList 가 비어 있다', pBare['Contents/header.xml'].includes('<hh:binDataList itemCnt="0"'));
 ok('제안서: 그림이 없으면 pic 을 안 그린다', !pBare['Contents/section0.xml'].includes('<hp:pic '));
 
+
+// ══════════════════════════════════════════════════════════ 견적서
+// 같은 입력에서 갈래만 다르다 — 사진 없이 한 장. 표에 공급가액·부가세·합계 줄이 더 붙는다.
+const qInput = {
+  ...pInput, kind: 'quote', quoteNo: 'Q-20260904', validDays: 30, vat: 'separate',
+  terms: '· 조건 첫 줄\n· 조건 둘째 줄',
+  items: [{ ...pInput.items[0], samples: [] }, { ...pInput.items[1], unitPrice: 10000 }],
+};
+const qf = H.buildDocumentHwpxFiles(qInput, pOrg, []);
+const qsec = qf['Contents/section0.xml'];
+const qhead = qf['Contents/header.xml'];
+ok('견적서: mimetype 은 application/hwp+zip', qf.mimetype === 'application/hwp+zip');
+for (const [name, xml] of Object.entries(qf)) {
+  if (typeof xml !== 'string' || !xml.startsWith('<?xml')) continue;
+  const open = (xml.match(/<[a-zA-Z][^>]*?(?<!\/)>/g) || []).length;
+  const close = (xml.match(/<\/[^>]+>/g) || []).length;
+  ok(`견적서: ${name} 태그 짝이 맞는다`, open === close);
+}
+ok('견적서: 속성에 접두어를 안 붙였다', !/\s(hp|hh|hc):[a-zA-Z]+=/.test(qsec + qhead));
+ok('견적서: 첫 문단에 용지 설정(secPr)', qsec.indexOf('<hp:secPr') > 0 && qsec.indexOf('<hp:secPr') < qsec.indexOf('<hp:tbl'));
+ok('견적서: 표는 머리 + 프로그램 2 + 공급가액·부가세·합계 = 6줄 6칸', qsec.includes('rowCnt="6" colCnt="6"'));
+ok('견적서: 5칸 병합 줄이 셋(공급가액·부가세·합계)', (qsec.match(/colSpan="5" rowSpan="1"/g) || []).length === 3);
+ok('견적서: 모든 칸에 주소·병합·크기가 있다', (() => {
+  const tc = (qsec.match(/<hp:tc /g) || []).length;
+  return ['cellAddr', 'cellSpan', 'cellSz', 'cellMargin'].every(
+    (t) => (qsec.match(new RegExp(`<hp:${t} `, 'g')) || []).length === tc,
+  );
+})());
+// 600,000(15,000×20×2) + 250,000(10,000×25×1) = 850,000 · 부가세 85,000 · 합계 935,000
+ok('견적서: 공급가액 850,000 · 부가세 85,000 · 합계 935,000', qsec.includes('850,000원') && qsec.includes('85,000원') && qsec.includes('935,000원'));
+ok('견적서: 한글 금액', qsec.includes('일금 구십삼만오천원정'));
+ok('견적서: 수신이 이스케이프되어 들어간다', qsec.includes('광주 &lt;테스트&gt; 중학교 귀하'));
+ok('견적서: 견적번호·유효기간', qsec.includes('Q-20260904') && qsec.includes('2026-10-04 까지'));
+ok('견적서: 공급자 줄', qsec.includes('상호 모아킷') && qsec.includes('대표 강양희'));
+ok('견적서: 조건이 문단으로 나뉜다', qsec.includes('조건 첫 줄') && qsec.includes('조건 둘째 줄'));
+ok('견적서: 그림이 없다', !qsec.includes('<hp:pic ') && qhead.includes('<hh:binDataList itemCnt="0"'));
+ok('견적서: (인) 자리가 있다', qsec.includes('(인)'));
+ok('견적서: 면세면 부가세 (면세) 0원', H.buildQuoteHwpxFiles({ ...qInput, vat: 'exempt' }, pOrg)['Contents/section0.xml'].includes('부가세 (면세)'));
+ok('갈래가 제안서면 제안서 부품이 나온다', H.buildDocumentHwpxFiles(pInput, pOrg, pPics)['Contents/section0.xml'].includes('프로그램 제안서'));
+
 rmSync(out, { recursive: true, force: true });
 console.log(`${pass}건 통과${fails.length ? `, ${fails.length}건 실패` : ''}`);
 if (fails.length) { for (const f of fails) console.error('  ✗', f); process.exit(1); }

@@ -2,7 +2,18 @@
 
 import { useLayoutEffect, useRef } from 'react';
 import type { OrgProfile } from '@/lib/types';
-import { grandTotal, hasUnpriced, lineTotal, orgLine, priceText, type ProposalInput } from '@/lib/proposal';
+import {
+  grandTotal,
+  hasUnpriced,
+  lineTotal,
+  moneyInKoreanLine,
+  orgLine,
+  priceText,
+  validUntil,
+  vatLabel,
+  vatSplit,
+  type ProposalInput,
+} from '@/lib/proposal';
 
 /* ------------------------------------------------------------ 제안서 A4
    강의계획서(PlanSheet)와 같은 방식이다 — 장 전체를 인쇄 영역 크기(186×268mm)로
@@ -204,4 +215,131 @@ export function ProposalSheet({ input, org }: { input: ProposalInput; org: OrgPr
       ))}
     </div>
   );
+}
+
+/* ------------------------------------------------------------ 견적서 A4
+   **한 장이다.** 제안서와 같은 입력에서 나오지만 쓰임이 다르다 — 제안서는 읽히는 문서,
+   견적서는 결재에 붙는 문서다. 그래서 소개·사진은 빼고 수신·공급자·합계(한글 금액)·품목 표·
+   부가세·비고·(인) 자리만 싣는다. 흔한 견적서 양식 그대로라 받는 쪽이 낯설지 않다. */
+
+export function QuoteSheet({ input, org }: { input: ProposalInput; org: OrgProfile }) {
+  const split = vatSplit(input.items, input.vat);
+  const th = 'border px-2 py-1.5 text-center text-[10.5px] font-bold';
+  const td = 'border px-2 py-1.5 text-[10.5px]';
+  const until = validUntil(input.date, input.validDays);
+
+  return (
+    <A4Page first>
+      <div className="flex h-full flex-col pb-8">
+        <div className="mb-4 flex items-end justify-between border-b-2 border-black pb-2">
+          <span className="text-[11px] font-bold text-neutral-600">{org.name || ' '}</span>
+          <span className="text-[11px] text-neutral-500">견적번호 {input.quoteNo}</span>
+        </div>
+        <h1 className="mb-5 text-center text-[26px] font-black tracking-[0.5em]">견적서</h1>
+
+        <div className="mb-4 grid grid-cols-2 gap-3 text-[11px] leading-relaxed">
+          <div className="rounded-lg border px-3 py-2" style={{ borderColor: LINE }}>
+            <div>
+              <span className="font-bold">수신</span>&nbsp;&nbsp;{input.org} 귀하
+            </div>
+            {input.contact && <div>담당&nbsp;&nbsp;{input.contact}</div>}
+            {input.tel && <div>연락처&nbsp;&nbsp;{input.tel}</div>}
+            <div>견적일&nbsp;&nbsp;{input.date}</div>
+            <div>
+              유효기간&nbsp;&nbsp;{until ? `${until} 까지` : ''} (견적일로부터 {input.validDays}일)
+            </div>
+          </div>
+          <div className="rounded-lg border px-3 py-2" style={{ borderColor: LINE, background: '#f5f7fc' }}>
+            <div className="mb-0.5 font-bold text-neutral-600">공급자</div>
+            {org.name && (
+              <div>
+                상호&nbsp;&nbsp;{org.name}
+                {org.ceo && <span className="ml-2">대표 {org.ceo}</span>}
+              </div>
+            )}
+            {org.bizNo && <div>사업자등록번호&nbsp;&nbsp;{org.bizNo}</div>}
+            {org.address && <div>주소&nbsp;&nbsp;{org.address}</div>}
+            {org.tel && <div>전화&nbsp;&nbsp;{org.tel}</div>}
+            {org.email && <div>이메일&nbsp;&nbsp;{org.email}</div>}
+          </div>
+        </div>
+
+        <p className="mb-1 text-[11.5px]">아래와 같이 견적합니다.</p>
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 rounded-lg border px-4 py-2" style={{ borderColor: LINE }}>
+          <span className="text-[12px] font-bold">합계 금액 ({vatLabel(input.vat)})</span>
+          <span className="text-[14px] font-black">
+            {moneyInKoreanLine(split.total)}
+            <span className="ml-2 text-[11.5px] font-semibold text-neutral-600">(₩{split.total.toLocaleString('ko-KR')})</span>
+          </span>
+        </div>
+
+        <table className="w-full table-fixed border-collapse" style={{ borderColor: LINE }}>
+          <colgroup>
+            <col style={{ width: '7%' }} />
+            <col />
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '18%' }} />
+          </colgroup>
+          <thead>
+            <tr style={{ background: FILL }}>
+              {['No.', '품목', '규격', '수량', '단가', '금액'].map((t) => (
+                <th key={t} className={th} style={{ borderColor: LINE }}>{t}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {input.items.map((it, i) => (
+              <tr key={it.appId}>
+                <td className={`${td} text-center`} style={{ borderColor: LINE }}>{i + 1}</td>
+                <td className={`${td} font-semibold`} style={{ borderColor: LINE }}>{it.title}</td>
+                <td className={`${td} text-center`} style={{ borderColor: LINE }}>
+                  {[it.grade, `${it.sessions}차시`].filter(Boolean).join(' · ')}
+                </td>
+                <td className={`${td} text-center`} style={{ borderColor: LINE }}>{it.headcount}명</td>
+                <td className={`${td} text-right`} style={{ borderColor: LINE }}>{priceText(it.unitPrice)}</td>
+                <td className={`${td} text-right`} style={{ borderColor: LINE }}>{priceText(lineTotal(it))}</td>
+              </tr>
+            ))}
+            {[
+              ['공급가액', split.supply],
+              [input.vat === 'exempt' ? '부가세 (면세)' : '부가세', split.vat],
+              ['합계', split.total],
+            ].map(([label, n], k) => (
+              <tr key={String(label)} style={k === 2 ? { background: FILL } : undefined}>
+                <td colSpan={5} className={`${td} text-right ${k === 2 ? 'font-bold' : ''}`} style={{ borderColor: LINE }}>{label}</td>
+                <td className={`${td} text-right ${k === 2 ? 'font-bold' : ''}`} style={{ borderColor: LINE }}>
+                  {Number(n).toLocaleString('ko-KR')}원
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-1 text-[9.5px] text-neutral-500">금액 = 단가(1인당) × 수량(인원) × 차시.</p>
+
+        {input.terms.trim() && (
+          <section className="mt-5">
+            <h3 className="mb-1 text-[11.5px] font-bold text-neutral-600">비고</h3>
+            <p className="whitespace-pre-wrap text-[11.5px] leading-relaxed">{input.terms}</p>
+          </section>
+        )}
+
+        <div className="mt-auto flex items-end justify-between text-[11.5px]">
+          <span>{input.date}</span>
+          <span>
+            {org.name}
+            {org.ceo && ` 대표 ${org.ceo}`}
+            <span className="ml-3 inline-block w-12 border-b border-black">&nbsp;</span> (인)
+          </span>
+        </div>
+      </div>
+      <Footer org={org} page={1} total={1} />
+    </A4Page>
+  );
+}
+
+/** 갈래에 맞는 장을 그린다 — 인쇄 화면이 쓴다 */
+export function DocumentSheet({ input, org }: { input: ProposalInput; org: OrgProfile }) {
+  return input.kind === 'quote' ? <QuoteSheet input={input} org={org} /> : <ProposalSheet input={input} org={org} />;
 }

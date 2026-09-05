@@ -88,6 +88,60 @@ console.log('\n[기본 문구·회사·파일 이름]');
   eq('파일 이름', P.proposalFileName({ ...P.emptyProposal('2026-09-02'), org: '광주/중학교' }), '제안서_광주_중학교_2026-09-02');
 }
 
+
+// ── 견적서 — 한글 금액 · 부가세 · 유효기간
+{
+  eq('한글 금액 — 0', P.moneyInKorean(0), '영');
+  eq('한글 금액 — 10 은 일십 (엑셀 NUMBERSTRING 과 같은 꼴)', P.moneyInKorean(10), '일십');
+  eq('한글 금액 — 15000', P.moneyInKorean(15000), '일만오천');
+  eq('한글 금액 — 600000', P.moneyInKorean(600000), '육십만');
+  eq('한글 금액 — 1234567', P.moneyInKorean(1234567), '일백이십삼만사천오백육십칠');
+  eq('한글 금액 — 1억', P.moneyInKorean(100000000), '일억');
+  eq('한글 금액 — 1조 5억 (빈 묶음은 건너뛴다)', P.moneyInKorean(1000500000000), '일조오억');
+  eq('한글 금액 — 20050', P.moneyInKorean(20050), '이만오십');
+  eq('한글 금액 줄', P.moneyInKoreanLine(600000), '일금 육십만원정');
+  const items = [{ appId: 'a', title: '', purpose: '', goal: '', grade: '', sessions: 2, headcount: 20, unitPrice: 15000, samples: [] }];
+  eq('부가세 별도', P.vatSplit(items, 'separate'), { supply: 600000, vat: 60000, total: 660000 });
+  eq('부가세 포함 — 합계는 그대로, 공급가액은 역산', P.vatSplit(items, 'included'), { supply: 545455, vat: 54545, total: 600000 });
+  eq('면세', P.vatSplit(items, 'exempt'), { supply: 600000, vat: 0, total: 600000 });
+  const inc = P.vatSplit([{ ...items[0], sessions: 1, headcount: 7 }], 'included');
+  eq('포함 — 공급가액 + 부가세 = 합계 (1원도 안 어긋난다)', [inc.supply + inc.vat, inc.total], [105000, 105000]);
+  eq('유효기간 — 월을 넘긴다', P.validUntil('2026-09-05', 30), '2026-10-05');
+  eq('유효기간 — 연을 넘긴다', P.validUntil('2026-12-20', 15), '2027-01-04');
+  eq('유효기간 — 날짜가 아니면 빈 값', P.validUntil('언젠가', 30), '');
+  eq('견적 번호 기본값', P.defaultQuoteNo('2026-09-05'), 'Q-20260905');
+}
+
+// ── 초안 맞추기 — 견적 칸이 생기기 전 초안도 그대로 읽힌다
+{
+  const today = '2026-09-05';
+  const old = { org: '광주중학교', contact: '', tel: '', date: '2026-09-01', greeting: 'g', closing: 'c',
+    items: [{ appId: 'a1', title: 'T', purpose: '', goal: '', grade: '', sessions: '3', headcount: 20, unitPrice: '15000', samples: ['u'] }] };
+  const n = P.normalizeInput(old, today);
+  eq('옛 초안 — 갈래·견적 칸이 채워진다', [n.kind, n.quoteNo, n.validDays, n.vat, n.terms === P.DEFAULT_TERMS], ['proposal', 'Q-20260905', 30, 'separate', true]);
+  eq('옛 초안 — 문자열 숫자를 숫자로', [n.items[0].sessions, n.items[0].unitPrice], [3, 15000]);
+  eq('옛 초안 — 적어둔 값은 그대로', [n.org, n.date, n.greeting], ['광주중학교', '2026-09-01', 'g']);
+  eq('깨진 초안은 빈 문서', P.normalizeInput('junk', today).items, []);
+  const x = P.normalizeInput({ kind: 'memo', vat: 'half', validDays: -3, items: [] }, today);
+  eq('없는 갈래·부가세·음수 기간은 기본값으로', [x.kind, x.vat, x.validDays], ['proposal', 'separate', 30]);
+  eq('견적서 갈래는 살아남는다', P.normalizeInput({ kind: 'quote', vat: 'exempt', validDays: 14, quoteNo: 'Q-1', items: [] }, today).kind, 'quote');
+  eq('appId 없는 줄은 버린다', P.normalizeInput({ items: [{ title: 'x' }, { appId: 'a', title: 'y' }] }, today).items.length, 1);
+}
+
+// ── 견적서는 제안서보다 엄하다
+{
+  const base = { ...P.emptyProposal('2026-09-05'), org: '광주중학교', items: [
+    { appId: 'a', title: 'A', purpose: '', goal: '', grade: '', sessions: 1, headcount: 20, unitPrice: 0, samples: [] },
+  ] };
+  eq('제안서는 가격이 없어도 나간다', P.docProblems(base), []);
+  eq('견적서는 가격 없는 줄이 있으면 막는다', P.docProblems({ ...base, kind: 'quote' }).length, 1);
+  const priced = [{ ...base.items[0], unitPrice: 10000 }];
+  eq('견적서 — 가격이 다 있으면 나간다', P.docProblems({ ...base, kind: 'quote', items: priced }), []);
+  eq('견적서 — 번호가 비면 막는다', P.docProblems({ ...base, kind: 'quote', quoteNo: ' ', items: priced }).length, 1);
+  eq('파일 이름 — 견적서', P.proposalFileName({ ...base, kind: 'quote' }), '견적서_광주중학교_2026-09-05');
+  eq('갈래 이름', [P.docLabel('proposal'), P.docLabel('quote')], ['제안서', '견적서']);
+}
+
 rmSync(out, { recursive: true, force: true });
 console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`);
 process.exit(fail === 0 ? 0 : 1);

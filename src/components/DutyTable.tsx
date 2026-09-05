@@ -743,7 +743,7 @@ export function DutyTable({
               href={`/proposal?duty=${dutyId}&row=${editing.id}`}
               className="tap w-full gap-1.5 rounded-xl border border-brand-300 text-[13px] font-bold text-brand-700"
             >
-              <Icon name="present" size={14} />이 기관에 제안서 만들기
+              <Icon name="present" size={14} />이 기관에 제안서·견적서 만들기
             </Link>
           )}
 

@@ -26,16 +26,24 @@ import {
   MAX_ITEMS,
   MAX_SAMPLES,
   DEFAULT_CLOSING,
+  DEFAULT_TERMS,
+  DOC_KINDS,
+  VAT_MODES,
   defaultGreeting,
+  docLabel,
+  docProblems,
   emptyProposal,
   grandTotal,
   hasUnpriced,
   itemFromApp,
   lineTotal,
+  normalizeInput,
   orgReady,
   priceText,
-  proposalProblems,
   toNumber,
+  validUntil,
+  vatLabel,
+  vatSplit,
   type ProposalInput,
   type ProposalItem,
 } from '@/lib/proposal';
@@ -69,10 +77,9 @@ interface RowCtx {
   dutyId: string;
   row: DutyRow;
   cols: DutyColumn[];
-  /** 첫 고르기 칸 — 상태 칩이 되는 그 칸 (statusCounts 와 같은 규칙) */
+  /** 첫 고르기 칸 — 상태 칩이 되는 그 칸 (statusCounts 와 같은 규칙).
+   *  그 칸의 보기 중 문서 갈래에 맞는 것('제안'·'견적' 이 든 것)으로 표시한다 — 없으면 버튼을 안 그린다 */
   statusCol: DutyColumn | null;
-  /** 그 칸의 보기 중 '제안' 이 든 것 — 없으면 '보냄으로 표시' 버튼을 안 그린다 */
-  sentLabel: string | null;
 }
 
 interface Draft {
@@ -117,7 +124,7 @@ export default function ProposalPage() {
     <Suspense
       fallback={
         <div>
-          <PageHeader title="제안서" />
+          <PageHeader title="제안서·견적서" />
           <div className="px-4 py-4">
             <CardSkeleton rows={4} />
           </div>
@@ -152,7 +159,8 @@ function ProposalInner() {
   const [busy, setBusy] = useState<'' | 'hwp' | 'org' | 'mark'>('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickQ, setPickQ] = useState('');
-  const [marked, setMarked] = useState(false);
+  /** 기관 표에 표시한 상태 이름 — 갈래를 바꾸면 다른 표시를 또 할 수 있다 */
+  const [marked, setMarked] = useState('');
   const draftRowRef = useRef<string | null>(null);
 
   /* ------------------------------------------------------------- 불러오기 */
@@ -205,7 +213,8 @@ function ProposalInner() {
     let alive = true;
     (async () => {
       const draft = readDraft();
-      let next: ProposalInput = draft?.input ?? emptyProposal(today());
+      // 옛 초안(견적 칸이 생기기 전)도 지금 모양으로 맞춰 읽는다
+      let next: ProposalInput = normalizeInput(draft?.input, today());
       // 마지막으로 채워준 기관 줄 — **초안에 적힌 값**으로 판단한다. ref 로 판단하면
       // 개발 모드(StrictMode)처럼 이 효과가 두 번 돌 때 첫 번째가 ref 를 먼저 채워
       // 두 번째가 "이미 채웠다" 고 건너뛴다 (실제로 그렇게 짰다가 점검에서 잡혔다)
@@ -222,8 +231,7 @@ function ProposalInner() {
           const row = rowRes.data as DutyRow | null;
           if (row && cols.length > 0) {
             const statusCol = cols.find((c) => safeKind(c.kind) === 'select') ?? null;
-            const sentLabel = statusCol?.options?.find((o) => o.includes('제안')) ?? null;
-            ctx = { dutyId: dutyParam, row, cols, statusCol, sentLabel };
+            ctx = { dutyId: dutyParam, row, cols, statusCol };
 
             // 같은 줄로 다시 들어온 게 아니면 받는 곳을 그 줄로 채운다.
             // 인사말은 손대지 않은 것(기본 문구 그대로)일 때만 새 기관 이름으로 다시 만든다
@@ -329,7 +337,10 @@ function ProposalInner() {
   };
 
   /* ----------------------------------------------------------- 내보내기 */
-  const problems = input ? proposalProblems(input) : [];
+  const problems = input ? docProblems(input) : [];
+  /** 기관 표에서 바꿀 상태 — 제안서면 '제안' 이 든 보기, 견적서면 '견적' 이 든 보기 */
+  const sentLabel =
+    rowCtx?.statusCol?.options?.find((o) => o.includes(input?.kind === 'quote' ? '견적' : '제안')) ?? null;
 
   const openPrint = () => {
     if (!input || !session) return;
@@ -343,7 +354,7 @@ function ProposalInner() {
       toast.show('이 브라우저는 저장소를 막아서 인쇄 화면을 열 수 없어요.');
       return;
     }
-    logActivity(session.id, '제안서 인쇄', input.org);
+    logActivity(session.id, `${docLabel(input.kind)} 인쇄`, input.org);
     window.open('/print/proposal', '_blank');
   };
 
@@ -357,7 +368,7 @@ function ProposalInner() {
     try {
       const r = await downloadProposalHwpx(input, org);
       toast.show(r.skipped > 0 ? `받았어요. 사진 ${r.skipped}장은 못 넣었어요.` : '한글 파일을 받았어요.');
-      logActivity(session.id, '제안서 한글 파일', input.org);
+      logActivity(session.id, `${docLabel(input.kind)} 한글 파일`, input.org);
     } catch (e) {
       toast.show(friendlyError(e, '한글 파일을 만들지 못했어요. 잠시 후 다시 눌러주세요.'));
     } finally {
@@ -365,19 +376,19 @@ function ProposalInner() {
     }
   };
 
-  /** 기관 표의 그 줄을 '제안서 보냄' 으로 — 표를 다시 열어 고치게 하면 안 고친다 */
+  /** 기관 표의 그 줄을 '제안서 보냄'·'견적…' 으로 — 표를 다시 열어 고치게 하면 안 고친다 */
   const markSent = async () => {
-    if (!rowCtx?.statusCol || !rowCtx.sentLabel || !session) return;
+    if (!rowCtx?.statusCol || !sentLabel || !session) return;
     setBusy('mark');
     try {
-      const cells = { ...(rowCtx.row.cells ?? {}), [rowCtx.statusCol.id]: rowCtx.sentLabel };
+      const cells = { ...(rowCtx.row.cells ?? {}), [rowCtx.statusCol.id]: sentLabel };
       const { error: e } = await supabase
         .from('duty_rows')
         .update({ cells, updated_by: session.id, updated_at: new Date().toISOString() })
         .eq('id', rowCtx.row.id);
       if (e) throw e;
-      setMarked(true);
-      toast.show(`${rowTitle(rowCtx.cols, rowCtx.row)} 을(를) '${rowCtx.sentLabel}' 으로 바꿨어요.`);
+      setMarked(sentLabel);
+      toast.show(`${rowTitle(rowCtx.cols, rowCtx.row)} 을(를) '${sentLabel}' 으로 바꿨어요.`);
     } catch (e) {
       toast.show(friendlyError(e));
     } finally {
@@ -387,16 +398,17 @@ function ProposalInner() {
 
   const reset = () => {
     draftRowRef.current = null;
-    setInput(emptyProposal(today()));
-    setMarked(false);
-    toast.show('새 제안서로 시작해요.');
+    // 갈래는 그대로 둔다 — 견적서를 쓰다 새로 시작하면 또 견적서다
+    setInput((cur) => ({ ...emptyProposal(today()), kind: cur?.kind ?? 'proposal' }));
+    setMarked('');
+    toast.show('새 문서로 시작해요.');
   };
 
   /* ------------------------------------------------------------------ 화면 */
   if (!input) {
     return (
       <div>
-        <PageHeader title="제안서" />
+        <PageHeader title="제안서·견적서" />
         <div className="px-4 py-4">
           <CardSkeleton rows={4} />
         </div>
@@ -406,11 +418,12 @@ function ProposalInner() {
 
   const rowTitleText = rowCtx ? rowTitle(rowCtx.cols, rowCtx.row) : '';
   const total = grandTotal(input.items);
+  const split = input.kind === 'quote' ? vatSplit(input.items, input.vat) : null;
 
   return (
     <div>
       <PageHeader
-        title="제안서"
+        title="제안서·견적서"
         subtitle="프로그램을 골라 기관에 보내는 문서를 만들어요"
         right={
           <button onClick={reset} className="tap -my-2 px-2 text-[13px] font-semibold text-neutral-500">
@@ -428,6 +441,25 @@ function ProposalInner() {
             기관 표의 <b>{rowTitleText}</b> 줄에서 왔어요. 받는 곳이 그 줄 그대로 채워졌어요.
           </p>
         )}
+
+        {/* ---------------------------------------------------------- 문서 갈래 */}
+        {/* 제안서와 견적서는 같은 입력(기관·프로그램·값)에서 나온다 — 화면을 둘로 가르면
+            같은 것을 두 번 고르게 된다. 갈래만 고르고 아래 칸이 그에 맞게 바뀐다 */}
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="문서 종류">
+          {DOC_KINDS.map((k) => (
+            <button
+              key={k.key}
+              role="radio"
+              aria-checked={input.kind === k.key}
+              onClick={() => patch({ kind: k.key })}
+              className={`tap rounded-xl border text-[14px] font-bold ${
+                input.kind === k.key ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-600'
+              }`}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
 
         {/* ---------------------------------------------------------- 받는 곳 */}
         <section className="card p-4">
@@ -458,7 +490,7 @@ function ProposalInner() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="label" htmlFor="p-date">제안일</label>
+                <label className="label" htmlFor="p-date">{input.kind === 'quote' ? '견적일' : '제안일'}</label>
                 <input id="p-date" type="date" className="field" value={input.date} onChange={(e) => patch({ date: e.target.value })} />
               </div>
             </div>
@@ -495,19 +527,37 @@ function ProposalInner() {
                   onMove={(d) => moveItem(it.appId, d)}
                 />
               ))}
-              <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2.5 text-[14px]">
-                <span className="font-semibold text-neutral-600">합계</span>
-                <span className="font-black">
-                  {priceText(total)}
-                  {hasUnpriced(input.items) && <span className="ml-1 text-[11px] font-semibold text-neutral-500">(일부 협의)</span>}
-                </span>
-              </div>
+              {split ? (
+                <div className="space-y-1 rounded-xl bg-raised px-3 py-2.5 text-[13px]">
+                  <div className="flex justify-between">
+                    <span className="text-neutral-600">공급가액</span>
+                    <span>{split.supply.toLocaleString('ko-KR')}원</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-600">{input.vat === 'exempt' ? '부가세 (면세)' : '부가세'}</span>
+                    <span>{split.vat.toLocaleString('ko-KR')}원</span>
+                  </div>
+                  <div className="flex justify-between text-[14px]">
+                    <span className="font-semibold text-neutral-600">합계 ({vatLabel(input.vat)})</span>
+                    <span className="font-black">{split.total.toLocaleString('ko-KR')}원</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2.5 text-[14px]">
+                  <span className="font-semibold text-neutral-600">합계</span>
+                  <span className="font-black">
+                    {priceText(total)}
+                    {hasUnpriced(input.items) && <span className="ml-1 text-[11px] font-semibold text-neutral-500">(일부 협의)</span>}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </section>
 
         {/* ---------------------------------------------------------- 인사말 */}
         {/* 기본 문구가 이미 들어 있어 대개 안 고친다 — 펼쳐두면 폰에서 250px 을 먹는다 */}
+        {input.kind === 'proposal' && (
         <Collapsible
           id="proposal.text"
           title="인사말 · 맺음말"
@@ -535,6 +585,61 @@ function ProposalInner() {
             </div>
           </div>
         </Collapsible>
+        )}
+
+        {/* ---------------------------------------------------------- 견적 조건 */}
+        {input.kind === 'quote' && (
+          <section className="card p-4">
+            <h2 className="mb-3 text-[15px] font-bold">견적 조건</h2>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label" htmlFor="q-no">견적 번호</label>
+                  <input id="q-no" className="field" value={input.quoteNo} onChange={(e) => patch({ quoteNo: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label" htmlFor="q-days">유효기간 (일)</label>
+                  <input
+                    id="q-days"
+                    type="number"
+                    min={1}
+                    className="field"
+                    value={input.validDays}
+                    onChange={(e) => patch({ validDays: Math.max(1, toNumber(e.target.value)) })}
+                  />
+                </div>
+              </div>
+              <p className="-mt-1 text-[12px] text-neutral-500">{validUntil(input.date, input.validDays)} 까지 유효</p>
+              <div>
+                <p className="label">부가세</p>
+                <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="부가세">
+                  {VAT_MODES.map((v) => (
+                    <button
+                      key={v.key}
+                      role="radio"
+                      aria-checked={input.vat === v.key}
+                      onClick={() => patch({ vat: v.key })}
+                      className={`tap rounded-xl border px-1 text-[13px] font-semibold ${
+                        input.vat === v.key ? 'pick-on' : 'border-neutral-300 bg-surface text-neutral-600'
+                      }`}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="label" htmlFor="q-terms">비고 · 조건</label>
+                <textarea id="q-terms" className="field min-h-[80px] leading-relaxed" value={input.terms} onChange={(e) => patch({ terms: e.target.value })} />
+                {input.terms.trim() !== DEFAULT_TERMS.trim() && (
+                  <button onClick={() => patch({ terms: DEFAULT_TERMS })} className="tap -my-3 px-1 text-[12px] font-semibold text-neutral-500">
+                    기본 문구로 되돌리기
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ---------------------------------------------------------- 회사 정보 */}
         {!orgLoaded ? (
@@ -599,6 +704,9 @@ function ProposalInner() {
           {!orgReady(org) && problems.length === 0 && (
             <p className="text-[12.5px] text-neutral-500">회사 이름이 비어 있으면 문서에 보내는 곳이 안 실려요. 위 <b>회사 정보</b> 를 채우면 좋아요.</p>
           )}
+          {input.kind === 'quote' && orgReady(org) && !org.bizNo.trim() && problems.length === 0 && (
+            <p className="text-[12.5px] text-neutral-500">견적서에는 <b>사업자등록번호</b>가 실려요. 위 회사 정보에 적어두면 좋아요.</p>
+          )}
           <button onClick={openPrint} disabled={problems.length > 0} className="btn-primary w-full">
             <Icon name="printer" size={15} />
             미리보기 · 인쇄 / PDF
@@ -607,10 +715,10 @@ function ProposalInner() {
             <Icon name="download" size={14} />
             {busy === 'hwp' ? '만드는 중…' : '한글 파일(.hwpx) 받기'}
           </button>
-          {rowCtx?.statusCol && rowCtx.sentLabel && (
-            <button onClick={() => void markSent()} disabled={marked || busy === 'mark'} className="btn-ghost w-full">
+          {rowCtx?.statusCol && sentLabel && (
+            <button onClick={() => void markSent()} disabled={marked === sentLabel || busy === 'mark'} className="btn-ghost w-full">
               <Icon name="check" size={14} />
-              {marked ? `'${rowCtx.sentLabel}' 으로 표시됨` : `기관 표에서 '${rowCtx.sentLabel}' 으로 표시`}
+              {marked === sentLabel ? `'${sentLabel}' 으로 표시됨` : `기관 표에서 '${sentLabel}' 으로 표시`}
             </button>
           )}
           {rowCtx && (

@@ -23,7 +23,18 @@
  */
 
 import type { LessonPlan, LessonPlanItem, OrgProfile, PlanSlot } from './types';
-import { grandTotal, hasUnpriced, lineTotal, priceText, orgLine, type ProposalInput } from './proposal';
+import {
+  grandTotal,
+  hasUnpriced,
+  lineTotal,
+  moneyInKoreanLine,
+  orgLine,
+  priceText,
+  validUntil,
+  vatLabel,
+  vatSplit,
+  type ProposalInput,
+} from './proposal';
 
 /* HWPUNIT = 1/7200 인치. 1mm = 7200/25.4 */
 const PER_MM = 7200 / 25.4;
@@ -944,6 +955,129 @@ async function loadPic(url: string, itemId: string, index: number, png = false):
   }
 }
 
+
+/* ------------------------------------------------------- 견적서 본문 */
+
+/**
+ * 견적서 한 벌 — 배치는 인쇄물(QuoteSheet)과 같다. 사진이 없어 그림 부품이 안 든다.
+ * 수신·공급자 → 합계(한글 금액) → 품목 표(공급가액·부가세·합계 줄 포함) → 비고 → (인)
+ */
+function quoteSectionXml(input: ProposalInput, org: OrgProfile): string {
+  const id = makeIds();
+  const H = mm(8);
+  const out: string[] = [];
+  const split = vatSplit(input.items, input.vat);
+
+  out.push(
+    para(id, '견 적 서', {
+      charPr: CH_TITLE,
+      paraPr: PA_CENTER,
+      width: TEXT_W,
+      inner:
+        `<hp:run charPrIDRef="${CH_BODY}">${SEC_PR}<hp:ctrl>` +
+        `<hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/>` +
+        `</hp:ctrl></hp:run>` +
+        `<hp:run charPrIDRef="${CH_TITLE}"><hp:t>견 적 서</hp:t></hp:run>`,
+    }),
+  );
+  out.push(para(id, '', { width: TEXT_W }));
+  const until = validUntil(input.date, input.validDays);
+  out.push(
+    para(id, `견적번호 : ${input.quoteNo}    견적일 : ${input.date}    유효기간 : ${until ? `${until} 까지` : ''} (견적일로부터 ${input.validDays}일)`, {
+      charPr: CH_SMALL,
+      width: TEXT_W,
+    }),
+  );
+  const who = [input.contact && `담당 ${input.contact}`, input.tel].filter(Boolean).join(' · ');
+  out.push(para(id, `수신 : ${input.org} 귀하${who ? `  (${who})` : ''}`, { charPr: CH_BOLD, width: TEXT_W }));
+  const supplier = [
+    org.name && `상호 ${org.name}`,
+    org.ceo && `대표 ${org.ceo}`,
+    org.bizNo && `사업자등록번호 ${org.bizNo}`,
+    org.tel,
+    org.email,
+    org.address,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  if (supplier) out.push(para(id, `공급자 : ${supplier}`, { width: TEXT_W }));
+  out.push(para(id, '', { width: TEXT_W }));
+  out.push(para(id, '아래와 같이 견적합니다.', { width: TEXT_W }));
+  out.push(
+    para(id, `합계 금액 (${vatLabel(input.vat)}) : ${moneyInKoreanLine(split.total)} (₩${split.total.toLocaleString('ko-KR')})`, {
+      charPr: CH_BOLD,
+      width: TEXT_W,
+    }),
+  );
+  out.push(para(id, '', { width: TEXT_W }));
+
+  // 품목 표 — No. | 품목 | 규격 | 수량 | 단가 | 금액
+  const widths = [mm(12), mm(58), mm(36), mm(18), mm(28), TEXT_W - mm(12) - mm(58) - mm(36) - mm(18) - mm(28)];
+  const cell = (text: string, col: number, row: number, opt: Partial<Cell> = {}): Cell => ({
+    body: para(id, text, { charPr: opt.head ? CH_BOLD : CH_BODY, paraPr: col === 1 && !opt.head ? PA_LEFT : PA_CENTER, width: widths[col] }),
+    col,
+    row,
+    width: widths[col],
+    height: H,
+    ...opt,
+  });
+  const rows: Cell[][] = [
+    ['No.', '품목', '규격', '수량', '단가', '금액'].map((t, c) => cell(t, c, 0, { head: true })),
+    ...input.items.map((it, i) => [
+      cell(String(i + 1), 0, i + 1),
+      cell(it.title, 1, i + 1),
+      cell([it.grade, `${it.sessions}차시`].filter(Boolean).join(' · '), 2, i + 1),
+      cell(`${it.headcount}명`, 3, i + 1),
+      cell(priceText(it.unitPrice), 4, i + 1),
+      cell(priceText(lineTotal(it)), 5, i + 1),
+    ]),
+  ];
+  const foot: [string, number][] = [
+    ['공급가액', split.supply],
+    [input.vat === 'exempt' ? '부가세 (면세)' : '부가세', split.vat],
+    ['합계', split.total],
+  ];
+  foot.forEach(([label, n], k) => {
+    const r = input.items.length + 1 + k;
+    const head = k === 2;
+    rows.push([
+      { ...cell(label, 0, r, { head }), colSpan: 5, width: TEXT_W - widths[5] },
+      cell(`${n.toLocaleString('ko-KR')}원`, 5, r, { head }),
+    ]);
+  });
+  out.push(
+    para(id, '', {
+      width: TEXT_W,
+      inner: `<hp:run charPrIDRef="${CH_BODY}">${tableXml(id, rows, H * rows.length, 6, TEXT_W)}</hp:run>`,
+    }),
+  );
+  out.push(para(id, '금액 = 단가(1인당) × 수량(인원) × 차시', { charPr: CH_SMALL, width: TEXT_W }));
+  out.push(para(id, '', { width: TEXT_W }));
+
+  if (input.terms.trim()) {
+    out.push(para(id, '비고', { charPr: CH_BOLD, width: TEXT_W }));
+    out.push(paras(id, input.terms, { width: TEXT_W }));
+    out.push(para(id, '', { width: TEXT_W }));
+  }
+  out.push(para(id, `${input.date}    ${org.name}${org.ceo ? ` 대표 ${org.ceo}` : ''}  (인)`, { paraPr: PA_CENTER, width: TEXT_W }));
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><hs:sec ${NS}>` + out.join('') + `</hs:sec>`;
+}
+
+/** 견적서 .hwpx 안에 들어갈 파일들 — 순수 함수 (scripts/hwpx.test.mjs 가 검사한다) */
+export function buildQuoteHwpxFiles(input: ProposalInput, org: OrgProfile): Record<string, string | Uint8Array> {
+  return packageFiles(`견적서 ${input.org}`, quoteSectionXml(input, org), `견적서 ${input.org}`, []);
+}
+
+/** 갈래에 맞는 한 벌 — 인쇄 화면·제안서 화면이 쓴다 */
+export function buildDocumentHwpxFiles(
+  input: ProposalInput,
+  org: OrgProfile,
+  pics: HwpxPic[],
+): Record<string, string | Uint8Array> {
+  return input.kind === 'quote' ? buildQuoteHwpxFiles(input, org) : buildProposalHwpxFiles(input, org, pics);
+}
+
 /**
  * 강의계획서를 .hwpx 로 내려받는다.
  * 사진을 못 받아도 문서는 나가고, 몇 장이 빠졌는지 돌려준다.
@@ -1010,15 +1144,18 @@ export async function downloadProposalHwpx(
 ): Promise<{ skipped: number; fileName: string }> {
   const jobs: Promise<HwpxPic | null>[] = [];
   let n = 0;
-  for (const it of input.items) {
-    it.samples.forEach((url, k) => {
-      jobs.push(loadPic(url, proposalPicId(it.appId, k), n));
-      n += 1;
-    });
+  if (input.kind !== 'quote') {
+    // 견적서에는 사진이 안 든다 — 받을 것도 없다
+    for (const it of input.items) {
+      it.samples.forEach((url, k) => {
+        jobs.push(loadPic(url, proposalPicId(it.appId, k), n));
+        n += 1;
+      });
+    }
   }
   const loaded = await Promise.all(jobs);
   const pics = loaded.filter((p): p is HwpxPic => p !== null);
-  const files = buildProposalHwpxFiles(input, org, pics);
+  const files = buildDocumentHwpxFiles(input, org, pics);
 
   const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
@@ -1028,7 +1165,7 @@ export async function downloadProposalHwpx(
     zip.file(path, data);
   }
   const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/hwp+zip', compression: 'DEFLATE' });
-  const fileName = `proposal_${input.date}.hwpx`;
+  const fileName = `${input.kind === 'quote' ? 'quote' : 'proposal'}_${input.date}.hwpx`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

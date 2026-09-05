@@ -78,7 +78,7 @@ const db = {
   duty_files: [],
   duty_columns: [
     { id: 'c1', duty_id: 'u1', name: '기관 이름', kind: 'text', options: null, sort_order: 1, created_at: '' },
-    { id: 'c2', duty_id: 'u1', name: '진행 상태', kind: 'select', options: ['연락 전', '연락함', '제안서 보냄', '보류'], sort_order: 2, created_at: '' },
+    { id: 'c2', duty_id: 'u1', name: '진행 상태', kind: 'select', options: ['연락 전', '연락함', '제안서 보냄', '견적·계약', '보류'], sort_order: 2, created_at: '' },
     { id: 'c3', duty_id: 'u1', name: '담당자·부서', kind: 'text', options: null, sort_order: 3, created_at: '' },
     { id: 'c4', duty_id: 'u1', name: '연락처', kind: 'text', options: null, sort_order: 4, created_at: '' },
     { id: 'c5', duty_id: 'u1', name: '다음 연락일', kind: 'date', options: null, sort_order: 5, created_at: '' },
@@ -200,7 +200,7 @@ const shot = async (p, name) => {
 console.log('\n[빈 제안서에서 시작 — 회사 정보부터]');
 await page.goto(`${BASE}/proposal`, { waitUntil: 'commit' });
 await page.waitForTimeout(3000);
-ok('제안서 화면이 열린다', await page.getByRole('heading', { name: '제안서' }).first().isVisible());
+ok('제안서 화면이 열린다', await page.getByRole('heading', { name: /제안서/ }).first().isVisible());
 {
   const a = await audit(page);
   ok('375px 에서 가로 스크롤이 없다', !a.overflow);
@@ -298,7 +298,7 @@ await page.goto(`${BASE}/roles/u1`, { waitUntil: 'commit' });
 await page.waitForTimeout(3000);
 await page.getByRole('button', { name: /무등중학교/ }).first().click();
 await page.waitForTimeout(600);
-const link = page.getByRole('link', { name: /이 기관에 제안서 만들기/ });
+const link = page.getByRole('link', { name: /이 기관에 제안서·견적서 만들기/ });
 ok('줄 시트에 제안서 링크가 있다', await link.isVisible());
 ok('링크가 그 줄을 가리킨다', ((await link.getAttribute('href')) ?? '').includes('/proposal?duty=u1&row=r1'));
 await link.click();
@@ -372,9 +372,79 @@ await page.evaluate(() => window.localStorage.removeItem('moalab.proposal.print'
 const bare = await ctx.newPage();
 await bare.goto(`${BASE}/print/proposal`, { waitUntil: 'commit' });
 await bare.waitForTimeout(2500);
-ok('보여줄 것이 없다고 알려준다', await bare.getByText(/보여줄 제안서가 없어요/).isVisible());
+ok('보여줄 것이 없다고 알려준다', await bare.getByText(/보여줄 문서가 없어요/).isVisible());
 ok('그때는 인쇄 버튼이 잠긴다', await bare.getByRole('button', { name: /인쇄 \/ PDF 저장/ }).isDisabled());
 await bare.close();
+
+console.log('\n[견적서 — 같은 입력에서 갈래만 바꾼다]');
+await page.getByRole('radio', { name: '견적서' }).click();
+await page.waitForTimeout(400);
+ok('견적 조건 칸이 나타난다', await page.getByLabel('견적 번호').isVisible());
+ok('인사말 칸은 사라진다', (await page.getByRole('button', { name: /인사말 · 맺음말/ }).count()) === 0);
+ok('견적 번호 기본값은 날짜', /^Q-\d{8}$/.test(await page.getByLabel('견적 번호').inputValue()));
+ok('부가세 별도가 기본 — 부가세 80,000 · 합계 880,000',
+  (await page.getByText('880,000원').count()) > 0 && (await page.getByText('80,000원').count()) > 0);
+await page.getByRole('radio', { name: '면세' }).click();
+await page.waitForTimeout(200);
+ok('면세로 바꾸면 합계 = 공급가액', (await page.getByText('880,000원').count()) === 0 && (await page.getByText('800,000원').count()) >= 1);
+await page.getByRole('radio', { name: '부가세 별도' }).click();
+await page.waitForTimeout(200);
+await page.locator('#p-app1').fill('');
+await page.waitForTimeout(200);
+ok('가격 없는 줄이 있으면 견적서 인쇄가 막힌다', await page.getByRole('button', { name: /미리보기 · 인쇄/ }).isDisabled());
+ok('왜 막히는지 적혀 있다', await page.getByText(/견적서는 모든 프로그램에 1인당 가격/).isVisible());
+await page.locator('#p-app1').fill('10000');
+await page.waitForTimeout(200);
+ok('가격을 채우면 다시 눌린다', await page.getByRole('button', { name: /미리보기 · 인쇄/ }).isEnabled());
+{
+  const a = await audit(page);
+  ok('견적서 칸이 열려도 가로 스크롤이 없다', !a.overflow);
+  ok('견적서 칸에도 44px 미만 탭 대상이 없다', a.small.length === 0, a.small.join(', '));
+  console.log(`      견적서(프로그램 2개) 세로 ${a.h}px`);
+}
+await shot(page, 'quote-form');
+const qmark = page.getByRole('button', { name: /'견적·계약' 으로 표시/ });
+ok("기관 표 표시 버튼이 '견적' 이 든 보기로 바뀐다", await qmark.isVisible());
+await qmark.click();
+await page.waitForTimeout(600);
+ok("그 줄이 '견적·계약' 으로 바뀐다", db.duty_rows[0].cells.c2 === '견적·계약', db.duty_rows[0].cells.c2);
+
+const [qpop] = await Promise.all([
+  ctx.waitForEvent('page'),
+  page.getByRole('button', { name: /미리보기 · 인쇄/ }).click(),
+]);
+await qpop.waitForLoadState('domcontentloaded');
+await qpop.waitForFunction(() => document.querySelectorAll('.print-a4-sheet').length >= 1, null, { timeout: 15000 }).catch(() => {});
+await qpop.waitForTimeout(1200);
+ok('견적서는 한 장', (await qpop.locator('.print-a4-sheet').count()) === 1);
+ok('견적서 제목·한글 금액·수신이 실린다',
+  (await qpop.getByRole('heading', { name: '견적서' }).count()) > 0
+  && (await qpop.getByText(/일금 팔십팔만원정/).count()) > 0
+  && (await qpop.getByText(/무등중학교 귀하/).count()) > 0);
+ok('공급자(회사)가 실린다', (await qpop.getByText(/상호/).count()) > 0);
+{
+  const a = await audit(qpop);
+  ok('견적서 미리보기도 375px 에서 가로 스크롤이 없다', !a.overflow);
+}
+await shot(qpop, 'quote-print');
+const [qdl] = await Promise.all([
+  qpop.waitForEvent('download', { timeout: 20000 }),
+  qpop.getByRole('button', { name: /한글 파일 받기/ }).click(),
+]);
+ok('견적서 한글 파일 이름은 quote_날짜.hwpx', /^quote_\d{4}-\d{2}-\d{2}\.hwpx$/.test(qdl.suggestedFilename()), qdl.suggestedFilename());
+{
+  const saved2 = join(mkdtempSync(join(tmpdir(), 'moalab-quote-')), qdl.suggestedFilename());
+  await qdl.saveAs(saved2);
+  const zip = await JSZip.loadAsync(readFileSync(saved2));
+  const sec = (await zip.file('Contents/section0.xml')?.async('string')) ?? '';
+  ok('견적서 한글 파일에 합계·한글 금액이 있다', sec.includes('880,000원') && sec.includes('일금 팔십팔만원정'));
+}
+await qpop.close();
+await page.reload({ waitUntil: 'commit' });
+await page.waitForTimeout(3000);
+ok('다시 열어도 견적서 갈래 그대로', (await page.getByRole('radio', { name: '견적서' }).getAttribute('aria-checked')) === 'true');
+await page.getByRole('radio', { name: '제안서' }).click();
+await page.waitForTimeout(300);
 
 console.log('\n[새로 시작]');
 await page.getByRole('button', { name: '새로 시작' }).click();

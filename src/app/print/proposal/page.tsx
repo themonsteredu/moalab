@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/session';
 import { EMPTY_ORG, type OrgProfile } from '@/lib/types';
-import { PRINT_DRAFT_KEY, type ProposalInput } from '@/lib/proposal';
+import { PRINT_DRAFT_KEY, docLabel, normalizeInput, type ProposalInput } from '@/lib/proposal';
 import { downloadProposalHwpx } from '@/lib/hwpx';
-import { ProposalSheet } from '@/components/ProposalSheet';
+import { DocumentSheet } from '@/components/ProposalSheet';
 import { Icon } from '@/components/Icon';
 
 /**
- * 제안서 인쇄 / PDF 저장 — `/proposal` 화면의 **미리보기·인쇄** 에서 새 창으로 연다.
+ * 제안서·견적서 인쇄 / PDF 저장 — `/proposal` 화면의 **미리보기·인쇄** 에서 새 창으로 연다.
+ * 갈래(`input.kind`)에 맞는 장을 그린다 — 제안서는 표지 + 프로그램마다 한 쪽, 견적서는 한 장.
  *
  * 내용은 주소가 아니라 **이 기기의 저장소**(localStorage)로 넘겨받는다 — 프로그램 여러 개의
  * 소개·목표·사진 주소를 주소창에 실으면 수천 자가 되어 잘린다. 같은 기기의 새 창이라
@@ -37,7 +38,7 @@ export default function PrintProposalPage() {
         return;
       }
       const parsed = JSON.parse(raw) as { input: ProposalInput; org?: OrgProfile };
-      setData({ input: parsed.input, org: { ...EMPTY_ORG, ...(parsed.org ?? {}) } });
+      setData({ input: normalizeInput(parsed.input, new Date().toISOString().slice(0, 10)), org: { ...EMPTY_ORG, ...(parsed.org ?? {}) } });
     } catch {
       setData(null);
     }
@@ -48,7 +49,7 @@ export default function PrintProposalPage() {
     setMsg('한글 파일을 만드는 중…');
     try {
       const r = await downloadProposalHwpx(data.input, data.org);
-      setMsg(r.skipped > 0 ? `받았어요. 사진 ${r.skipped}장은 못 넣었어요.` : '받았어요. 한글에서 열어보세요.');
+      setMsg(r.skipped > 0 ? `${docLabel(data.input.kind)}를 받았어요. 사진 ${r.skipped}장은 못 넣었어요.` : `${docLabel(data.input.kind)}를 받았어요. 한글에서 열어보세요.`);
     } catch {
       setMsg('한글 파일을 만들지 못했어요. 잠시 후 다시 눌러주세요.');
     }
@@ -81,10 +82,10 @@ export default function PrintProposalPage() {
       </div>
 
       {data ? (
-        <ProposalSheet input={data.input} org={data.org} />
+        <DocumentSheet input={data.input} org={data.org} />
       ) : (
         <p className="rounded-xl border border-neutral-200 p-4 text-[13px] text-neutral-600">
-          보여줄 제안서가 없어요. <b>제안서</b> 화면에서 프로그램을 고르고 <b>미리보기 · 인쇄</b> 를 눌러 여기로 오세요.
+          보여줄 문서가 없어요. <b>제안서·견적서</b> 화면에서 프로그램을 고르고 <b>미리보기 · 인쇄</b> 를 눌러 여기로 오세요.
         </p>
       )}
     </main>

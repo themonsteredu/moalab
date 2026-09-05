@@ -33,7 +33,29 @@ export interface ProposalItem {
   samples: string[];
 }
 
+/** 문서 갈래 — 제안서와 견적서는 **같은 입력**에서 나온다 (같은 기관·같은 프로그램·같은 값) */
+export type DocKind = 'proposal' | 'quote';
+export const DOC_KINDS: { key: DocKind; label: string; title: string }[] = [
+  { key: 'proposal', label: '제안서', title: '프로그램 제안서' },
+  { key: 'quote', label: '견적서', title: '견적서' },
+];
+export function docLabel(kind: DocKind): string {
+  return kind === 'quote' ? '견적서' : '제안서';
+}
+
+/** 부가세를 어떻게 적나 — 회사 사정에 따라 다르므로 원장이 고른다 */
+export type VatMode = 'separate' | 'included' | 'exempt';
+export const VAT_MODES: { key: VatMode; label: string; hint: string }[] = [
+  { key: 'separate', label: '부가세 별도', hint: '합계 = 공급가액 + 10%' },
+  { key: 'included', label: '부가세 포함', hint: '적은 금액 안에 10% 가 들어 있다' },
+  { key: 'exempt', label: '면세', hint: '부가세 없음' },
+];
+export function vatLabel(mode: VatMode): string {
+  return VAT_MODES.find((v) => v.key === mode)?.label ?? '부가세 별도';
+}
+
 export interface ProposalInput {
+  kind: DocKind;
   org: string;
   contact: string;
   tel: string;
@@ -42,6 +64,14 @@ export interface ProposalInput {
   greeting: string;
   closing: string;
   items: ProposalItem[];
+  /* ---- 견적서에만 쓰는 칸 ---- */
+  /** 견적 번호 — 기본은 날짜로 만들고 손으로 고칠 수 있다 */
+  quoteNo: string;
+  /** 유효기간(일) — 견적일로부터 */
+  validDays: number;
+  vat: VatMode;
+  /** 비고·조건 */
+  terms: string;
 }
 
 /** 이 기기에 남겨두는 초안 (다시 열면 이어 쓴다) */
@@ -90,8 +120,74 @@ export function defaultGreeting(org: string): string {
 export const DEFAULT_CLOSING =
   '일정·인원·차시는 기관 사정에 맞춰 조정할 수 있습니다.\n궁금하신 점은 아래 연락처로 편하게 문의해 주세요.';
 
+/**
+ * 견적 조건 기본 문구 — **사실을 단정하지 않는다.** 재료비 포함 여부·결제 조건은 회사가 정하는
+ * 것이라 기본값으로 박아두면 원장이 안 고치고 그대로 보낸다. 바뀔 수 있다는 말만 적어둔다
+ */
+export const DEFAULT_TERMS =
+  '· 인원·차시가 바뀌면 금액이 달라질 수 있습니다.\n· 교구·재료 포함 여부와 결제 조건은 계약 시 확정합니다.';
+
+/** 견적 번호 기본값 — 날짜로. 같은 날 두 번째부터는 원장이 뒤에 -2 처럼 붙인다 */
+export function defaultQuoteNo(today: string): string {
+  return `Q-${today.replace(/-/g, '')}`;
+}
+
 export function emptyProposal(today: string): ProposalInput {
-  return { org: '', contact: '', tel: '', date: today, greeting: defaultGreeting(''), closing: DEFAULT_CLOSING, items: [] };
+  return {
+    kind: 'proposal',
+    org: '',
+    contact: '',
+    tel: '',
+    date: today,
+    greeting: defaultGreeting(''),
+    closing: DEFAULT_CLOSING,
+    items: [],
+    quoteNo: defaultQuoteNo(today),
+    validDays: 30,
+    vat: 'separate',
+    terms: DEFAULT_TERMS,
+  };
+}
+
+/**
+ * 저장소에서 읽은 초안을 **지금 모양으로** 맞춘다 — 견적 칸이 생기기 전에 남긴 초안도
+ * 그대로 읽히고, 깨진 값(문자열 숫자·없는 갈래)이 화면을 죽이지 않는다
+ */
+export function normalizeInput(raw: unknown, today: string): ProposalInput {
+  const base = emptyProposal(today);
+  if (!raw || typeof raw !== 'object') return base;
+  const r = raw as Partial<Record<keyof ProposalInput, unknown>>;
+  const str = (v: unknown, fallback: string) => (typeof v === 'string' ? v : fallback);
+  const items: ProposalItem[] = Array.isArray(r.items)
+    ? (r.items as Partial<ProposalItem>[])
+        .filter((it) => it && typeof it.appId === 'string')
+        .map((it) => ({
+          appId: it.appId as string,
+          title: str(it.title, ''),
+          purpose: str(it.purpose, ''),
+          goal: str(it.goal, ''),
+          grade: str(it.grade, ''),
+          sessions: Math.max(1, Math.round(toNumber(it.sessions ?? 1) || 1)),
+          headcount: Math.max(1, Math.round(toNumber(it.headcount ?? 20) || 20)),
+          unitPrice: Math.max(0, Math.round(toNumber(it.unitPrice ?? 0))),
+          samples: Array.isArray(it.samples) ? it.samples.filter((u): u is string => typeof u === 'string') : [],
+        }))
+    : [];
+  const validDays = toNumber((r.validDays as number | string | undefined) ?? base.validDays);
+  return {
+    kind: r.kind === 'quote' ? 'quote' : 'proposal',
+    org: str(r.org, ''),
+    contact: str(r.contact, ''),
+    tel: str(r.tel, ''),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(str(r.date, '')) ? (r.date as string) : base.date,
+    greeting: str(r.greeting, base.greeting),
+    closing: str(r.closing, base.closing),
+    items,
+    quoteNo: str(r.quoteNo, '').trim() || base.quoteNo,
+    validDays: validDays > 0 ? Math.round(validDays) : base.validDays,
+    vat: VAT_MODES.some((v) => v.key === r.vat) ? (r.vat as VatMode) : base.vat,
+    terms: str(r.terms, base.terms),
+  };
 }
 
 /* ---------------------------------------------------------------- 계산 */
@@ -116,6 +212,72 @@ export function priceText(n: number): string {
   return n > 0 ? `${n.toLocaleString('ko-KR')}원` : '협의';
 }
 
+/* ---------------------------------------------------------------- 견적 */
+
+export interface VatSplit {
+  /** 공급가액 */
+  supply: number;
+  vat: number;
+  total: number;
+}
+
+/**
+ * 부가세를 가른다. 원 단위로 반올림하고 **합계에서 역산해 1원이 안 어긋나게** 한다
+ * (포함이면 공급가액을 반올림하고 부가세는 합계 − 공급가액).
+ */
+export function vatSplit(items: ProposalItem[], mode: VatMode): VatSplit {
+  const sum = grandTotal(items);
+  if (mode === 'exempt') return { supply: sum, vat: 0, total: sum };
+  if (mode === 'included') {
+    const supply = Math.round(sum / 1.1);
+    return { supply, vat: sum - supply, total: sum };
+  }
+  const vat = Math.round(sum * 0.1);
+  return { supply: sum, vat, total: sum + vat };
+}
+
+/** 유효기간 마지막 날 — 견적일 + N일. 날짜가 아니면 빈 문자열 */
+export function validUntil(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const x = new Date(y, m - 1, d + Math.max(0, Math.round(days)));
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * 금액을 한글로 — 견적서의 `일금 ○○원정`.
+ * 엑셀 `NUMBERSTRING(값,1)` 과 같은 꼴이다 (일십·일백·일만처럼 **'일' 을 빠뜨리지 않는다**) —
+ * 한글 견적서 양식 대부분이 그 함수로 만든 글자라 같은 모양이어야 낯설지 않다.
+ */
+export function moneyInKorean(n: number): string {
+  const v = Math.floor(Math.abs(n));
+  if (v === 0) return '영';
+  const DIG = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'];
+  const SMALL = ['', '십', '백', '천'];
+  const BIG = ['', '만', '억', '조', '경'];
+  const groups: string[] = [];
+  let rest = v;
+  let g = 0;
+  while (rest > 0 && g < BIG.length) {
+    const part = rest % 10000;
+    if (part > 0) {
+      let s = '';
+      for (let i = 3; i >= 0; i -= 1) {
+        const digit = Math.floor(part / 10 ** i) % 10;
+        if (digit > 0) s += DIG[digit] + SMALL[i];
+      }
+      groups.unshift(s + BIG[g]);
+    }
+    rest = Math.floor(rest / 10000);
+    g += 1;
+  }
+  return groups.join('');
+}
+
+export function moneyInKoreanLine(n: number): string {
+  return `일금 ${moneyInKorean(n)}원정`;
+}
+
 /* ---------------------------------------------------------- 검사·다듬기 */
 
 /** 저장 전 검사 — 무엇이 비었는지 한글로. 빈 배열이면 보내도 된다 */
@@ -129,11 +291,25 @@ export function proposalProblems(p: ProposalInput): string[] {
 }
 
 /**
+ * 견적서는 제안서보다 엄하다 — **가격이 없는 줄이 있으면 못 나간다.** 견적서의 쓸모가 곧 가격이다.
+ * 제안서는 '협의' 로 나가도 되지만 견적서에 '협의' 가 있으면 견적이 아니다
+ */
+export function docProblems(p: ProposalInput): string[] {
+  const out = proposalProblems(p);
+  if (p.kind !== 'quote') return out;
+  if (p.items.some((it) => it.unitPrice <= 0)) out.push('견적서는 모든 프로그램에 1인당 가격이 있어야 해요. 빈 가격을 적어주세요.');
+  if (!p.quoteNo.trim()) out.push('견적 번호를 적어주세요.');
+  if (!(p.validDays > 0)) out.push('유효기간(일)은 1 이상이어야 해요.');
+  return out;
+}
+
+/**
  * 숫자 칸 입력 다듬기 — `4만5,000원` 도 45000 으로 (지출결의서 금액 칸과 같은 판단).
  * 숫자가 하나도 없으면 0
  */
-export function toNumber(raw: string | number): number {
+export function toNumber(raw: unknown): number {
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0;
+  if (typeof raw !== 'string') return 0;
   const digits = raw.replace(/[^\d]/g, '');
   return digits ? Number(digits) : 0;
 }
@@ -148,8 +324,8 @@ export function orgLine(o: OrgProfile): string {
   return [o.name, o.ceo && `대표 ${o.ceo}`, o.tel, o.email, o.address].filter(Boolean).join(' · ');
 }
 
-/** 파일 이름 — `제안서_광주중학교_2026-09-02` */
+/** 파일 이름 — `제안서_광주중학교_2026-09-02` · `견적서_…` */
 export function proposalFileName(p: ProposalInput): string {
   const org = p.org.trim().replace(/[\\/:*?"<>|]/g, '_') || '기관';
-  return `제안서_${org}_${p.date}`;
+  return `${docLabel(p.kind ?? 'proposal')}_${org}_${p.date}`;
 }
