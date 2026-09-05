@@ -1107,7 +1107,8 @@ begin
     'tasks','task_templates','task_template_items',
     'expenses','expense_files',
     'departments','duty_groups','duties','duty_helpers',
-    'collab_requests','collab_comments'
+    'collab_requests','collab_comments',
+    'settings'
   ] loop
     execute format('alter table moalab.%I enable row level security', t);
     execute format('drop policy if exists "internal_all" on moalab.%I', t);
@@ -1328,3 +1329,27 @@ create policy "internal_all" on moalab.duty_columns for all using (true) with ch
 create policy "internal_all" on moalab.duty_rows    for all using (true) with check (true);
 grant all on moalab.duty_columns to anon, authenticated, service_role;
 grant all on moalab.duty_rows    to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- 26. 설정 — 열쇠 하나에 jsonb 하나
+--
+--   지금은 `org`(회사 정보 — 제안서 표지와 맨 아래에 찍히는 것) 한 줄뿐이다.
+--   회사 정보를 코드에 박아넣지 않는 이유는 강의계획서 로고와 같다 —
+--   대표·전화·주소는 바뀌고, 바뀔 때마다 배포할 일이 아니다.
+--
+--   ★ 비밀(API 키·PIN·드라이브 토큰)은 여기 넣지 않는다 — 그건 app_secrets(잠긴 표)다.
+--     이 표는 internal_all 로 열려 있어서 브라우저가 그대로 읽는다.
+--   (따로 돌리려면 supabase/settings.sql — 같은 내용이다)
+-- ---------------------------------------------------------------------
+
+create table if not exists moalab.settings (
+  key        text primary key,
+  value      jsonb not null default '{}'::jsonb,
+  updated_by uuid references moalab.members(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+alter table moalab.settings enable row level security;
+drop policy if exists "internal_all" on moalab.settings;
+create policy "internal_all" on moalab.settings for all using (true) with check (true);
+grant all on moalab.settings to anon, authenticated, service_role;

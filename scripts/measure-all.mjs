@@ -218,6 +218,16 @@ const COST_SHEETS = Array.from({ length: 10 }, (_, i) => ({
   created_at: '2026-07-20T00:00:00Z', updated_at: '2026-08-01T00:00:00Z',
 }));
 
+/* 제안서 화면이 읽는 것 — 강의계획서 목표 · 샘플 사진 · 회사 정보.
+   회사 정보는 **저장된 상태**로 잰다 (첫 한 번만 펼쳐지는 칸이라 그게 평소 모습이다) */
+const LESSON_PLANS = [{ app_id: 'app0', category: 'AI', goal: '학생이 직접 AI 로 그림을 만들어 본다',
+  intro: null, dev_title: '', work_title: '', closing: null, tools: null, etc: null, logo_url: null,
+  updated_by: ME, updated_at: '2026-08-01T00:00:00Z', created_at: '2026-08-01T00:00:00Z' }];
+const APP_SAMPLES = [0, 1, 2].map((i) => ({ id: `sp${i}`, app_id: 'app0', url: `/icon-192.png?${i}`, caption: null,
+  sort_order: i, created_at: '2026-08-01T00:00:00Z' }));
+const SETTINGS = [{ key: 'org', value: { name: '모아킷', ceo: '강양희', tel: '010-0000-0000', email: 'moakit@example.com',
+  address: '광주광역시', bizNo: '' }, updated_by: ME, updated_at: '2026-08-01T00:00:00Z' }];
+
 /** 테이블 이름으로 갈라서 돌려준다. 없는 표는 빈 배열 (갤러리·모의수업·강사양성이 그렇다) */
 function rowsFor(url) {
   const table = (url.match(/\/rest\/v1\/([a-z_]+)/) ?? [])[1] ?? '';
@@ -230,6 +240,7 @@ function rowsFor(url) {
     departments: DEPTS, duty_groups: DUTY_GROUPS, duties: DUTIES, duty_helpers: [],
     duty_files: [], duty_columns: DUTY_COLUMNS, duty_rows: DUTY_ROWS,
     collab_requests: COLLABS, collab_comments: [],
+    lesson_plans: LESSON_PLANS, app_samples: APP_SAMPLES, settings: SETTINGS,
   };
   let rows = map[table] ?? [];
   /* `id=eq.x` · `duty_id=eq.x` 를 실제로 걸러준다.
@@ -251,6 +262,7 @@ const PAGES = [
   ['/collab', '부서협업'],
   ['/apps', '프로그램계획'],
   ['/verify', '프로그램검증'],
+  ['/proposal', '제안서'],
   ['/roles', '부서업무'],
   ['/roles/u48', '역할 한 장(표)'],
   ['/mock', '모의수업'],
