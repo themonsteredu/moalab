@@ -95,6 +95,15 @@ export function DutyTable({
   const [pasteError, setPasteError] = useState('');
 
   /** 목록으로 돌아가 `줄 추가`를 다시 누르지 않고 여러 건을 이어서 입력한다. */
+  /**
+   * 목록에서 **상태만** 바꿀 때 고른 줄.
+   *
+   * 영업 목록에서 제일 자주 하는 일이 `연락 전 → 제안서 보냄` 인데, 예전엔 그것 하나에
+   * 줄 누르고 → 시트 열고 → 열두 칸 중에서 찾아 내리고 → 닫기였다. 오른쪽 칩이
+   * 이미 그 값을 보여주고 있으니 **그 칩을 그대로 누르게** 한다.
+   */
+  const [picking, setPicking] = useState<DutyRow | null>(null);
+
   const [entryOpen, setEntryOpen] = useState(false);
   const [entryValues, setEntryValues] = useState<Values>({});
   const [entryBusy, setEntryBusy] = useState(false);
@@ -253,11 +262,9 @@ export function DutyTable({
    * **칸을 벗어날 때 저장한다.** 타이핑 중에는 안 보낸다 —
    * 글자마다 보내면 폰에서 요청이 수십 번 나가고, 느린 망에서는 순서가 뒤집힌다.
    */
-  const saveValues = async (next: Values) => {
-    if (!editing) return;
-    const before = editing.cells ?? {};
+  const writeCells = async (row: DutyRow, next: Values) => {
     // 안 바뀌었으면 아무것도 안 한다 (칸을 지나가기만 해도 저장되면 '저장됨' 이 거짓말이 된다)
-    if (JSON.stringify(before) === JSON.stringify(next)) return;
+    if (JSON.stringify(row.cells ?? {}) === JSON.stringify(next)) return;
     setSaving(true);
     setError('');
     try {
@@ -265,11 +272,12 @@ export function DutyTable({
       const { error: e } = await supabase
         .from('duty_rows')
         .update({ cells: next, updated_by: session?.id ?? null, updated_at: at })
-        .eq('id', editing.id);
+        .eq('id', row.id);
       if (e) throw e;
-      const updated: DutyRow = { ...editing, cells: next, updated_by: session?.id ?? null, updated_at: at };
-      setEditing(updated);
+      const updated: DutyRow = { ...row, cells: next, updated_by: session?.id ?? null, updated_at: at };
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      // 시트가 이 줄을 열어두고 있으면 같이 맞춘다 (목록에서 바꿔도 어긋나지 않게)
+      setEditing((cur) => (cur && cur.id === updated.id ? updated : cur));
       setSavedAt(at);
       freshRef.current = null;
     } catch (e) {
@@ -277,6 +285,10 @@ export function DutyTable({
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveValues = async (next: Values) => {
+    if (editing) await writeCells(editing, next);
   };
 
   /** 시트를 닫는다. 한 글자도 안 적은 새 줄이면 조용히 걷어낸다 ('이름 없음' 이 쌓이면 못 찾는다) */
@@ -620,10 +632,10 @@ export function DutyTable({
               .map((c) => cellText(c, (r.cells ?? {})[c.id] ?? null))
               .filter((t) => t !== '' && t !== '아니오');
             return (
-              <li key={r.id}>
+              <li key={r.id} className="flex items-center gap-1">
                 <button
                   onClick={() => openRow(r)}
-                  className="flex min-h-[44px] w-full items-center gap-2 py-2 text-left"
+                  className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 py-2 text-left"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-semibold text-neutral-800">
@@ -635,9 +647,31 @@ export function DutyTable({
                       </span>
                     )}
                   </span>
-                  {st && <span className="chip shrink-0 bg-neutral-100 text-neutral-600">{st}</span>}
-                  <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
+                  {/* 칩이 있으면 화살표를 안 그린다 — 둘 다 그리면
+                      `제목 … › [연락 전]` 이 되어 화살표가 글자 사이에 낀다 */}
+                  {!counts && (
+                    <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
+                  )}
                 </button>
+                {/* **상태는 목록에서 바로 바꾼다.** 칩은 **버튼 밖**이다 —
+                    button 안에 button 은 안 되는 중첩이다 */}
+                {counts && (
+                  <button
+                    onClick={() => setPicking(r)}
+                    aria-label={`${rowTitle(cols ?? [], r)} — ${counts.col.name} 바꾸기`}
+                    className="tap -my-2 shrink-0 px-1"
+                  >
+                    <span
+                      className={`chip ${
+                        st
+                          ? 'bg-neutral-100 text-neutral-600'
+                          : 'border border-dashed border-neutral-300 text-neutral-400'
+                      }`}
+                    >
+                      {st || counts.col.name}
+                    </span>
+                  </button>
+                )}
               </li>
             );
           })}
@@ -757,6 +791,41 @@ export function DutyTable({
             </button>
           )}
         </div>
+      </Sheet>
+
+      {/* ------------------------------------------- 상태만 바꾸기 (목록에서 바로) */}
+      <Sheet
+        open={!!picking}
+        onClose={() => setPicking(null)}
+        title={picking ? rowTitle(cols ?? [], picking) : ''}
+      >
+        {counts && picking && (
+          <div className="space-y-1.5">
+            <p className="mb-2 text-[12.5px] font-semibold text-neutral-500">{counts.col.name}</p>
+            {[...(counts.col.options ?? []), null].map((o) => {
+              const now = (picking.cells ?? {})[counts.col.id] ?? null;
+              return (
+                <button
+                  key={o ?? '__none__'}
+                  onClick={() => {
+                    const next = { ...(picking.cells ?? {}) };
+                    if (o === null) delete next[counts.col.id];
+                    else next[counts.col.id] = o;
+                    void writeCells(picking, next);
+                    setPicking(null);
+                  }}
+                  className={`tap w-full justify-start rounded-xl border px-3 text-[14px] font-bold ${
+                    (o === null ? now === null : now === o)
+                      ? 'pick-on'
+                      : 'border-neutral-200 bg-surface text-neutral-600'
+                  }`}
+                >
+                  {o ?? '안 고름'}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </Sheet>
 
       <ConfirmDialog

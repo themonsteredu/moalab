@@ -175,15 +175,39 @@ ok('안 바뀌었으면 저장을 안 보낸다', writes.filter((w) => w.method 
 await page.getByRole('button', { name: '닫기', exact: true }).last().click();
 await page.waitForTimeout(500);
 
-console.log('\n[한 글자도 안 적은 새 줄은 조용히 걷어낸다]');
-const rowsBefore = db.duty_rows.length;
-await page.getByRole('button', { name: /줄 추가/ }).click();
-await page.waitForTimeout(700);
-ok('줄을 추가하면 바로 고치기 칸이 열린다', await page.getByLabel('학교·기관').isVisible());
-ok('그 순간 DB 에 줄이 선다', db.duty_rows.length === rowsBefore + 1);
-await page.getByRole('button', { name: '닫기', exact: true }).last().click();
-await page.waitForTimeout(800);
-ok("'이름 없음' 이 목록에 안 남는다", db.duty_rows.length === rowsBefore, `${db.duty_rows.length}줄`);
+console.log('\n[새 내용 입력 — 연달아 넣고, 빈 제목은 안 들어간다]');
+{
+  /* ⚠️ 예전에는 `+ 줄 추가` 가 **빈 줄을 먼저 만들고** 시트를 열어서,
+     한 글자도 안 적고 닫으면 조용히 걷어내야 했다. 지금은 첫 칸을 적어야만
+     줄이 만들어지므로 그 뒷정리 자체가 필요 없다 — 그걸 여기서 못박는다 */
+  const n0 = db.duty_rows.length;
+  await page.getByRole('button', { name: /새 내용 입력/ }).click();
+  await page.waitForTimeout(700);
+  ok('입력 시트가 열린다', await page.getByLabel('학교·기관', { exact: true }).isVisible());
+  ok('그 순간에는 DB 에 아무것도 안 선다', db.duty_rows.length === n0);
+
+  // 첫 칸을 비우고 저장하면 한글로 막는다
+  await page.getByRole('button', { name: '저장 후 다음 건' }).click();
+  await page.waitForTimeout(600);
+  ok('첫 칸이 비면 한글로 막는다', await page.getByText(/학교·기관을 적어주세요/).isVisible());
+  ok('막혔으면 줄도 안 생긴다', db.duty_rows.length === n0, `${db.duty_rows.length}줄`);
+
+  // 연달아 두 건 — 시트가 닫히지 않고 칸만 비워진다
+  await page.getByLabel('학교·기관', { exact: true }).fill('첫번째중학교');
+  await page.getByRole('button', { name: '저장 후 다음 건' }).click();
+  await page.waitForTimeout(800);
+  ok('한 건이 들어간다', db.duty_rows.length === n0 + 1, `${db.duty_rows.length}줄`);
+  ok('시트가 그대로 열려 있다', await page.getByLabel('학교·기관', { exact: true }).isVisible());
+  ok('칸이 비워진다', (await page.getByLabel('학교·기관', { exact: true }).inputValue()) === '');
+  ok('몇 건 넣었는지 알려준다', await page.getByText(/1건 저장됨/).isVisible());
+
+  await page.getByLabel('학교·기관', { exact: true }).fill('두번째초등학교');
+  await page.getByRole('button', { name: '저장하고 닫기' }).click();
+  await page.waitForTimeout(800);
+  ok('저장하고 닫으면 시트가 닫힌다', !(await page.getByLabel('학교·기관', { exact: true }).isVisible()));
+  ok('연달아 두 건이 들어간다', db.duty_rows.length === n0 + 2, `${db.duty_rows.length}줄`);
+  ok('목록에 보인다', await page.getByText('두번째초등학교').first().isVisible());
+}
 
 console.log('\n[여러 줄 한꺼번에 넣기]');
 {
@@ -192,7 +216,8 @@ console.log('\n[여러 줄 한꺼번에 넣기]');
        · 미리보기 없이 여러 건이 한꺼번에 들어가는 것 (지우는 것도 여러 번이다)
        · 같은 기관이 두 줄로 늘어 어느 쪽에 연락 기록을 적었는지 모르게 되는 것
        · 줄마다 요청이 나가는 것 — 300줄이면 요청 300번이다 */
-  await page.getByRole('button', { name: /여러 줄 넣기/ }).click();
+  const n0 = db.duty_rows.length;
+  await page.getByRole('button', { name: /목록 한꺼번에/ }).click();
   await page.waitForTimeout(600);
   const box2 = page.getByLabel('넣을 줄 붙여넣기');
   ok('붙여넣는 칸이 열린다', await box2.isVisible());
@@ -212,13 +237,16 @@ console.log('\n[여러 줄 한꺼번에 넣기]');
 
   ok('요청 한 번으로 넣는다 (줄마다 보내지 않는다)',
     writes.filter((w) => w.table === 'duty_rows' && w.method === 'POST').length === posts + 1);
-  ok('DB 에 두 줄이 늘었다', db.duty_rows.length === 3, `${db.duty_rows.length}줄`);
+  /* ⚠️ 줄 수를 **상대로** 센다. 앞 절에서 몇 줄을 넣었는지에 따라 절대 번호가
+     밀리는데, 그러면 앞 절을 손볼 때마다 여기가 같이 깨진다 */
+  ok('DB 에 두 줄이 늘었다', db.duty_rows.length === n0 + 2, `${db.duty_rows.length}줄`);
+  const added = db.duty_rows.slice(-2);
   ok('탭으로 가른 칸이 제자리에 들어간다',
-    db.duty_rows[1].cells.c1 === '광주청소년문화의집' && db.duty_rows[1].cells.c2 === '계약',
-    JSON.stringify(db.duty_rows[1].cells));
-  ok('안 적은 칸은 아예 안 넣는다', db.duty_rows[2].cells.c2 === undefined,
-    JSON.stringify(db.duty_rows[2].cells));
-  ok('누가 넣었는지 남는다', db.duty_rows[2].updated_by === ME);
+    added[0].cells.c1 === '광주청소년문화의집' && added[0].cells.c2 === '계약',
+    JSON.stringify(added[0].cells));
+  ok('안 적은 칸은 아예 안 넣는다', added[1].cells.c2 === undefined,
+    JSON.stringify(added[1].cells));
+  ok('누가 넣었는지 남는다', added[1].updated_by === ME);
   ok('넣고 나면 목록에 바로 보인다',
     await page.getByText('북구청소년문화의집').first().isVisible());
 }
@@ -256,7 +284,9 @@ ok('저장을 눌러야 바뀐다', db.duty_columns.find((c) => c.id === 'c1').n
 console.log('\n[업로드만 하면 되는 역할 — 자료가 먼저다]');
 await page.goto(`${BASE}/roles/u2`, { waitUntil: 'commit' });
 await page.waitForTimeout(2500);
-ok('업로드만 하면 되는 일이라고 알려준다', await page.getByText(/파일 한 벌/).first().isVisible());
+/* ⚠️ 예전엔 "결과물이 파일 한 벌이면…" 이라는 안내문을 재고 있었는데, 화면이
+   **설명을 말로 하지 않기로** 바뀌면서 그 문구가 사라졌다. 갈래는 이제 **배치로**
+   말한다 — 자료가 위로 오고 표는 접혀 있다. 아래 두 줄이 그것을 잰다 */
 {
   // **자료가 목록보다 위에 있어야 한다** — 주인공이 갈래마다 다르다
   const y = (t) => page.getByText(t, { exact: true }).first().evaluate((el) => el.getBoundingClientRect().top);
@@ -305,6 +335,29 @@ await page.waitForTimeout(2500);
   ok('번호가 붙는다 (종이에서 줄을 세려면 필요하다)', cells[0] === '1');
   ok('가로 인쇄로 정해둔다', (await page.locator('style').allInnerTexts()).join('').includes('A4 landscape'));
   ok('조작 줄은 인쇄에서 빠진다', await page.locator('.no-print').first().isVisible());
+}
+
+console.log('\n[상태는 목록에서 바로 바꾼다]');
+{
+  /* 영업 목록에서 제일 자주 하는 일이 `연락 전 → 제안서 보냄` 인데, 예전엔 그것 하나에
+     줄 누르고 → 시트 열고 → 열두 칸 중에서 찾아 내리고 → 닫기였다 */
+  await page.goto(`${BASE}/roles/u1`, { waitUntil: 'commit' });
+  await page.waitForTimeout(2500);
+  const row = db.duty_rows.find((r) => r.cells.c1 === '광주중학교(본교)');
+  ok('바꾸기 전 상태', row.cells.c2 === '연락 전', String(row.cells.c2));
+
+  await page.getByRole('button', { name: /광주중학교\(본교\) — 진행 상태 바꾸기/ }).click();
+  await page.waitForTimeout(600);
+  ok('칩을 누르면 보기가 뜬다', await page.getByRole('button', { name: '계약', exact: true }).isVisible());
+
+  const before = writes.filter((w) => w.method === 'PATCH').length;
+  await page.getByRole('button', { name: '계약', exact: true }).click();
+  await page.waitForTimeout(900);
+  ok('고르면 바로 저장된다 (2탭)', writes.filter((w) => w.method === 'PATCH').length === before + 1);
+  ok('DB 에 적힌다', row.cells.c2 === '계약', String(row.cells.c2));
+  ok('시트가 닫힌다', !(await page.getByRole('button', { name: '계약', exact: true }).isVisible()));
+  ok('목록 칩이 따라 바뀐다',
+    await page.getByRole('button', { name: /광주중학교\(본교\) — 진행 상태 바꾸기/ }).innerText() === '계약');
 }
 
 console.log('\n[폰 375px]');
