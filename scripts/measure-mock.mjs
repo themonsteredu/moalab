@@ -226,11 +226,9 @@ await page.waitForTimeout(600);
 await measure('부서 하나 펼침');
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT.replace('.png', '-roles-dept.png') });
 
-await page.getByRole('button', { name: /담당자 미정/ }).click();
-await page.waitForTimeout(700);
-await measure('미정만 보기');
-await page.getByRole('button', { name: /담당자 미정/ }).click();
-await page.waitForTimeout(500);
+/* `담당자 미정만 보기` 는 34단계에서 사라졌다 — 역할에는 사람을 안 붙이고
+   부서(팀장)가 도맡기로 하면서 그 필터가 잴 대상이 없어졌다. 여기 남아 있던
+   클릭이 30초 타임아웃으로 죽어서 **그 아래 /roles/[dutyId] 를 영영 못 쟀다** */
 
 /* 검색이 걸리면 트리가 저절로 펼쳐져야 한다.
    defaultOpen 은 첫 값만 잡아서 실제로는 안 열렸다 — Collapsible 의 forceOpen 으로 고쳤다.
@@ -248,11 +246,40 @@ await page.waitForTimeout(700);
 const person = await measure('사람별');
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT.replace('.png', '-roles.png') });
 
-await page.getByRole('button', { name: '내 역할', exact: true }).click();
+/* 34단계에서 `내 역할` → **`내 부서`** 로 바뀌었다 (내가 팀장인 부서).
+   옛 이름을 누르고 있어서 여기서도 타임아웃으로 죽었다 */
+await page.getByRole('button', { name: '내 부서', exact: true }).click();
 await page.waitForTimeout(700);
-await measure('내 역할');
+await measure('내 부서');
 
-const worst = [...rolesTop.small, ...person.small];
+/* ★ 내 부서는 **중분류별로 접힌다** (39단계). 원장의 영업마케팅부는 역할 28개라
+   펼쳐 늘어놓으니 폰 1701px · PC 1904px 이었다. 접힌 채로 0건처럼 보이면 안 되므로
+   **펼치기와 검색 자동 펼침을 실제로 눌러본다.** 역할 이름은 화면에서 읽어 쓴다 —
+   가짜 데이터의 이름에 묶이면 데이터를 바꿀 때마다 여기가 깨진다 */
+let meOpened = null;
+{
+  const hdr = page.getByRole('button', { name: /역할 \d+/ }).first();
+  const hasHdr = (await hdr.count()) > 0;
+  console.log(`\n내 부서 접힌 머리글: ${hasHdr ? 'OK' : '✗ 없음 (접이식이 아니다)'}`);
+  if (hasHdr) {
+    await hdr.click();
+    await page.waitForTimeout(500);
+    meOpened = await measure('내 부서 · 중분류 하나 펼침');
+    const first = page.locator('a[href^="/roles/"] span.font-semibold').first();
+    const name = ((await first.textContent()) ?? '').trim();
+    await hdr.click();
+    await page.waitForTimeout(300);
+    const beforeQ = await page.getByText(name, { exact: true }).first().isVisible().catch(() => false);
+    await page.getByLabel('내 부서 역할 검색').fill(name.slice(0, 3));
+    await page.waitForTimeout(600);
+    const afterQ = await page.getByText(name, { exact: true }).first().isVisible().catch(() => false);
+    console.log(`내 부서 검색 자동 펼침: 검색 전 보임=${beforeQ} → 검색 후 보임=${afterQ}  ${!beforeQ && afterQ ? 'OK' : '✗'}`);
+    await page.getByLabel('내 부서 역할 검색').fill('');
+    await page.waitForTimeout(300);
+  }
+}
+
+const worst = [...rolesTop.small, ...person.small, ...(meOpened?.small ?? [])];
 if (worst.length) {
   console.log('\n44px 미만 탭 대상');
   [...new Set(worst)].forEach((s) => console.log('  · ' + s));

@@ -145,11 +145,6 @@ export default function MoneyPage() {
             );
           })}
         </div>
-
-        <p className="mt-4 px-1 text-[12px] leading-relaxed text-neutral-400">
-          셋은 <b className="text-neutral-500">문만 같이 쓰고 표는 따로</b>예요. 원가는 <i>앞으로 얼마 들까</i>,
-          지출은 <i>실제로 얼마 썼나</i>라서 섞으면 둘 다 못 쓰거든요.
-        </p>
       </div>
     </div>
   );

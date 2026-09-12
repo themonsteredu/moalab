@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { DRIVE_KEY, OAUTH_KEEP, OAUTH_TTL_MS, type DriveMeta } from '@/lib/drive';
+import { actorFromToken } from '@/lib/chatServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,14 +17,13 @@ export const dynamic = 'force-dynamic';
  * · **앞서 만든 것을 덮어쓰지 않고 몇 개를 같이 들고 있는다.** 폰에서 구글 창을
  *   닫지 않고 여기서 한 번 더 누르면, 앞 창을 끝내도 확인값이 안 맞아 튕긴다
  */
-export async function GET(req: Request) {
+export async function POST(req: Request) {
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: '서버 설정이 아직 안 됐어요.' }, { status: 500 });
 
-  const actorId = new URL(req.url).searchParams.get('actor');
-  if (!actorId) return NextResponse.json({ error: '권한이 없어요.' }, { status: 403 });
-  const { data: me } = await admin.from('members').select('role,active').eq('id', actorId).maybeSingle();
-  if (!me || !me.active || me.role !== 'admin') {
+  const form = await req.formData().catch(() => null);
+  const actor = await actorFromToken(admin, typeof form?.get('sessionToken') === 'string' ? String(form.get('sessionToken')) : null);
+  if (!actor || actor.role !== 'admin') {
     return NextResponse.json({ error: '원장만 쓸 수 있어요.' }, { status: 403 });
   }
 
@@ -69,5 +69,6 @@ export async function GET(req: Request) {
   go.searchParams.set('access_type', 'offline');
   go.searchParams.set('prompt', 'consent');
   go.searchParams.set('state', state);
-  return NextResponse.redirect(go);
+  // 폼 POST 뒤 Google 동의 화면은 GET으로 열어야 한다.
+  return NextResponse.redirect(go, 303);
 }

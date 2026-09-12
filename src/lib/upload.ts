@@ -99,11 +99,19 @@ export interface DriveQueueInput {
 }
 
 /** 절대 await 하지 않아도 된다. 실패해도 아무 일도 일어나지 않는다 */
-export function queueDrive(actorId: string | null | undefined, input: DriveQueueInput): void {
-  if (!actorId || input.files.length === 0) return;
+export function queueDrive(
+  actorId: string | null | undefined,
+  sessionToken: string | null | undefined,
+  input: DriveQueueInput,
+): void {
+  if (!actorId || !sessionToken || input.files.length === 0) return;
   void fetch('/api/drive/queue', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-actor-id': actorId },
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': actorId,
+      'x-session-token': sessionToken,
+    },
     body: JSON.stringify(input),
   }).catch(() => null);
 }

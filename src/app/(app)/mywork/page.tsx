@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
+import { useDutyCounts } from '@/lib/useDutyCounts';
 import { logActivity } from '@/lib/log';
 import { buildOrg, type DutyRef } from '@/lib/org';
 import { isOverdue, sortTasks, todayStr } from '@/lib/task';
@@ -12,6 +13,8 @@ import { collabPriorityLabel, sortRequests } from '@/lib/collab';
 import { korDate, ddayLabel, ddayClass, hhmm, relTime, toISODate } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
 import { Icon } from '@/components/Icon';
+import { SalesBoard } from '@/components/SalesBoard';
+import type { SalesInput } from '@/lib/sales';
 import { Collapsible, EmptyState, ErrorBanner, Sheet, CardSkeleton, useToast } from '@/components/ui';
 import type {
   AppRow,
@@ -60,9 +63,8 @@ export default function MyWorkPage() {
   const [deptNames, setDeptNames] = useState<Record<string, string>>({});
   const [entries, setEntries] = useState<ReturnType<typeof buildEntries>>([]);
   const [files, setFiles] = useState<FileRow[]>([]);
-  /** 역할별 자료 개수 — 줄에 배지로 보여준다 (내 것만이 아니라 그 역할에 쌓인 전부) */
-  const [fileCount, setFileCount] = useState<Record<string, number>>({});
-  const [rowCount, setRowCount] = useState<Record<string, number>>({});
+  /** 역할별 줄·자료 개수 — 줄에 배지로 보여준다. `부서업무 › 내 부서` 와 같은 훅이다 */
+  const counts = useDutyCounts();
   const [error, setError] = useState('');
   const [actionErr, setActionErr] = useState('');
 
@@ -85,7 +87,7 @@ export default function MyWorkPage() {
     if (!meId) return;
     setError('');
     try {
-      const [taskRes, deptRes, grpRes, dutyRes, helperRes, collabRes, schedRes, smRes, appRes, revRes, dfRes, pfRes, dcRes, drRes] =
+      const [taskRes, deptRes, grpRes, dutyRes, helperRes, collabRes, schedRes, smRes, appRes, revRes, dfRes, pfRes] =
         await Promise.all([
           supabase.from('tasks').select('*').eq('assignee_id', meId),
           supabase.from('departments').select('*').order('sort_order'),
@@ -109,8 +111,6 @@ export default function MyWorkPage() {
             .eq('member_id', meId)
             .order('created_at', { ascending: false })
             .limit(10),
-          supabase.from('duty_files').select('duty_id'),
-          supabase.from('duty_rows').select('duty_id'),
         ]);
 
       setTasks((taskRes.data ?? []) as Task[]);
@@ -132,20 +132,6 @@ export default function MyWorkPage() {
       const mine = new Set(depts.filter((d) => d.head_id === meId).map((d) => d.id));
       const myDepts = [...mine];
       setMyDeptIds(myDepts);
-
-      const counted: Record<string, number> = {};
-      for (const r of (dcRes.data ?? []) as { duty_id: string }[]) {
-        counted[r.duty_id] = (counted[r.duty_id] ?? 0) + 1;
-      }
-      setFileCount(counted);
-
-      /* 표에 몇 줄 쌓였는지 — 자료 개수와 나란히 칩으로 보여준다.
-         `duty_rows` 표가 아직 없는 DB 에서도 화면이 죽으면 안 되므로 실패는 조용히 0 이다 */
-      const rowed: Record<string, number> = {};
-      for (const r of (drRes.data ?? []) as { duty_id: string }[]) {
-        rowed[r.duty_id] = (rowed[r.duty_id] ?? 0) + 1;
-      }
-      setRowCount(rowed);
 
       /* ---- 받은 요청 --------------------------------------------------- */
       const reqs = (collabRes.data ?? []) as CollabRequest[];
@@ -302,6 +288,12 @@ export default function MyWorkPage() {
     [tree, myDeptIds],
   );
 
+  /** 영업 한 판에 넣을 후보 — 내 부서의 역할 전부. 어떤 표를 실제로 모을지는 sales.ts 가 칸을 보고 정한다 */
+  const salesInputs = useMemo<SalesInput[]>(
+    () => myDepts.flatMap((d) => d.groups.flatMap((g) => g.duties.map((n) => ({ duty: n.duty, groupName: g.group.name })))),
+    [myDepts],
+  );
+
 
   const sortedCollabs = useMemo(() => sortRequests(collabs, today), [collabs, today]);
 
@@ -400,6 +392,11 @@ export default function MyWorkPage() {
               {chip('오늘', stat.today, 'today')}
             </div>
 
+            {/* ------------------------------------------------------ 영업 한 판 */}
+            {/* 기관 표가 갈래 15개로 나뉘어 "오늘 연락할 곳" 을 보려면 15개를 열어야 했다.
+                여기서 읽어서 합친다 — 모을 표가 없는 사람(영업이 아닌 부서)에게는 아예 안 그려진다 */}
+            <SalesBoard inputs={salesInputs} today={today} />
+
             {/* ------------------------------------------------------ 내 부서 */}
             {/* 원장이 말한 구조: *"내 업무를 클릭하면 내 부서의 일을 체계적으로 할 수
                 있는 구조가 펼쳐지면 좋겠음"*. 그래서 접지 않고 **펼친 채로** 그린다 —
@@ -432,12 +429,6 @@ export default function MyWorkPage() {
                       전체 ›
                     </Link>
                   </div>
-                  <p className="mb-2 text-[12px] leading-relaxed text-neutral-400">
-                    역할을 누르면 <b className="text-neutral-500">그 일을 하는 자리가 열려요</b> — 목록·자료·바로가기.
-                    올린 파일은
-                    구글 드라이브 <code className="text-neutral-500">업무분장/{d.dept.name}</code> 에도 들어갑니다.
-                  </p>
-
                   <div className="divide-y divide-neutral-100">
                     {d.groups.map((g) => (
                       <div key={g.group.id} className="py-2 first:pt-0 last:pb-0">
@@ -446,8 +437,8 @@ export default function MyWorkPage() {
                         </p>
                         <ul>
                           {g.duties.map((n) => {
-                            const files = fileCount[n.duty.id] ?? 0;
-                            const lines = rowCount[n.duty.id] ?? 0;
+                            const files = counts.files[n.duty.id] ?? 0;
+                            const lines = counts.rows[n.duty.id] ?? 0;
                             return (
                               <li key={n.duty.id} className="flex items-center gap-1">
                                 {/* **역할 한 장으로 간다** — 목록·자료·바로가기가 거기 다 있다.
@@ -666,12 +657,9 @@ export default function MyWorkPage() {
               /* 문장 안에 링크를 그냥 두면 탭 면이 19px 이다. 패딩으로 키우고
                  마진으로 되돌려 **줄 높이는 그대로** 둔다 (일정 화면과 같은 처리) */
               <div className="flex items-center gap-2 px-1">
-                <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-neutral-400">
-                  남에게 나눠주는 것은 업무배분에서 해요.
-                </p>
                 <Link
                   href="/task"
-                  className="-my-3 flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
+                  className="-my-3 ml-auto flex min-h-[44px] shrink-0 items-center text-[12px] font-bold text-brand"
                 >
                   업무배분 ›
                 </Link>

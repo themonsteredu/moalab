@@ -254,6 +254,62 @@ export interface RevenueShareMemberSnapshot {
   name: string;
 }
 
+/* ------------------------------------------------------------- 정부지원사업 */
+
+export type GrantStatus =
+  | 'discovered'
+  | 'concept_shared'
+  | 'writing'
+  | 'submitted'
+  | 'selected'
+  | 'not_selected'
+  | 'paused';
+
+export interface GrantProject {
+  id: string;
+  title: string;
+  agency: string | null;
+  announcement_url: string | null;
+  deadline: string | null;
+  item_name: string | null;
+  target_audience: string | null;
+  concept_summary: string | null;
+  differentiation: string | null;
+  support_needed: string | null;
+  lead_id: string | null;
+  status: GrantStatus;
+  duplicate_checked: boolean;
+  concept_shared_at: string | null;
+  submitted_at: string | null;
+  result_note: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GrantCollaborator {
+  grant_id: string;
+  member_id: string;
+  created_at: string;
+}
+
+export type GrantFileKind = 'announcement' | 'final_plan';
+
+export interface GrantFile {
+  id: string;
+  grant_id: string;
+  kind: GrantFileKind;
+  file_path: string;
+  /** API가 짧게 발급한 비공개 열람 주소 */
+  signed_url?: string | null;
+  file_name: string;
+  file_size: number | null;
+  mime_type: string | null;
+  member_id: string | null;
+  created_at: string;
+}
+
 /** 프로젝트 한 개의 한 달 수익배분 계산 스냅샷. */
 export interface RevenueProjectMonth {
   id: string;
@@ -826,4 +882,32 @@ export interface RoomSummary {
   lastBody: string | null;
   lastAt: string | null;
   lastFrom: string | null;
+}
+
+/* ------------------------------------------------------------ 설정 · 회사 정보 */
+
+/**
+ * **우리 회사 정보** — 제안서·견적서 맨 끝에 찍히는 것.
+ * 코드에 박아넣지 않는다 (강의계획서 로고를 올리는 칸으로 둔 것과 같은 판단 —
+ * 대표·전화·주소는 바뀌고, 바뀔 때마다 배포할 일이 아니다).
+ * `moalab.settings` 의 `org` 줄에 jsonb 로 들어간다.
+ */
+export interface OrgProfile {
+  name: string;
+  ceo: string;
+  tel: string;
+  email: string;
+  address: string;
+  /** 사업자등록번호 — 견적서에 필요하다 */
+  bizNo: string;
+}
+
+export const EMPTY_ORG: OrgProfile = { name: '', ceo: '', tel: '', email: '', address: '', bizNo: '' };
+
+/** 설정 한 줄 — 열쇠 하나에 jsonb 하나 (`org` 처럼) */
+export interface SettingRow {
+  key: string;
+  value: Record<string, unknown>;
+  updated_by: string | null;
+  updated_at: string;
 }

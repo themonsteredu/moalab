@@ -311,53 +311,56 @@ console.log('\n[엑셀로 내보내기 — 열리는 것이 목적이다]');
   eq('헤더에 줄바꿈이 섞이지 않는다', /[\r\n]/.test(T.csvDisposition('줄\n바꿈')), false);
 }
 
-console.log('\n[여러 줄 붙여넣기 — 기관 목록을 한 번에]');
+console.log('\n[여러 줄 한꺼번에 넣기]');
 {
-  /* ⚠️ 이 절이 있는 이유: 표를 만든 역할 65개 중 59개가 줄 0개였고, 채워진 것은
-     updated_at 이 마이크로초까지 같았다 — 손으로 친 게 아니라 SQL 로 넣은 것이다.
-     한 건마다 시트를 열어 12칸을 훑게 해놨으니 아무도 못 넣었다 */
-  const cols = [
+  /* 기관 발굴 목록은 광주·전남에 수백 곳이라 `+ 줄 추가` 를 수백 번 누를 수 없다.
+     여기서 막고 싶은 것은 **붙여넣은 것과 들어간 것이 다른 것**이다 —
+     조용히 자르거나, 같은 기관이 두 줄로 늘거나, 첫 칸이 빈 줄이 쌓이는 것 */
+  const cs = [
     col('c1', '기관 이름'),
-    col('c2', '진행 상태', 'select', ['연락 전', '계약']),
-    col('c3', '예상 인원', 'number'),
-    col('c4', '다음 연락일', 'date'),
-    col('c5', '끝남', 'check'),
+    col('c2', '진행 상태', 'select', ['연락 전', '연락함']),
+    col('c3', '인원', 'number'),
+    col('c4', '방문함', 'check'),
   ];
 
-  // 이름만 주르륵 — 제일 흔한 붙여넣기
-  const only = T.parsePaste(cols, '광주중학교\n무등초등학교\n\n수완중학교\n');
-  eq('빈 줄은 건너뛴다', only.length, 3);
-  eq('탭이 없으면 첫 칸만 채운다', only[0], { c1: '광주중학교' });
-  eq('순서가 유지된다', only.map((r) => r.c1), ['광주중학교', '무등초등학교', '수완중학교']);
+  const one = T.parsePasted(cs, [], '광주청소년문화의집\n북구청소년문화의집');
+  eq('한 줄이 한 개다', one.rows.length, 2);
+  eq('첫 칸에 이름이 들어간다', one.rows[0].c1, '광주청소년문화의집');
+  eq('안 적은 칸은 아예 안 넣는다', Object.keys(one.rows[0]), ['c1']);
+  eq('미리보기 제목', one.titles, ['광주청소년문화의집', '북구청소년문화의집']);
 
-  // 엑셀에서 복사 = 탭 구분
-  const tabbed = T.parsePaste(cols, '광주중학교\t연락 전\t1,200\t2026-09-20\t예');
-  eq('탭으로 칸을 가른다', tabbed[0].c1, '광주중학교');
-  eq('숫자 칸의 콤마를 턴다', tabbed[0].c3, 1200);
-  eq('날짜도 그대로', tabbed[0].c4, '2026-09-20');
-  eq('예/아니오를 알아본다', tabbed[0].c5, true);
+  eq('빈 줄은 조용히 넘긴다', T.parsePasted(cs, [], 'ㄱ\n\n \n\nㄴ').rows.length, 2);
+  eq('앞뒤 공백을 턴다', T.parsePasted(cs, [], '  광주청년센터  ').rows[0].c1, '광주청년센터');
 
-  // '아니오' 를 그냥 Boolean 하면 참이 된다 — 제일 조용한 사고다
-  eq("'아니오' 는 거짓이다", T.parsePaste(cols, 'A\t\t\t\t아니오')[0].c5, undefined);
-  eq("'O' 도 참으로 본다", T.parsePaste(cols, 'A\t\t\t\tO')[0].c5, true);
-  eq("'ㅇ' 도 참으로 본다", T.parsePaste(cols, 'A\t\t\t\tㅇ')[0].c5, true);
+  /* ★ 탭이 있으면 칸 구분. **쉼표는 안 본다** — `광주 동구, 서구` 가 쪼개진다 */
+  const tab = T.parsePasted(cs, [], '동구청소년문화의집\t연락함\t30\t예');
+  eq('탭은 칸을 가른다', tab.rows[0], { c1: '동구청소년문화의집', c2: '연락함', c3: 30, c4: true });
+  const comma = T.parsePasted(cs, [], '광주 동구, 서구 청소년센터');
+  eq('쉼표는 칸을 안 가른다', comma.rows[0].c1, '광주 동구, 서구 청소년센터');
 
-  // 칸 수가 안 맞아도 안 죽는다
-  eq('칸이 모자라면 빈 칸', T.parsePaste(cols, '광주중\t연락 전')[0], { c1: '광주중', c2: '연락 전' });
-  eq('칸이 넘치면 버린다', Object.keys(T.parsePaste(cols, 'A\tB\t1\td\t예\t남는것\t또')[0]).length <= 5, true);
-  eq('빈 글자는 안 넣는다', T.parsePaste(cols, '광주중\t\t\t\t')[0], { c1: '광주중' });
-  eq('숫자 칸에 글자면 안 넣는다', T.parsePaste(cols, 'A\t\t몰라')[0], { c1: 'A' });
+  eq('예/아니오는 글자로 온다', T.parsePasted(cs, [], 'ㄱ\t\t\t아니오').rows[0].c4, undefined);
+  eq('숫자가 아니면 0 으로 안 묻는다', T.parsePasted(cs, [], 'ㄱ\t\t미정').rows[0].c3, undefined);
+  eq('숫자의 쉼표는 털어낸다', T.parsePasted(cs, [], 'ㄱ\t\t1,200').rows[0].c3, 1200);
 
-  // 보기에 없는 값도 버리지 않는다 (화면이 옛 값을 그대로 보여주게 이미 만들어뒀다)
-  eq('보기에 없는 상태도 남긴다', T.parsePaste(cols, 'A\t처음보는상태')[0].c2, '처음보는상태');
+  /* ★ 같은 기관이 두 줄이면 어느 쪽에 연락 기록을 적었는지 모르게 된다 */
+  const dup = T.parsePasted(cs, [row('r1', { c1: '광주청년센터' })], '광주청년센터\n전남청년센터\n전남청년센터');
+  eq('이미 있는 이름은 건너뛴다', dup.rows.length, 1);
+  eq('붙여넣기 안에서 겹치는 것도 건너뛴다', dup.dup, 2);
+  eq('건너뛴 것 말고는 그대로 들어간다', dup.titles, ['전남청년센터']);
 
-  eq('빈 글은 0줄', T.parsePaste(cols, '   \n\n  ').length, 0);
-  eq('칸이 없으면 0줄', T.parsePaste([], '광주중학교').length, 0);
-  eq('줄바꿈이 \\r\\n 이어도 (윈도우 엑셀)', T.parsePaste(cols, 'A\r\nB').length, 2);
+  /* ★ 첫 칸이 비면 `이름 없음` 이 쌓여 목록에서 아무것도 못 찾는다 */
+  const blank = T.parsePasted(cs, [], '\t연락함\t10\nㄱ');
+  eq('첫 칸이 비면 버린다', blank.rows.length, 1);
+  eq('버린 줄을 세어서 알려준다', blank.blank, 1);
 
-  // 미리보기 — 저장 전에 뭐가 들어가는지 보여준다
-  eq('미리보기', T.pastePreview(cols, { c1: '광주중학교', c3: 30 }), '광주중학교 · 2칸');
-  eq('제목이 비면 이름 없음', T.pastePreview(cols, { c3: 30 }), '이름 없음 · 1칸');
+  /* ★ 조용히 자르면 붙여넣은 것과 들어간 것이 다른 걸 아무도 모른다 */
+  const many = T.parsePasted(cs, [], Array.from({ length: 8 }, (_, i) => `기관${i}`).join('\n'), 5);
+  eq('최대치에서 자른다', many.rows.length, 5);
+  eq('몇 줄이 잘렸는지 센다', many.cut, 3);
+
+  eq('열보다 칸이 많으면 알려준다', T.parsePasted(cs, [], 'ㄱ\t\t\t\t남는 칸').over, 1);
+  eq('열이 없으면 아무것도 안 넣는다', T.parsePasted([], [], 'ㄱ\nㄴ').rows.length, 0);
+  eq('빈 붙여넣기', T.parsePasted(cs, [], '   ').rows.length, 0);
 }
 
 console.log('\n[맨 뒤에 붙이기]');

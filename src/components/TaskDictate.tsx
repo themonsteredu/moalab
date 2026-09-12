@@ -172,12 +172,6 @@ export function TaskDictate({
                 <b>폰 키보드의 마이크</b>를 눌러 말해도 돼요. 잘못 들은 건 여기서 고치면 됩니다.
               </p>
             </div>
-            <div className="rounded-xl bg-neutral-100 px-3.5 py-3">
-              <p className="text-[12.5px] leading-relaxed text-neutral-500">
-                <b>누가 · 무엇을 · 언제까지</b>가 들어가면 알아서 나눠줍니다.
-                누구인지나 기한이 안 나오면 빈 칸으로 두고, 다음 화면에서 채우면 돼요.
-              </p>
-            </div>
           </>
         ) : (
           <>

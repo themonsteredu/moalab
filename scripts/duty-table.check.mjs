@@ -146,7 +146,7 @@ ok('상태 칩이 보인다', await page.getByText('연락 전', { exact: true }
 
 await page.getByRole('button', { name: /광주중학교/ }).first().click();
 await page.waitForTimeout(600);
-const box = page.getByLabel('학교·기관', { exact: true });
+const box = page.getByLabel('학교·기관');
 ok('줄을 누르면 고치기 칸이 열린다', await box.isVisible());
 
 const before = writes.filter((w) => w.method === 'PATCH').length;
@@ -177,93 +177,63 @@ await page.waitForTimeout(500);
 
 console.log('\n[한 글자도 안 적은 새 줄은 조용히 걷어낸다]');
 const rowsBefore = db.duty_rows.length;
-await page.getByRole('button', { name: /한 줄 자세히/ }).click();
+await page.getByRole('button', { name: /줄 추가/ }).click();
 await page.waitForTimeout(700);
-ok("'한 줄 자세히' 는 시트를 연다 (칸을 다 채울 때)", await page.getByLabel('학교·기관', { exact: true }).isVisible());
+ok('줄을 추가하면 바로 고치기 칸이 열린다', await page.getByLabel('학교·기관').isVisible());
 ok('그 순간 DB 에 줄이 선다', db.duty_rows.length === rowsBefore + 1);
 await page.getByRole('button', { name: '닫기', exact: true }).last().click();
 await page.waitForTimeout(800);
 ok("'이름 없음' 이 목록에 안 남는다", db.duty_rows.length === rowsBefore, `${db.duty_rows.length}줄`);
 
-console.log('\n[이름만 적고 엔터 — 연달아 넣을 수 있어야 한다]');
+console.log('\n[여러 줄 한꺼번에 넣기]');
 {
-  /* ⚠️ 이 절이 있는 이유: 맨 아래 버튼 하나였을 때 **표 65개 중 59개가 빈 표**였다.
-     한 건마다 시트를 열어 12칸을 훑고 다시 맨 아래로 스크롤해야 했다 */
-  const n0 = db.duty_rows.length;
-  const quick = page.getByLabel('학교·기관 적고 줄 추가');
-  ok('목록 위에 빠른 추가 칸이 있다', await quick.isVisible());
-
-  await quick.fill('첫번째중학교');
-  await quick.press('Enter');
-  await page.waitForTimeout(700);
-  ok('엔터로 줄이 생긴다', db.duty_rows.length === n0 + 1, `${db.duty_rows.length}줄`);
-  ok('첫 칸에 이름이 들어간다',
-    db.duty_rows[db.duty_rows.length - 1].cells.c1 === '첫번째중학교',
-    JSON.stringify(db.duty_rows[db.duty_rows.length - 1].cells));
-  ok('칸이 비워진다', (await quick.inputValue()) === '');
-  ok('포커스가 그대로다 (연달아 넣는 게 이 칸의 쓸모다)',
-    await quick.evaluate((el) => el === document.activeElement));
-
-  // 연달아 두 건 더 — 스크롤도 시트도 없이
-  await quick.fill('두번째초등학교');
-  await quick.press('Enter');
+  /* 기관 발굴 목록은 광주·전남에 수백 곳이다. `+ 줄 추가` 를 수백 번 누르게 하면
+     아무도 시작을 못 한다. 여기서 막고 싶은 것:
+       · 미리보기 없이 여러 건이 한꺼번에 들어가는 것 (지우는 것도 여러 번이다)
+       · 같은 기관이 두 줄로 늘어 어느 쪽에 연락 기록을 적었는지 모르게 되는 것
+       · 줄마다 요청이 나가는 것 — 300줄이면 요청 300번이다 */
+  await page.getByRole('button', { name: /여러 줄 넣기/ }).click();
   await page.waitForTimeout(600);
-  await quick.fill('세번째고등학교');
-  await quick.press('Enter');
-  await page.waitForTimeout(600);
-  ok('연달아 세 건이 들어간다', db.duty_rows.length === n0 + 3, `${db.duty_rows.length}줄`);
-  ok('목록에 보인다', await page.getByText('세번째고등학교').first().isVisible());
+  const box2 = page.getByLabel('넣을 줄 붙여넣기');
+  ok('붙여넣는 칸이 열린다', await box2.isVisible());
+  ok('칸 순서를 알려준다', await page.getByText(/칸 순서 —/).first().isVisible());
+  ok('붙여넣기 전에는 넣기 버튼이 안 눌린다',
+    await page.getByRole('button', { name: '붙여넣어 주세요' }).isDisabled());
 
-  ok('빈 칸이면 버튼이 안 눌린다',
-    await page.getByRole('button', { name: '줄 추가', exact: true }).isDisabled());
-}
-
-console.log('\n[상태는 목록에서 바로 바꾼다]');
-{
-  /* 제일 자주 하는 일인데 예전엔 줄 누르고 → 시트 → 12칸 중에서 찾아 내리고 → 닫기였다 */
-  const row = db.duty_rows.find((r) => r.cells.c1 === '광주중학교(본교)');
-  ok('바꾸기 전 상태', row.cells.c2 === '연락 전', String(row.cells.c2));
-
-  await page.getByRole('button', { name: /광주중학교\(본교\) — 진행 상태 바꾸기/ }).click();
-  await page.waitForTimeout(600);
-  ok('보기가 뜬다', await page.getByRole('button', { name: '계약', exact: true }).isVisible());
-
-  const before = writes.filter((w) => w.method === 'PATCH').length;
-  await page.getByRole('button', { name: '계약', exact: true }).click();
-  await page.waitForTimeout(900);
-  ok('고르면 바로 저장된다', writes.filter((w) => w.method === 'PATCH').length === before + 1);
-  ok('DB 에 적힌다', row.cells.c2 === '계약', String(row.cells.c2));
-  ok('시트가 닫힌다', !(await page.getByRole('button', { name: '계약', exact: true }).isVisible()));
-}
-
-console.log('\n[엑셀에서 복사한 표를 그대로 붙여넣기]');
-{
-  const n0 = db.duty_rows.length;
-  await page.getByRole('button', { name: /여러 줄 붙여넣기/ }).click();
-  await page.waitForTimeout(600);
-  const box = page.getByLabel('붙여넣을 내용');
-  ok('붙여넣는 칸이 열린다', await box.isVisible());
-  ok('칸 순서를 알려준다', await page.getByText(/칸 순서:/).isVisible());
-
-  // 엑셀에서 복사하면 탭 구분이다. 빈 줄도 딸려온다
-  await box.fill('가나중학교\t계약\n다라초등학교\t연락 전\n\n마바고등학교');
+  // 세 줄 중 하나는 이미 있는 기관이다 — 건너뛰어야 한다
+  await box2.fill('광주청소년문화의집\t계약\n북구청소년문화의집\n광주중학교(본교)');
   await page.waitForTimeout(500);
+  ok('저장 전에 몇 줄이 들어갈지 보여준다', await page.getByText('2줄이 들어갑니다').isVisible());
+  ok('이미 있는 것은 건너뛴다고 알려준다', await page.getByText('이미 있음 1').isVisible());
 
-  // **저장 전 미리보기가 필수다** — 여러 건이 한꺼번에 생기는 동작이다
-  ok('미리보기가 뜬다', await page.getByText('이렇게 들어갑니다').isVisible());
-  ok('빈 줄을 뺀 수를 버튼에 적는다',
-    await page.getByRole('button', { name: '3줄 넣기' }).isVisible());
-  ok('아직 DB 에는 안 들어갔다', db.duty_rows.length === n0);
+  const posts = writes.filter((w) => w.table === 'duty_rows' && w.method === 'POST').length;
+  await page.getByRole('button', { name: '2줄 넣기' }).click();
+  await page.waitForTimeout(1200);
 
-  await page.getByRole('button', { name: '3줄 넣기' }).click();
-  await page.waitForTimeout(900);
-  ok('세 줄이 한 번에 들어간다', db.duty_rows.length === n0 + 3, `${db.duty_rows.length}줄`);
-  const added = db.duty_rows.slice(-3);
-  ok('탭으로 가른 둘째 칸도 들어간다', added[0].cells.c2 === '계약', JSON.stringify(added[0].cells));
-  ok('탭이 없는 줄은 이름만', JSON.stringify(added[2].cells) === JSON.stringify({ c1: '마바고등학교' }),
-    JSON.stringify(added[2].cells));
-  ok('시트가 닫힌다', !(await page.getByLabel('붙여넣을 내용').isVisible()));
-  ok('목록에 보인다', await page.getByText('가나중학교').first().isVisible());
+  ok('요청 한 번으로 넣는다 (줄마다 보내지 않는다)',
+    writes.filter((w) => w.table === 'duty_rows' && w.method === 'POST').length === posts + 1);
+  ok('DB 에 두 줄이 늘었다', db.duty_rows.length === 3, `${db.duty_rows.length}줄`);
+  ok('탭으로 가른 칸이 제자리에 들어간다',
+    db.duty_rows[1].cells.c1 === '광주청소년문화의집' && db.duty_rows[1].cells.c2 === '계약',
+    JSON.stringify(db.duty_rows[1].cells));
+  ok('안 적은 칸은 아예 안 넣는다', db.duty_rows[2].cells.c2 === undefined,
+    JSON.stringify(db.duty_rows[2].cells));
+  ok('누가 넣었는지 남는다', db.duty_rows[2].updated_by === ME);
+  ok('넣고 나면 목록에 바로 보인다',
+    await page.getByText('북구청소년문화의집').first().isVisible());
+}
+
+console.log('\n[?q= 로 들어오면 그 줄부터 — 영업 한 판에서 누르면 여기로 온다]');
+{
+  /* 14줄짜리 표에 떨어져 다시 찾게 하면 '오늘 연락할 곳' 을 누를 이유가 없다 */
+  await page.goto(`${BASE}/roles/u1?q=${encodeURIComponent('북구청소년문화의집')}`, { waitUntil: 'commit' });
+  await page.waitForTimeout(2500);
+  ok('검색 칸이 미리 채워진다', (await page.getByLabel('목록에서 찾기').inputValue()) === '북구청소년문화의집');
+  ok('그 줄만 보인다', await page.getByText('북구청소년문화의집').first().isVisible());
+  ok('다른 줄은 걸러진다', !(await page.getByText('광주청소년문화의집', { exact: true }).first().isVisible().catch(() => false)));
+  await page.getByLabel('목록에서 찾기').fill('');
+  await page.waitForTimeout(500);
+  ok('검색을 지우면 원래 목록이다', await page.getByText('광주청소년문화의집', { exact: true }).first().isVisible());
 }
 
 console.log('\n[표의 모양(열)은 명시적 저장이다]');

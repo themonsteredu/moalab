@@ -143,6 +143,62 @@ const withLogo = H.buildPlanHwpxFiles(
 ok('로고가 그림으로 들어간다', withLogo['Contents/section0.xml'].includes('binaryItemIDRef="BIN0001"'));
 ok('로고가 있으면 기본 문구를 안 넣는다', !withLogo['Contents/section0.xml'].includes('모아킷_교육을 위한 모든 것'));
 
+
+// ══════════════════════════════════════════════════════════ 제안서
+// 강의계획서와 같은 부품(packageFiles·tableXml)을 쓰지만 표 모양이 다르다 —
+// 요약표 6칸, 프로그램마다 사진 한 줄. 한글이 거부하는 조건은 똑같이 지켜야 한다.
+const pInput = {
+  org: '광주 <테스트> 중학교', contact: '김선생', tel: '062-000-0000', date: '2026-09-04',
+  greeting: '인사 첫 줄\n인사 둘째 줄', closing: '맺음말 & 끝',
+  items: [
+    { appId: 'a1', title: '라면공작소', purpose: '소개 글', goal: '목표 글', grade: '중 1~3',
+      sessions: 2, headcount: 20, unitPrice: 15000, samples: ['u1', 'u2'] },
+    { appId: 'a2', title: '가격 없는 수업', purpose: '', goal: '', grade: '',
+      sessions: 1, headcount: 25, unitPrice: 0, samples: [] },
+  ],
+};
+const pOrg = { name: '모아킷', ceo: '강양희', tel: '010-0000-0000', email: 'a@b.c', address: '광주', bizNo: '' };
+const pPics = [0, 1].map((k) => ({
+  itemId: H.proposalPicId('a1', k), binId: `BIN000${k + 1}`, ext: 'jpg',
+  data: new Uint8Array([k + 1]), w: 17008, h: 12756,
+}));
+const pf = H.buildProposalHwpxFiles(pInput, pOrg, pPics);
+const psec = pf['Contents/section0.xml'];
+const phead = pf['Contents/header.xml'];
+
+ok('제안서: mimetype 은 application/hwp+zip', pf.mimetype === 'application/hwp+zip');
+for (const [name, xml] of Object.entries(pf)) {
+  if (typeof xml !== 'string' || !xml.startsWith('<?xml')) continue;
+  const open = (xml.match(/<[a-zA-Z][^>]*?(?<!\/)>/g) || []).length;
+  const close = (xml.match(/<\/[^>]+>/g) || []).length;
+  ok(`제안서: ${name} 태그 짝이 맞는다`, open === close);
+}
+ok('제안서: 속성에 접두어를 안 붙였다', !/\s(hp|hh|hc):[a-zA-Z]+=/.test(psec + phead));
+ok('제안서: 첫 문단에 용지 설정(secPr)', psec.indexOf('<hp:secPr') > 0 && psec.indexOf('<hp:secPr') < psec.indexOf('<hp:tbl'));
+ok('제안서: 요약표는 프로그램 수 + 머리 + 합계 줄, 6칸', psec.includes('rowCnt="4" colCnt="6"'));
+ok('제안서: 합계 줄이 5칸 병합', psec.includes('colSpan="5" rowSpan="1"'));
+ok('제안서: 모든 칸에 주소·병합·크기가 있다', (() => {
+  const tc = (psec.match(/<hp:tc /g) || []).length;
+  return ['cellAddr', 'cellSpan', 'cellSz', 'cellMargin'].every(
+    (t) => (psec.match(new RegExp(`<hp:${t} `, 'g')) || []).length === tc,
+  );
+})());
+ok('제안서: 기관 이름이 이스케이프된다', psec.includes('광주 &lt;테스트&gt; 중학교') && !psec.includes('<테스트>'));
+ok('제안서: 금액 = 1인당 × 인원 × 차시', psec.includes('600,000원'));
+ok('제안서: 가격 없는 줄은 협의', psec.includes('협의'));
+ok('제안서: 합계 옆에 일부 협의', psec.includes('일부 협의'));
+ok('제안서: 여러 줄 인사말이 문단으로 나뉜다', psec.includes('인사 첫 줄') && psec.includes('인사 둘째 줄'));
+ok('제안서: 회사 한 줄이 맨 아래 실린다', psec.includes('모아킷') && psec.includes('대표 강양희'));
+ok('제안서: 사진 2장이 binDataList 에 있다', phead.includes('<hh:binDataList itemCnt="2"') && pPics.every((p) => phead.includes(`BinData="${p.binId}.jpg" Format="jpg"`)));
+ok('제안서: 본문 그림이 그 이름을 가리킨다', pPics.every((p) => psec.includes(`binaryItemIDRef="${p.binId}"`)));
+ok('제안서: 그림 수와 본문 pic 수가 같다', (psec.match(/<hp:pic /g) || []).length === pPics.length);
+ok('제안서: content.hpf 가 그림을 싣는다', pPics.every((p) => pf['Contents/content.hpf'].includes(`href="BinData/${p.binId}.jpg"`)));
+
+const pBare = H.buildProposalHwpxFiles({ ...pInput, items: [pInput.items[1]] }, { ...pOrg, name: '' }, []);
+ok('제안서: 사진 0장·회사 정보 없음이어도 만들어진다', pBare['Contents/section0.xml'].includes('가격 없는 수업'));
+ok('제안서: 사진 0장이면 binDataList 가 비어 있다', pBare['Contents/header.xml'].includes('<hh:binDataList itemCnt="0"'));
+ok('제안서: 그림이 없으면 pic 을 안 그린다', !pBare['Contents/section0.xml'].includes('<hp:pic '));
+
 rmSync(out, { recursive: true, force: true });
 console.log(`${pass}건 통과${fails.length ? `, ${fails.length}건 실패` : ''}`);
 if (fails.length) { for (const f of fails) console.error('  ✗', f); process.exit(1); }

@@ -22,7 +22,8 @@
  *   구조는 scripts/hwpx.test.mjs 가 실제로 만들어 보고 검사한다.
  */
 
-import type { LessonPlan, LessonPlanItem, PlanSlot } from './types';
+import type { LessonPlan, LessonPlanItem, OrgProfile, PlanSlot } from './types';
+import { grandTotal, hasUnpriced, lineTotal, priceText, orgLine, type ProposalInput } from './proposal';
 
 /* HWPUNIT = 1/7200 인치. 1mm = 7200/25.4 */
 const PER_MM = 7200 / 25.4;
@@ -650,6 +651,24 @@ export function buildPlanHwpxFiles(
     return { ...found, w: Math.round(found.w * scale), h: Math.round(found.h * scale) };
   };
 
+  return packageFiles(
+    title,
+    planSectionXml(plan, items, title, picFor),
+    [title, plan.goal ?? '', plan.intro ?? '', plan.closing ?? ''].join('\n'),
+    pics,
+  );
+}
+
+/**
+ * 본문(section0.xml)만 다른 문서들이 **같은 껍데기**를 쓴다 — 강의계획서·제안서.
+ * mimetype·manifest·header 를 문서마다 따로 두면 한쪽만 고쳐져서 한글이 한쪽만 거부한다.
+ */
+function packageFiles(
+  title: string,
+  sectionXml: string,
+  preview: string,
+  pics: HwpxPic[],
+): Record<string, string | Uint8Array> {
   const bins = pics.map((p) => ({
     ...p,
     href: `BinData/${p.binId}.${p.ext}`,
@@ -714,11 +733,145 @@ export function buildPlanHwpxFiles(
     'META-INF/manifest.xml': manifest,
     'Contents/content.hpf': contentHpf,
     'Contents/header.xml': headerXml(bins),
-    'Contents/section0.xml': planSectionXml(plan, items, title, picFor),
-    'Preview/PrvText.txt': [title, plan.goal ?? '', plan.intro ?? '', plan.closing ?? ''].join('\n'),
+    'Contents/section0.xml': sectionXml,
+    'Preview/PrvText.txt': preview,
   };
   for (const b of bins) files[b.href] = b.data;
   return files;
+}
+
+/* ------------------------------------------------------- 제안서 본문 */
+
+/** 제안서 사진의 itemId — `프로그램id#몇번째` */
+export const proposalPicId = (appId: string, index: number) => `${appId}#${index}`;
+
+/**
+ * 제안서 한 벌을 짓는다 — 배치는 인쇄물(ProposalSheet)과 같다.
+ * 표지(받는 곳·인사말·요약표) → 프로그램마다 한 묶음(소개·목표·사진) → 맺음말·회사 정보.
+ * 한글에서는 쪽을 억지로 가르지 않는다 — 글 길이대로 흐르게 두는 편이 편집하기 낫다.
+ */
+function proposalSectionXml(
+  input: ProposalInput,
+  org: OrgProfile,
+  picOf: (itemId: string, w: number) => HwpxPic | null,
+): string {
+  const id = makeIds();
+  const H = mm(8);
+  const out: string[] = [];
+
+  // 첫 문단 — 용지 설정 + 제목
+  out.push(
+    para(id, '프로그램 제안서', {
+      charPr: CH_TITLE,
+      paraPr: PA_CENTER,
+      width: TEXT_W,
+      inner:
+        `<hp:run charPrIDRef="${CH_BODY}">${SEC_PR}<hp:ctrl>` +
+        `<hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/>` +
+        `</hp:ctrl></hp:run>` +
+        `<hp:run charPrIDRef="${CH_TITLE}"><hp:t>프로그램 제안서</hp:t></hp:run>`,
+    }),
+  );
+  out.push(para(id, '', { width: TEXT_W }));
+  out.push(para(id, `받는 곳 : ${input.org}${input.contact ? `  (담당 ${input.contact})` : ''}`, { charPr: CH_BOLD, width: TEXT_W }));
+  out.push(para(id, `제안일 : ${input.date}${org.name ? `    보내는 곳 : ${org.name}` : ''}`, { width: TEXT_W }));
+  out.push(para(id, '', { width: TEXT_W }));
+  out.push(paras(id, input.greeting, { width: TEXT_W }));
+  out.push(para(id, '', { width: TEXT_W }));
+
+  // 요약표 — 프로그램 | 대상 | 차시 | 인원 | 1인당 | 금액
+  const widths = [mm(62), mm(24), mm(16), mm(16), mm(30), TEXT_W - mm(62) - mm(24) - mm(16) - mm(16) - mm(30)];
+  const cell = (text: string, col: number, row: number, opt: Partial<Cell> = {}): Cell => ({
+    body: para(id, text, { charPr: opt.head ? CH_BOLD : CH_BODY, paraPr: col === 0 && !opt.head ? PA_LEFT : PA_CENTER, width: widths[col] }),
+    col,
+    row,
+    width: widths[col],
+    height: H,
+    ...opt,
+  });
+  const rows: Cell[][] = [
+    ['프로그램', '대상', '차시', '인원', '1인당', '금액'].map((t, c) => cell(t, c, 0, { head: true })),
+    ...input.items.map((it, i) => [
+      cell(it.title, 0, i + 1),
+      cell(it.grade || '-', 1, i + 1),
+      cell(String(it.sessions), 2, i + 1),
+      cell(String(it.headcount), 3, i + 1),
+      cell(priceText(it.unitPrice), 4, i + 1),
+      cell(priceText(lineTotal(it)), 5, i + 1),
+    ]),
+  ];
+  const last = input.items.length + 1;
+  rows.push([
+    { ...cell('합계', 0, last, { head: true }), colSpan: 5, width: TEXT_W - widths[5] },
+    cell(priceText(grandTotal(input.items)) + (hasUnpriced(input.items) ? ' (일부 협의)' : ''), 5, last, { head: true }),
+  ]);
+  out.push(
+    para(id, '', {
+      width: TEXT_W,
+      inner: `<hp:run charPrIDRef="${CH_BODY}">${tableXml(id, rows, H * rows.length, 6, TEXT_W)}</hp:run>`,
+    }),
+  );
+  out.push(para(id, '', { width: TEXT_W }));
+
+  // 프로그램마다 한 묶음
+  input.items.forEach((it, i) => {
+    out.push(para(id, `${i + 1}. ${it.title}`, { charPr: CH_TITLE, width: TEXT_W }));
+    const meta = [
+      it.grade && `대상 ${it.grade}`,
+      `${it.sessions}차시`,
+      `${it.headcount}명`,
+      `1인당 ${priceText(it.unitPrice)}`,
+    ].filter(Boolean).join(' · ');
+    out.push(para(id, meta, { charPr: CH_SMALL, width: TEXT_W }));
+    if (it.purpose) out.push(paras(id, `이런 수업입니다 — ${it.purpose}`, { width: TEXT_W }));
+    if (it.goal) out.push(paras(id, `수업 목표 — ${it.goal}`, { width: TEXT_W }));
+    const pics = it.samples.map((_, k) => picOf(proposalPicId(it.appId, k), 0)).filter((p): p is HwpxPic => p !== null);
+    if (pics.length > 0) {
+      const cols = pics.length;
+      const colW = Math.floor(TEXT_W / cols);
+      const cells: Cell[] = pics.map((_, ci) => {
+        const p = picOf(proposalPicId(it.appId, ci), colW - mm(4));
+        return { body: p ? picPara(id, p, colW) : para(id, '', { width: colW }), col: ci, row: 0, width: colW, height: mm(45) };
+      });
+      out.push(
+        para(id, '', {
+          width: TEXT_W,
+          inner: `<hp:run charPrIDRef="${CH_BODY}">${tableXml(id, [cells], mm(45), cols, TEXT_W)}</hp:run>`,
+        }),
+      );
+    }
+    out.push(para(id, '', { width: TEXT_W }));
+  });
+
+  out.push(paras(id, input.closing, { width: TEXT_W }));
+  out.push(para(id, '', { width: TEXT_W }));
+  if (org.name) out.push(para(id, orgLine(org), { charPr: CH_SMALL, paraPr: PA_CENTER, width: TEXT_W }));
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><hs:sec ${NS}>` + out.join('') + `</hs:sec>`;
+}
+
+/**
+ * 제안서 .hwpx 안에 들어갈 파일들 — **브라우저 API 를 안 쓰는 순수 함수**라
+ * scripts/hwpx.test.mjs 가 node 에서 그대로 검사한다.
+ */
+export function buildProposalHwpxFiles(
+  input: ProposalInput,
+  org: OrgProfile,
+  pics: HwpxPic[],
+): Record<string, string | Uint8Array> {
+  const picFor = (itemId: string, w: number): HwpxPic | null => {
+    const found = pics.find((p) => p.itemId === itemId);
+    if (!found) return null;
+    if (w <= 0) return found;
+    const scale = Math.min(1, w / found.w);
+    return { ...found, w: Math.round(found.w * scale), h: Math.round(found.h * scale) };
+  };
+  return packageFiles(
+    `제안서 ${input.org}`,
+    proposalSectionXml(input, org, picFor),
+    [input.org, input.greeting, ...input.items.map((i) => i.title)].join('\n'),
+    pics,
+  );
 }
 
 /* -------------------------------------------------- 브라우저에서 내려받기 */
@@ -844,4 +997,45 @@ export async function downloadPlanHwpx(
   /* 만든 파일을 그대로 돌려준다 — 부르는 쪽이 구글 드라이브에도 한 벌 넣는다.
      여기서 직접 올리지 않는 이유: 이 파일은 순수 계산이고 서버·저장소를 모른다 */
   return { skipped: jobs.length - pics.length, blob, fileName: `${name}.hwpx` };
+}
+
+/**
+ * 제안서를 .hwpx 로 내려받는다. 샘플 사진을 못 받아도 문서는 나가고, 몇 장이 빠졌는지 돌려준다.
+ * 파일 이름은 ASCII 로 둔다 — 크로미움은 `<a download>` 에 한글이 있으면 이름을 통째로
+ * 버린다 (CSV 에서 실제로 겪은 일. 안에 적힌 기관 이름은 그대로다).
+ */
+export async function downloadProposalHwpx(
+  input: ProposalInput,
+  org: OrgProfile,
+): Promise<{ skipped: number; fileName: string }> {
+  const jobs: Promise<HwpxPic | null>[] = [];
+  let n = 0;
+  for (const it of input.items) {
+    it.samples.forEach((url, k) => {
+      jobs.push(loadPic(url, proposalPicId(it.appId, k), n));
+      n += 1;
+    });
+  }
+  const loaded = await Promise.all(jobs);
+  const pics = loaded.filter((p): p is HwpxPic => p !== null);
+  const files = buildProposalHwpxFiles(input, org, pics);
+
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip();
+  zip.file('mimetype', files.mimetype as string, { compression: 'STORE' });
+  for (const [path, data] of Object.entries(files)) {
+    if (path === 'mimetype') continue;
+    zip.file(path, data);
+  }
+  const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/hwp+zip', compression: 'DEFLATE' });
+  const fileName = `proposal_${input.date}.hwpx`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return { skipped: jobs.length - pics.length, fileName };
 }

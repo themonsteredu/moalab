@@ -32,13 +32,15 @@ export type IconName =
   | 'board'
   | 'external'
   | 'chevronDown'
+  | 'chevronUp'
   | 'puzzle'
   | 'receipt'
   | 'megaphone'
   | 'present'
   | 'dots'
   | 'tree'
-  | 'printer';
+  | 'printer'
+  | 'briefcase';
 
 const P: Record<IconName, React.ReactNode> = {
   check: <path d="m4.5 12.5 5 5 10-11" />,
@@ -151,6 +153,7 @@ const P: Record<IconName, React.ReactNode> = {
   ),
   external: <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />,
   chevronDown: <path d="m6 9.5 6 6 6-6" />,
+  chevronUp: <path d="m6 14.5 6-6 6 6" />,
   puzzle: <path d="M10 4.5a1.8 1.8 0 1 1 3.6 0V6H17a1 1 0 0 1 1 1v3.4h1.5a1.8 1.8 0 1 1 0 3.6H18V18a1 1 0 0 1-1 1h-3.4v-1.5a1.8 1.8 0 1 0-3.6 0V19H6a1 1 0 0 1-1-1v-4h1.4a1.8 1.8 0 1 0 0-3.6H5V7a1 1 0 0 1 1-1h4z" />,
   receipt: (
     <>
@@ -188,6 +191,12 @@ const P: Record<IconName, React.ReactNode> = {
       <path d="M7 9V4h10v5" />
       <path d="M5 9h14a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 19 17h-2v3H7v-3H5a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 5 9z" />
       <path d="M7 13.5h10" />
+    </>
+  ),
+  briefcase: (
+    <>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M8.5 7V5.5A1.5 1.5 0 0 1 10 4h4a1.5 1.5 0 0 1 1.5 1.5V7M3 12h18M10 12v2h4v-2" />
     </>
   ),
 };

@@ -709,9 +709,6 @@ function ScheduleForm({
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11.5px] leading-relaxed text-neutral-400">
-            마감은 여기서 안 넣어요. 프로그램 제출 기한과 부서협업 요청 기한이 달력에 저절로 표시돼요.
-          </p>
         </div>
 
         {isClass ? (

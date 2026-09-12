@@ -48,15 +48,19 @@ export function EmptyState({
 
 /* ------------------------------------------------------------------ 에러 배너 */
 
-export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
+/**
+ * `actionLabel` — 무엇을 눌러야 하는지가 상황마다 다르다. 그냥 `다시` 로 두면
+ * **다시 로그인해야 하는 경우에 눌러도 아무 일이 안 일어난다** (같은 실패를 반복한다).
+ */
+export function ErrorBanner({ message, onRetry, actionLabel = '다시' }: { message: string; onRetry?: () => void; actionLabel?: string }) {
   if (!message) return null;
   return (
     <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-3.5">
       <Icon name="warning" size={17} className="mt-0.5 text-red-500" />
       <p className="flex-1 text-[13px] leading-relaxed text-red-800">{message}</p>
       {onRetry && (
-        <button onClick={onRetry} className="shrink-0 text-[13px] font-bold text-red-700 underline">
-          다시
+        <button onClick={onRetry} className="tap -my-2 shrink-0 whitespace-nowrap text-[13px] font-bold text-red-700 underline">
+          {actionLabel}
         </button>
       )}
     </div>

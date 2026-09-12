@@ -261,6 +261,34 @@ export function groupRefs(refs: DutyRef[]): RefGroup[] {
   return out;
 }
 
+/**
+ * 역할 목록(`DutyRef[]`)에 검색을 건다 — `내 부서`·`사람별` 처럼 트리가 아니라
+ * 평평한 목록을 그리는 화면용. 이름·설명·중분류·부서 어디에 걸려도 남긴다
+ * (`filterOrg` 와 같은 기준이어야 화면마다 결과가 안 달라진다).
+ *
+ * `내 부서` 를 중분류별로 접기 시작하면서 필요해졌다 — **접힌 채로 0건처럼
+ * 보이면 안 되므로** 검색이 걸리면 펼쳐야 하고, 그러려면 무엇이 걸렸는지 알아야 한다.
+ */
+export function filterRefs(refs: DutyRef[], q: string): DutyRef[] {
+  const s = q.trim().toLowerCase();
+  if (!s) return refs;
+  const hit = (v: string | null | undefined) => Boolean(v && v.toLowerCase().includes(s));
+  return refs.filter(
+    (r) => hit(r.duty.name) || hit(r.duty.note) || hit(r.groupName) || hit(r.deptName),
+  );
+}
+
+/**
+ * `duty_id` 만 받아 역할마다 몇 개인지 센다 — 줄(`duty_rows`)·자료(`duty_files`)에
+ * 같이 쓴다. 역할 목록에 `14줄` · `자료 2` 배지를 붙이는 계산이다.
+ * 없는 역할은 키 자체가 없다 (`?? 0` 으로 읽는다) — 0 을 63개 채워두면 뜻이 없다.
+ */
+export function countByDuty(list: { duty_id: string }[] | null | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of list ?? []) out[r.duty_id] = (out[r.duty_id] ?? 0) + 1;
+  return out;
+}
+
 /** 검색 — 부서·중분류·소분류·설명 어디에 걸려도 남긴다 */
 export function filterOrg(tree: DeptNode[], q: string): DeptNode[] {
   const s = q.trim().toLowerCase();

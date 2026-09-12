@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { DRIVE_KEY, type DriveMeta } from '@/lib/drive';
 import { fileNameFor, isDriveKind, pathFor, type DriveKind } from '@/lib/drivePath';
+import { actorFromToken, tokenOf } from '@/lib/chatServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +17,9 @@ export async function POST(req: Request) {
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ skipped: '서버 설정 없음' });
 
-  const actorId = req.headers.get('x-actor-id');
-  if (!actorId) return NextResponse.json({ skipped: '누구인지 모름' });
+  const actor = await actorFromToken(admin, tokenOf(req));
+  if (!actor) return NextResponse.json({ error: '다시 로그인해주세요.' }, { status: 401 });
+  const actorId = actor.memberId;
 
   const body = (await req.json().catch(() => ({}))) as {
     kind?: string;
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
   // 바로 한 번 돌려본다 (기다리지 않는다). 실패해도 줄에 남아 있어 다시 시도된다
   void fetch(`${new URL(req.url).origin}/api/drive/run`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-actor-id': actorId },
+    headers: { 'content-type': 'application/json', 'x-session-token': tokenOf(req) ?? '' },
   }).catch(() => null);
 
   return NextResponse.json({ queued: rows.length, folder });

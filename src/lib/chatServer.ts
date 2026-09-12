@@ -34,18 +34,15 @@ export async function actorFromToken(admin: Admin, token: string | null): Promis
   // uuid 가 아니면 DB 에 물어볼 것도 없다 (형식이 틀리면 postgres 가 에러를 낸다)
   if (!/^[0-9a-f-]{36}$/i.test(token)) return null;
 
+  // 세션과 멤버를 따로 읽으면 모든 보호 API가 DB 왕복을 두 번 기다리게 된다.
+  // FK 임베드로 한 번에 확인해 첫 화면 로딩의 직렬 대기를 줄인다.
   const { data } = await admin
     .from('sessions')
-    .select('member_id, expires_at')
+    .select('member_id, expires_at, member:members!sessions_member_id_fkey(id, name, role, active)')
     .eq('token', token)
     .maybeSingle();
   if (!data || new Date(data.expires_at).getTime() < Date.now()) return null;
-
-  const { data: m } = await admin
-    .from('members')
-    .select('id, name, role, active')
-    .eq('id', data.member_id)
-    .maybeSingle();
+  const m = Array.isArray(data.member) ? data.member[0] : data.member;
   if (!m || !m.active) return null;
 
   // 마지막으로 쓴 시각만 조용히 갱신한다 (실패해도 로그인을 막지 않는다)
