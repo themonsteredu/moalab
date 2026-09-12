@@ -311,6 +311,55 @@ console.log('\n[엑셀로 내보내기 — 열리는 것이 목적이다]');
   eq('헤더에 줄바꿈이 섞이지 않는다', /[\r\n]/.test(T.csvDisposition('줄\n바꿈')), false);
 }
 
+console.log('\n[여러 줄 붙여넣기 — 기관 목록을 한 번에]');
+{
+  /* ⚠️ 이 절이 있는 이유: 표를 만든 역할 65개 중 59개가 줄 0개였고, 채워진 것은
+     updated_at 이 마이크로초까지 같았다 — 손으로 친 게 아니라 SQL 로 넣은 것이다.
+     한 건마다 시트를 열어 12칸을 훑게 해놨으니 아무도 못 넣었다 */
+  const cols = [
+    col('c1', '기관 이름'),
+    col('c2', '진행 상태', 'select', ['연락 전', '계약']),
+    col('c3', '예상 인원', 'number'),
+    col('c4', '다음 연락일', 'date'),
+    col('c5', '끝남', 'check'),
+  ];
+
+  // 이름만 주르륵 — 제일 흔한 붙여넣기
+  const only = T.parsePaste(cols, '광주중학교\n무등초등학교\n\n수완중학교\n');
+  eq('빈 줄은 건너뛴다', only.length, 3);
+  eq('탭이 없으면 첫 칸만 채운다', only[0], { c1: '광주중학교' });
+  eq('순서가 유지된다', only.map((r) => r.c1), ['광주중학교', '무등초등학교', '수완중학교']);
+
+  // 엑셀에서 복사 = 탭 구분
+  const tabbed = T.parsePaste(cols, '광주중학교\t연락 전\t1,200\t2026-09-20\t예');
+  eq('탭으로 칸을 가른다', tabbed[0].c1, '광주중학교');
+  eq('숫자 칸의 콤마를 턴다', tabbed[0].c3, 1200);
+  eq('날짜도 그대로', tabbed[0].c4, '2026-09-20');
+  eq('예/아니오를 알아본다', tabbed[0].c5, true);
+
+  // '아니오' 를 그냥 Boolean 하면 참이 된다 — 제일 조용한 사고다
+  eq("'아니오' 는 거짓이다", T.parsePaste(cols, 'A\t\t\t\t아니오')[0].c5, undefined);
+  eq("'O' 도 참으로 본다", T.parsePaste(cols, 'A\t\t\t\tO')[0].c5, true);
+  eq("'ㅇ' 도 참으로 본다", T.parsePaste(cols, 'A\t\t\t\tㅇ')[0].c5, true);
+
+  // 칸 수가 안 맞아도 안 죽는다
+  eq('칸이 모자라면 빈 칸', T.parsePaste(cols, '광주중\t연락 전')[0], { c1: '광주중', c2: '연락 전' });
+  eq('칸이 넘치면 버린다', Object.keys(T.parsePaste(cols, 'A\tB\t1\td\t예\t남는것\t또')[0]).length <= 5, true);
+  eq('빈 글자는 안 넣는다', T.parsePaste(cols, '광주중\t\t\t\t')[0], { c1: '광주중' });
+  eq('숫자 칸에 글자면 안 넣는다', T.parsePaste(cols, 'A\t\t몰라')[0], { c1: 'A' });
+
+  // 보기에 없는 값도 버리지 않는다 (화면이 옛 값을 그대로 보여주게 이미 만들어뒀다)
+  eq('보기에 없는 상태도 남긴다', T.parsePaste(cols, 'A\t처음보는상태')[0].c2, '처음보는상태');
+
+  eq('빈 글은 0줄', T.parsePaste(cols, '   \n\n  ').length, 0);
+  eq('칸이 없으면 0줄', T.parsePaste([], '광주중학교').length, 0);
+  eq('줄바꿈이 \\r\\n 이어도 (윈도우 엑셀)', T.parsePaste(cols, 'A\r\nB').length, 2);
+
+  // 미리보기 — 저장 전에 뭐가 들어가는지 보여준다
+  eq('미리보기', T.pastePreview(cols, { c1: '광주중학교', c3: 30 }), '광주중학교 · 2칸');
+  eq('제목이 비면 이름 없음', T.pastePreview(cols, { c3: 30 }), '이름 없음 · 1칸');
+}
+
 console.log('\n[맨 뒤에 붙이기]');
 {
   eq('빈 목록은 1', T.nextOrder([]), 1);

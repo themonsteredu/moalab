@@ -19,6 +19,8 @@ import {
   safeKind,
   statusCounts,
   suggestPreset,
+  parsePaste,
+  pastePreview,
   type CellValue,
   type ColumnKind,
 } from '@/lib/dutyTable';
@@ -78,6 +80,19 @@ export function DutyTable({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [killing, setKilling] = useState<DutyRow | null>(null);
+
+  /** 목록 맨 위 빠른 추가 — 이름만 적고 엔터. 나머지 칸은 나중에 채운다 */
+  const [quick, setQuick] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
+  const quickRef = useRef<HTMLInputElement>(null);
+
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [pasteBusy, setPasteBusy] = useState(false);
+  const [pasteError, setPasteError] = useState('');
+
+  /** 목록에서 상태만 바꿀 때 — 시트를 열어 12칸을 훑지 않아도 되게 */
+  const [picking, setPicking] = useState<DutyRow | null>(null);
 
   const [structOpen, setStructOpen] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -166,11 +181,9 @@ export function DutyTable({
    * **칸을 벗어날 때 저장한다.** 타이핑 중에는 안 보낸다 —
    * 글자마다 보내면 폰에서 요청이 수십 번 나가고, 느린 망에서는 순서가 뒤집힌다.
    */
-  const saveValues = async (next: Values) => {
-    if (!editing) return;
-    const before = editing.cells ?? {};
+  const writeCells = async (row: DutyRow, next: Values) => {
     // 안 바뀌었으면 아무것도 안 한다 (칸을 지나가기만 해도 저장되면 '저장됨' 이 거짓말이 된다)
-    if (JSON.stringify(before) === JSON.stringify(next)) return;
+    if (JSON.stringify(row.cells ?? {}) === JSON.stringify(next)) return;
     setSaving(true);
     setError('');
     try {
@@ -178,17 +191,90 @@ export function DutyTable({
       const { error: e } = await supabase
         .from('duty_rows')
         .update({ cells: next, updated_by: session?.id ?? null, updated_at: at })
-        .eq('id', editing.id);
+        .eq('id', row.id);
       if (e) throw e;
-      const updated: DutyRow = { ...editing, cells: next, updated_by: session?.id ?? null, updated_at: at };
-      setEditing(updated);
+      const updated: DutyRow = { ...row, cells: next, updated_by: session?.id ?? null, updated_at: at };
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      // 시트가 이 줄을 열어두고 있으면 같이 맞춘다 (목록에서 상태를 바꿔도 어긋나지 않게)
+      setEditing((cur) => (cur && cur.id === updated.id ? updated : cur));
       setSavedAt(at);
       freshRef.current = null;
     } catch (e) {
       setError(friendlyError(e, '저장이 안 됐어요.'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveValues = async (next: Values) => {
+    if (editing) await writeCells(editing, next);
+  };
+
+  /**
+   * **이름만 적고 엔터.** 기관 목록은 스무 개 쉰 개를 한 자리에서 넣는 일인데,
+   * 한 건마다 시트를 열어 12칸을 훑게 해놨더니 **표 65개 중 59개가 빈 표**였다.
+   * 나머지 칸은 나중에 줄을 눌러 채운다.
+   */
+  const quickAdd = async () => {
+    const name = quick.trim();
+    const first = (cols ?? [])[0];
+    if (!name || !first || quickBusy) return;
+    setQuickBusy(true);
+    setError('');
+    try {
+      const { data, error: e } = await supabase
+        .from('duty_rows')
+        .insert({
+          duty_id: dutyId,
+          cells: { [first.id]: name },
+          sort_order: nextOrder(rows),
+          updated_by: session?.id ?? null,
+        })
+        .select()
+        .single();
+      if (e) throw e;
+      setRows((prev) => [...prev, data as DutyRow]);
+      setQuick('');
+      // 포커스를 놓지 않는다 — 연달아 넣는 게 이 칸의 쓸모다
+      quickRef.current?.focus();
+    } catch (e) {
+      setError(friendlyError(e, '줄을 추가하지 못했어요.'));
+    } finally {
+      setQuickBusy(false);
+    }
+  };
+
+  /** 엑셀·한글에서 복사한 표를 그대로. **여러 건이 한꺼번에 생기니 미리보기가 필수다** */
+  const savePaste = async () => {
+    const parsed = parsePaste(cols ?? [], pasteText);
+    if (parsed.length === 0) {
+      setPasteError('붙여넣은 내용이 없어요.');
+      return;
+    }
+    setPasteBusy(true);
+    setPasteError('');
+    try {
+      const base = nextOrder(rows);
+      const { data, error: e } = await supabase
+        .from('duty_rows')
+        .insert(
+          parsed.map((cells, i) => ({
+            duty_id: dutyId,
+            cells,
+            sort_order: base + i,
+            updated_by: session?.id ?? null,
+          })),
+        )
+        .select();
+      if (e) throw e;
+      setRows((prev) => [...prev, ...((data ?? []) as DutyRow[])]);
+      logActivity(session?.id, `역할 표에 ${parsed.length}줄 붙여넣기 — ${dutyName}`, `duty:${dutyId}`);
+      setPasteOpen(false);
+      setPasteText('');
+    } catch (e) {
+      setPasteError(friendlyError(e, '붙여넣지 못했어요.'));
+    } finally {
+      setPasteBusy(false);
     }
   };
 
@@ -460,11 +546,49 @@ export function DutyTable({
         </button>
       </div>
 
+      {/* **이름만 적고 엔터.** 목록 맨 아래 버튼 하나였을 땐 표 65개 중 59개가 빈 표였다 —
+          한 건 넣을 때마다 시트를 열어 12칸을 훑고, 다시 맨 아래로 스크롤해야 했다 */}
+      <div className="flex gap-1.5">
+        {/* 바로 위가 검색칸이라 생김새가 같으면 **찾기 칸에 학교 이름을 치고 만다.**
+            검색이 돋보기를 달고 있으니 이쪽은 `+` 를 단다 (줄 높이는 그대로) */}
+        <div className="relative min-w-0 flex-1">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
+            <Icon name="plus" size={14} />
+          </span>
+          <input
+            ref={quickRef}
+            value={quick}
+            onChange={(e) => setQuick(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void quickAdd();
+              }
+            }}
+            placeholder={`${(cols ?? [])[0]?.name ?? '이름'} 적고 엔터`}
+            aria-label={`${(cols ?? [])[0]?.name ?? '이름'} 적고 줄 추가`}
+            className="field pl-9"
+          />
+        </div>
+        <button
+          onClick={() => void quickAdd()}
+          disabled={quick.trim() === '' || quickBusy}
+          aria-label="줄 추가"
+          className="tap w-11 shrink-0 rounded-xl border border-neutral-300 text-neutral-500 disabled:opacity-40"
+        >
+          <Icon name="plus" size={15} />
+        </button>
+      </div>
+
       {shown.length === 0 ? (
         <EmptyState
           icon="list"
           title={q ? '찾는 줄이 없어요' : '아직 비어 있어요'}
-          desc={q ? '다른 말로 찾아보세요.' : '아래 버튼으로 한 줄씩 채워보세요.'}
+          desc={
+            q
+              ? '다른 말로 찾아보세요.'
+              : '위 칸에 이름을 적고 엔터를 누르면 한 줄씩 생겨요. 엑셀에 이미 있으면 아래 붙여넣기가 빨라요.'
+          }
         />
       ) : (
         <ul className="divide-y divide-neutral-100">
@@ -479,10 +603,10 @@ export function DutyTable({
               .map((c) => cellText(c, (r.cells ?? {})[c.id] ?? null))
               .filter((t) => t !== '' && t !== '아니오');
             return (
-              <li key={r.id}>
+              <li key={r.id} className="flex items-center gap-1">
                 <button
                   onClick={() => openRow(r)}
-                  className="flex min-h-[44px] w-full items-center gap-2 py-2 text-left"
+                  className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 py-2 text-left"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-semibold text-neutral-800">
@@ -494,18 +618,52 @@ export function DutyTable({
                       </span>
                     )}
                   </span>
-                  {st && <span className="chip shrink-0 bg-neutral-100 text-neutral-600">{st}</span>}
-                  <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
+                  {/* 상태 칩이 있으면 화살표를 안 그린다 — 오른쪽 끝은 칩 자리다.
+                      둘 다 그리면 `제목 … > [연락 전]` 이 되어 화살표가 글자 사이에 낀다 */}
+                  {!counts && (
+                    <Icon name="chevronDown" size={13} className="shrink-0 -rotate-90 text-neutral-300" />
+                  )}
                 </button>
+                {/* **상태는 목록에서 바로 바꾼다.** 제일 자주 하는 일인데 예전엔
+                    줄 누르고 → 시트 열고 → 12칸 중에서 찾아 내리고 → 닫기였다.
+                    버튼 밖에 둔다 — button 안에 button 은 안 되는 중첩이다 */}
+                {counts && (
+                  <button
+                    onClick={() => setPicking(r)}
+                    aria-label={`${rowTitle(cols ?? [], r)} — ${counts.col.name} 바꾸기`}
+                    className="tap -my-2 shrink-0 px-1"
+                  >
+                    <span
+                      className={`chip ${st ? 'bg-neutral-100 text-neutral-600' : 'border border-dashed border-neutral-300 text-neutral-400'}`}
+                    >
+                      {st || counts.col.name}
+                    </span>
+                  </button>
+                )}
               </li>
             );
           })}
         </ul>
       )}
 
-      <button onClick={() => void addRow()} className="tap w-full gap-1.5 rounded-xl border border-dashed border-neutral-300 text-[13px] font-bold text-neutral-500">
-        <Icon name="plus" size={14} />줄 추가
-      </button>
+      {/* 위의 빠른 추가로 안 되는 두 가지 — 칸을 다 채워 넣기, 그리고 통째로 붙여넣기 */}
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => void addRow()}
+          className="tap flex-1 gap-1.5 rounded-xl border border-dashed border-neutral-300 text-[13px] font-bold text-neutral-500"
+        >
+          <Icon name="plus" size={14} />한 줄 자세히
+        </button>
+        <button
+          onClick={() => {
+            setPasteError('');
+            setPasteOpen(true);
+          }}
+          className="tap flex-1 gap-1.5 rounded-xl border border-dashed border-neutral-300 text-[13px] font-bold text-neutral-500"
+        >
+          <Icon name="copy" size={14} />여러 줄 붙여넣기
+        </button>
+      </div>
 
       {/* ------------------------------------------------ 줄 고치기 (자동저장) */}
       <Sheet
@@ -543,6 +701,105 @@ export function DutyTable({
               <Icon name="trash" size={14} />이 줄 지우기
             </button>
           )}
+        </div>
+      </Sheet>
+
+      {/* --------------------------------------------- 상태만 바꾸기 (목록에서 바로) */}
+      <Sheet
+        open={!!picking}
+        onClose={() => setPicking(null)}
+        title={picking ? rowTitle(cols ?? [], picking) : ''}
+      >
+        {counts && picking && (
+          <div className="space-y-1.5">
+            <p className="mb-2 text-[12.5px] font-semibold text-neutral-500">{counts.col.name}</p>
+            {[...(counts.col.options ?? []), null].map((o) => {
+              const now = (picking.cells ?? {})[counts.col.id] ?? null;
+              const on = o === null ? now === null : now === o;
+              return (
+                <button
+                  key={o ?? '__none__'}
+                  onClick={() => {
+                    const next = { ...(picking.cells ?? {}) };
+                    if (o === null) delete next[counts.col.id];
+                    else next[counts.col.id] = o;
+                    void writeCells(picking, next);
+                    setPicking(null);
+                  }}
+                  className={`tap w-full justify-start rounded-xl border px-3 text-[14px] font-bold ${
+                    on ? 'pick-on' : 'border-neutral-200 bg-surface text-neutral-600'
+                  }`}
+                >
+                  {o ?? '안 고름'}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Sheet>
+
+      {/* ------------------------------------------ 여러 줄 붙여넣기 (미리보기 필수) */}
+      <Sheet
+        open={pasteOpen}
+        onClose={() => setPasteOpen(false)}
+        title="여러 줄 붙여넣기"
+        footer={
+          <button
+            onClick={() => void savePaste()}
+            disabled={pasteBusy || parsePaste(cols ?? [], pasteText).length === 0}
+            className="btn-primary w-full"
+          >
+            {pasteBusy
+              ? '넣는 중…'
+              : `${parsePaste(cols ?? [], pasteText).length}줄 넣기`}
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-[12.5px] leading-relaxed text-neutral-500">
+            엑셀·한글 표에서 복사해서 그대로 붙여넣으세요. <b className="text-neutral-700">한 줄에 하나씩</b>이고,
+            칸은 <b className="text-neutral-700">탭</b>으로 갈라집니다. 이름만 주르륵 붙여넣어도 돼요 —
+            나머지 칸은 나중에 채우면 됩니다.
+          </p>
+
+          {(cols ?? []).length > 0 && (
+            <p className="rounded-lg bg-raised px-3 py-2 text-[11.5px] leading-relaxed text-neutral-500">
+              칸 순서: {(cols ?? []).map((c) => c.name).join(' → ')}
+            </p>
+          )}
+
+          <textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            rows={6}
+            aria-label="붙여넣을 내용"
+            placeholder={`광주중학교\n무등초등학교\n수완중학교`}
+            className="field resize-none font-mono text-[13px]"
+          />
+
+          {/* **저장 전 미리보기가 필수다** — 여러 건이 한꺼번에 생기는 동작이라
+              잘못 넣으면 지우는 것도 그만큼 여러 번이다 (체크리스트 뿌리기와 같은 규칙) */}
+          {pasteText.trim() !== '' && (
+            <div>
+              <p className="label">이렇게 들어갑니다</p>
+              <ul className="max-h-40 overflow-y-auto rounded-xl border border-neutral-200 p-2 text-[12.5px]">
+                {parsePaste(cols ?? [], pasteText)
+                  .slice(0, 20)
+                  .map((cells, i) => (
+                    <li key={i} className="truncate py-0.5 text-neutral-600">
+                      {i + 1}. {pastePreview(cols ?? [], cells)}
+                    </li>
+                  ))}
+                {parsePaste(cols ?? [], pasteText).length > 20 && (
+                  <li className="py-0.5 text-neutral-400">
+                    … 모두 {parsePaste(cols ?? [], pasteText).length}줄
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {pasteError && <ErrorBanner message={pasteError} />}
         </div>
       </Sheet>
 

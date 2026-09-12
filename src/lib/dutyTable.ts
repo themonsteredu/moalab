@@ -475,3 +475,55 @@ export function csvDisposition(name: string): string {
   const file = `${safeFileName(name)}.csv`;
   return `attachment; filename="duty-table.csv"; filename*=UTF-8''${encodeURIComponent(file)}`;
 }
+
+/* --------------------------------------------------------- 여러 줄 붙여넣기 */
+
+/**
+ * **엑셀·한글에서 복사한 표를 그대로 붙여넣는다.**
+ *
+ * ⚠️ 이걸 만든 이유가 있다. 표를 만든 역할 65개 중 **59개가 줄 0개**였고,
+ * 채워진 두 개는 `updated_at` 이 **마이크로초까지 같았다** — 손으로 친 게 아니라
+ * 원장이 SQL 로 밀어넣은 것이다. 기관 목록은 원래 스무 개 쉰 개를 한 자리에서
+ * 넣는 일인데, 한 건마다 시트를 열어 12칸을 훑게 해놨으니 아무도 못 넣는다.
+ *
+ * · 줄바꿈으로 줄을 가르고 **탭**으로 칸을 가른다 (엑셀·구글시트·한글 표가 전부 탭이다)
+ * · 탭이 없으면 **첫 칸(제목)만** 채운다 — 이름만 주르륵 붙여넣는 게 제일 흔하다
+ * · 칸 수가 넘치면 버린다. 모자라면 빈 칸으로 둔다
+ * · 빈 줄은 건너뛴다 (엑셀에서 복사하면 맨 끝에 빈 줄이 딸려온다)
+ * · 값은 `cleanCell` 로 칸 갈래에 맞춘다 — 숫자 칸의 `1,200` 은 1200 이 된다
+ */
+export function parsePaste(cols: DutyColumn[], text: string): Record<string, CellValue>[] {
+  if (cols.length === 0) return [];
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.split('\t'))
+    .filter((parts) => parts.some((p) => p.trim() !== ''))
+    .map((parts) => {
+      const cells: Record<string, CellValue> = {};
+      cols.forEach((c, i) => {
+        const raw = parts[i];
+        if (raw === undefined) return;
+        const v = cleanCell(safeKind(c.kind), pasteValue(safeKind(c.kind), raw));
+        if (v !== null && v !== false) cells[c.id] = v;
+      });
+      return cells;
+    });
+}
+
+/**
+ * 예/아니오 칸에 사람이 적는 말들. `예`·`O`·`v` 처럼 표마다 다르게 쓴다 —
+ * 그대로 `Boolean('아니오')` 를 하면 **'아니오' 가 참**이 된다.
+ */
+function pasteValue(kind: ColumnKind, raw: string): unknown {
+  if (kind !== 'check') return raw;
+  const s = raw.trim().toLowerCase();
+  return ['예', 'o', 'ㅇ', 'v', 'y', 'yes', 'true', '1', '완료', '함'].includes(s);
+}
+
+/** 붙여넣기 미리보기 한 줄 — 제목과 채워진 칸 수 */
+export function pastePreview(cols: DutyColumn[], cells: Record<string, CellValue>): string {
+  const first = cols[0];
+  const title = first ? cellText(first, cells[first.id] ?? null) : '';
+  const filled = cols.filter((c) => (cells[c.id] ?? null) !== null).length;
+  return `${title.trim() || '이름 없음'} · ${filled}칸`;
+}
