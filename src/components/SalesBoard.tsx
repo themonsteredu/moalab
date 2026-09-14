@@ -150,7 +150,10 @@ export function SalesBoard({ inputs, today }: { inputs: SalesInput[]; today: str
             <ul className="divide-y divide-neutral-100">
               {board.tables.map((t) => (
                 <li key={t.dutyId}>
-                  <Link href={`/roles/${t.dutyId}`} className={rowLink}>
+                  <Link
+                    href={`/roles/${t.dutyId}${t.q ? `?q=${encodeURIComponent(t.q)}` : ''}`}
+                    className={rowLink}
+                  >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13.5px] font-semibold text-neutral-800">{t.dutyName}</span>
                       {t.top.length > 0 && (
